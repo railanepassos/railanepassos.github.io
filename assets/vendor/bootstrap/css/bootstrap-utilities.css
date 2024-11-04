@@ -2300,6 +2300,16 @@
   pointer-events: auto !important;
 }
 
+.img-circle {
+  border-radius: 50%;
+  width: 144px;
+  height: 144px;
+}
+
+.align-right {
+  float: right;
+}
+
 .rounded {
   border-radius: var(--bs-border-radius) !important;
 }
