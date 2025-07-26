@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://railanepassos.tec.br/sitemap.xml
+
+# Allow all pages
+Allow: /index.html
+Allow: /calendar.html
+Allow: /privacy-policy.html
+Allow: /styles.css
+Allow: /assets/
+
+# Crawl delay
+Crawl-delay: 1 

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Agende uma reunião com Railane Passos - QA Engineer. Acesse o calendário do Google ou agende via Calendly.">
+    <meta name="keywords" content="agendar reunião, calendário, Railane Passos, QA Engineer, consultoria">
+    <meta name="author" content="Railane Passos">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://railanepassos.tec.br/calendar.html">
+    <meta property="og:title" content="Agendar Reunião - Railane Passos">
+    <meta property="og:description" content="Agende uma reunião com Railane Passos - QA Engineer. Acesse o calendário do Google ou agende via Calendly.">
+    <meta property="og:image" content="https://railanepassos.tec.br/assets/img/perfil.jpg">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://railanepassos.tec.br/calendar.html">
+    <meta property="twitter:title" content="Agendar Reunião - Railane Passos">
+    <meta property="twitter:description" content="Agende uma reunião com Railane Passos - QA Engineer. Acesse o calendário do Google ou agende via Calendly.">
+    <meta property="twitter:image" content="https://railanepassos.tec.br/assets/img/perfil.jpg">
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://railanepassos.tec.br/calendar.html">
+    
+    <title>Agendar Reunião - Railane Passos</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .calendar-container {
+            text-align: center;
+            padding: 40px 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .calendar-icon {
+            font-size: 4em;
+            color: #2f855a;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+        
+        .calendar-title {
+            font-size: 2em;
+            color: #2f855a;
+            margin-bottom: 15px;
+        }
+        
+        .calendar-description {
+            color: #5a5a5a;
+            font-size: 1.1em;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        
+        .calendar-button {
+            display: inline-block;
+            background-color: #2f855a;
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 25px;
+            font-size: 1.1em;
+            font-weight: bold;
+            margin: 10px;
+            transition: all 0.3s ease;
+            box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .calendar-button:hover {
+            background-color: #276749;
+            transform: translateY(-2px);
+            box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .back-link {
+            display: inline-block;
+            color: #2f855a;
+            text-decoration: none;
+            margin-top: 30px;
+            font-size: 1em;
+            transition: color 0.3s ease;
+        }
+        
+        .back-link:hover {
+            color: #276749;
+        }
+        
+        .loading {
+            display: none;
+            margin-top: 20px;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #2f855a;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .auto-redirect {
+            margin-top: 20px;
+            color: #5a5a5a;
+            font-size: 0.9em;
+        }
+        
+        .countdown {
+            font-weight: bold;
+            color: #2f855a;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="calendar-container">
+            <div class="calendar-icon">
+                <i class="fas fa-calendar-alt"></i>
+            </div>
+            
+            <h1 class="calendar-title">Meu Calendário</h1>
+            
+            <p class="calendar-description">
+                Acesse meu calendário do Google para agendar uma reunião ou verificar minha disponibilidade.
+            </p>
+            
+            <div class="calendar-buttons">
+                <a href="https://calendar.google.com/calendar/u/0/embed?src=contato.railanepassos@gmail.com" 
+                   target="_blank" 
+                   class="calendar-button"
+                   onclick="showLoading()">
+                    <i class="fas fa-calendar-check"></i>
+                    Ver Calendário
+                </a>
+                
+                <a href="https://calendar.app.google/uyhKVBde5vVGacNu9" 
+                   target="_blank" 
+                   class="calendar-button"
+                   onclick="showLoading()">
+                    <i class="fas fa-clock"></i>
+                    Agendar Reunião
+                </a>
+            </div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Redirecionando...</p>
+            </div>
+            
+            <div class="auto-redirect">
+                <p>Redirecionamento automático em <span class="countdown" id="countdown">5</span> segundos</p>
+            </div>
+            
+            <a href="index.html" class="back-link">
+                <i class="fas fa-arrow-left"></i>
+                Voltar ao início
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Função para mostrar loading
+        function showLoading() {
+            document.getElementById('loading').classList.add('show');
+        }
+        
+        // Redirecionamento automático após 30 segundos
+        let countdown = 30;
+        const countdownElement = document.getElementById('countdown');
+        const countdownInterval = setInterval(() => {
+            countdown--;
+            countdownElement.textContent = countdown;
+            
+            if (countdown <= 0) {
+                clearInterval(countdownInterval);
+                // Redirecionar para o calendário principal
+                window.open('https://calendar.google.com/calendar/u/0/embed?src=contato.railanepassos@gmail.com', '_blank');
+            }
+        }, 1000);
+        
+        // Adicionar evento de clique para parar o countdown se o usuário clicar em um botão
+        document.querySelectorAll('.calendar-button').forEach(button => {
+            button.addEventListener('click', () => {
+                clearInterval(countdownInterval);
+                document.querySelector('.auto-redirect').style.display = 'none';
+            });
+        });
+        
+        // Adicionar evento de clique para parar o countdown se o usuário clicar no link de voltar
+        document.querySelector('.back-link').addEventListener('click', () => {
+            clearInterval(countdownInterval);
+        });
+    </script>
+</body>
+</html> 

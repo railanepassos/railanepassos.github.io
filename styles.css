@@ -44,32 +44,43 @@ h1 {
 }
 
 .link-card {
-  position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  /* Centraliza o texto horizontalmente */
+  justify-content: flex-start;
   background-color: #fff;
   border-radius: 25px;
-  padding: 10px 15px;
+  padding: 15px 20px;
   margin: 10px 0;
   box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.1);
   text-decoration: none;
   color: #345c4f;
   width: 100%;
-  /* Ocupa a largura máxima do container */
-  text-align: center;
-  /* Centraliza o texto dentro do card */
+  text-align: left;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.link-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.15);
 }
 
 .link-card img {
-  position: absolute;
-  left: 15px;
-  /* Ajusta o espaço para o ícone ficar à esquerda */
   width: 24px;
   height: 24px;
-  margin-right: 10px;
-  /* Espaço entre o ícone e o texto */
+  margin-right: 15px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.link-card i {
+  margin-right: 15px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.link-card span {
+  flex: 1;
+  font-weight: 500;
 }
 
 h2 {
