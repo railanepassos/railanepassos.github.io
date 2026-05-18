@@ -3,29 +3,26 @@
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
         http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
-  
-  <!-- Homepage -->
+
   <url>
     <loc>https://railanepassos.tec.br/</loc>
-    <lastmod>2024-01-15</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
   </url>
-  
-  <!-- Privacy Policy -->
+
   <url>
     <loc>https://railanepassos.tec.br/privacy-policy.html</loc>
-    <lastmod>2024-01-15</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
+    <priority>0.5</priority>
   </url>
-  
-  <!-- Calendar -->
+
   <url>
     <loc>https://railanepassos.tec.br/calendar.html</loc>
-    <lastmod>2024-01-15</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
-  
-</urlset> 
+
+</urlset>
