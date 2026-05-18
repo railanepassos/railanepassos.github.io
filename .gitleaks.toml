@@ -1,0 +1,21 @@
+# gitleaks configuration — https://github.com/gitleaks/gitleaks
+# Alinhado ao PLAYBOOK.md §4
+
+title = "railanepassos.github.io"
+
+[allowlist]
+description = "Falsos positivos conhecidos do projeto"
+paths = [
+  '''^\.github/workflows/.*\.yml$''',
+  '''^PLAYBOOK\.md$''',
+  '''^docs/lgpd-checklist\.md$''',
+  '''^\.github/pull_request_template\.md$''',
+  '''^AGENTS\.md$''',
+]
+regexes = [
+  '''privacy@railanepassos\.tec\.br''',
+  '''\$\{\{ secrets\.[A-Z0-9_]+ \}\}''',
+  '''SNYK_TOKEN''',
+  '''SONAR_TOKEN''',
+  '''GITHUB_TOKEN''',
+]

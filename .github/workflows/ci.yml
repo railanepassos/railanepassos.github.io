@@ -1,0 +1,290 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  lint-html:
+    name: Lint HTML + CSP + links
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate HTML
+        run: npx -y html-validate@9.4.0 --config .htmlvalidate.json index.html calendar.html privacy-policy.html
+
+      - name: Verify Content-Security-Policy meta
+        run: |
+          set -euo pipefail
+          missing=0
+          for file in index.html calendar.html privacy-policy.html; do
+            if ! grep -q 'http-equiv="Content-Security-Policy"' "$file"; then
+              echo "::error file=$file::Missing Content-Security-Policy meta tag"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Serve site and check links
+        run: |
+          set -euo pipefail
+          npx -y serve@14.2.4 . -l 8080 &
+          npx -y wait-on@8.0.1 tcp:8080
+          npx -y linkinator@6.1.2 \
+            http://127.0.0.1:8080/index.html \
+            http://127.0.0.1:8080/calendar.html \
+            http://127.0.0.1:8080/privacy-policy.html \
+            --recurse \
+            --verbosity error \
+            --skip "^(https?:)?//(www\\.)?(linkedin|github|youtube|instagram|dev\\.to|medium|amazon|google|digibee|bstqb|gov\\.br)"
+
+  lint-css:
+    name: Lint CSS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Stylelint
+        run: npx -y stylelint@16.14.1 "**/*.css" --config .stylelintrc.json --allow-empty-input
+
+  a11y:
+    name: Accessibility smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Pa11y CI (axe / WCAG2AA)
+        run: |
+          set -euo pipefail
+          npx -y serve@14.2.4 . -l 8080 &
+          npx -y wait-on@8.0.1 tcp:8080
+          npx -y pa11y-ci@3.1.0 --config .pa11yci.json
+
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  lgpd-policy-check:
+    name: LGPD policy gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require LGPD review when site HTML changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
+          SITE_HTML=$(echo "$FILES" | grep -E '\.html$' | grep -v '^privacy-policy\.html$' || true)
+          if [ -z "$SITE_HTML" ]; then
+            echo "No site HTML changes outside privacy-policy — LGPD gate skipped."
+            exit 0
+          fi
+          echo "Site HTML changed:"
+          echo "$SITE_HTML"
+          LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' || true)
+          if echo "$LABELS" | grep -qx 'lgpd-reviewed'; then
+            echo "Label lgpd-reviewed present."
+            exit 0
+          fi
+          BODY=$(gh pr view "$PR_NUMBER" --json body --jq .body || true)
+          if echo "$BODY" | grep -q 'LGPD-OK'; then
+            echo "LGPD-OK found in PR body."
+            exit 0
+          fi
+          echo "::error::HTML do site alterado. Adicione a label lgpd-reviewed ou inclua LGPD-OK no corpo do PR (ver docs/lgpd-checklist.md)."
+          exit 1
+
+  sonar:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarCloud Scan
+        if: ${{ secrets.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarcloud-github-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Skip Sonar (SONAR_TOKEN not configured)
+        if: ${{ secrets.SONAR_TOKEN == '' }}
+        run: |
+          echo "::warning::SONAR_TOKEN not set. Configure SonarCloud per PLAYBOOK.md §10 (Onda 1)."
+
+  unit:
+    name: Unit tests (Vitest)
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('package.json') != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests with coverage
+        run: npm run test:unit --if-present
+
+  mutation:
+    name: Mutation tests (Stryker)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' && hashFiles('package.json') != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run mutation tests
+        run: npm run test:mutation --if-present
+
+  integration:
+    name: Integration tests (Playwright)
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('package.json') != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e tests
+        run: npm run test:e2e --if-present
+
+  ci-success:
+    name: CI success
+    runs-on: ubuntu-latest
+    needs:
+      - lint-html
+      - lint-css
+      - a11y
+      - gitleaks
+      - lgpd-policy-check
+      - sonar
+      - unit
+      - mutation
+      - integration
+    if: always()
+    steps:
+      - name: Check required jobs
+        run: |
+          set -euo pipefail
+          check() {
+            local result="$1"
+            local name="$2"
+            if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
+              echo "::error::$name failed ($result)"
+              exit 1
+            fi
+            if [ "$result" = "skipped" ]; then
+              echo "$name skipped (OK)"
+            else
+              echo "$name $result"
+            fi
+          }
+          check "${{ needs.lint-html.result }}" "lint-html"
+          check "${{ needs.lint-css.result }}" "lint-css"
+          check "${{ needs.a11y.result }}" "a11y"
+          check "${{ needs.gitleaks.result }}" "gitleaks"
+          # lgpd-policy-check skipped on push — treat as OK
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            check "${{ needs.lgpd-policy-check.result }}" "lgpd-policy-check"
+          fi
+          check "${{ needs.sonar.result }}" "sonar"
+          # Optional jobs when no package.json
+          for job in unit mutation integration; do
+            result=""
+            case "$job" in
+              unit) result="${{ needs.unit.result }}" ;;
+              mutation) result="${{ needs.mutation.result }}" ;;
+              integration) result="${{ needs.integration.result }}" ;;
+            esac
+            if [ "$result" = "failure" ]; then
+              echo "::error::$job failed"
+              exit 1
+            fi
+          done
+          echo "All required CI checks passed."

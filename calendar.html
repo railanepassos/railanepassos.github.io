@@ -3,73 +3,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Agende uma reunião com Railane Passos - QA Engineer. Acesse o calendário do Google mediante sua escolha.">
-    <meta name="keywords" content="agendar reunião, calendário, Railane Passos, QA Engineer">
+    <meta name="description" content="Agende uma conversa exploratória com Railane Passos sobre qualidade de software e IA.">
     <meta name="author" content="Railane Passos">
     <meta name="robots" content="index, follow">
 
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://railanepassos.tec.br/calendar.html">
-    <meta property="og:title" content="Agendar Reunião - Railane Passos">
-    <meta property="og:description" content="Agende uma reunião com Railane Passos - QA Engineer via Google Calendar.">
+    <meta property="og:title" content="Conversa exploratória - Railane Passos">
+    <meta property="og:description" content="Agende uma conversa sobre qualidade de software e IA aplicada ao seu contexto.">
     <meta property="og:image" content="https://railanepassos.tec.br/assets/img/perfil.jpg">
-
-    <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:url" content="https://railanepassos.tec.br/calendar.html">
-    <meta property="twitter:title" content="Agendar Reunião - Railane Passos">
-    <meta property="twitter:description" content="Agende uma reunião com Railane Passos - QA Engineer via Google Calendar.">
-    <meta property="twitter:image" content="https://railanepassos.tec.br/assets/img/perfil.jpg">
 
     <link rel="canonical" href="https://railanepassos.tec.br/calendar.html">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; img-src 'self' https: data:; font-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; script-src 'none'; upgrade-insecure-requests">
     <link rel="stylesheet" href="styles.css">
-    <title>Agendar Reunião - Railane Passos</title>
+    <title>Conversa exploratória - Railane Passos</title>
 </head>
 <body class="page-calendar">
-    <div class="container container--calendar">
-        <div class="calendar-container">
-            <img src="assets/img/calendar.svg" alt="" class="calendar-icon" width="64" height="64" aria-hidden="true">
-
-            <h1 class="calendar-title">Agendar reunião</h1>
-
-            <p class="calendar-description">
-                Ao continuar, você será direcionado(a) ao <strong>Google Calendar</strong>, serviço da Google LLC,
-                que tratará os dados que você informar conforme a
-                <a href="https://policies.google.com/privacy" rel="noopener noreferrer">política de privacidade do Google</a>.
-                Nenhum redirecionamento automático é realizado sem o seu clique.
-            </p>
-
-            <div class="calendar-buttons">
-                <a href="https://calendar.app.google/uyhKVBde5vVGacNu9"
-                   class="calendar-button"
-                   rel="noopener noreferrer"
-                   target="_blank">
-                    <img src="assets/icons/external-link.svg" alt="" width="16" height="16">
-                    Agendar reunião
+    <div class="page-shell">
+        <header class="site-header">
+            <div class="site-header__inner">
+                <a href="index.html" class="logo" aria-label="Workflow Tech Engineering — início">
+                    <span class="logo__name">Workflow <span class="logo__accent">Tech Engineering</span></span>
                 </a>
-
-                <a href="https://calendar.google.com/calendar/u/0/embed?src=contato.railanepassos%40gmail.com"
-                   class="calendar-button calendar-button--secondary"
-                   rel="noopener noreferrer"
-                   target="_blank">
-                    <img src="assets/icons/external-link.svg" alt="" width="16" height="16">
-                    Ver disponibilidade
-                </a>
+                <nav class="site-nav" aria-label="Principal">
+                    <a href="index.html">Início</a>
+                    <a href="calendar.html" aria-current="page">Conversa</a>
+                    <a href="privacy-policy.html">Privacidade</a>
+                </nav>
             </div>
+        </header>
 
-            <p class="calendar-notice">
-                O endereço de e-mail exibido no calendário é utilizado apenas para identificação pública do agendamento.
-                Detalhes constam na <a href="privacy-policy.html">Política de Privacidade</a>.
-            </p>
+        <main class="page-main">
+            <div class="container container--narrow">
+                <article class="calendar-card">
+                    <img src="assets/img/calendar.svg" alt="" width="56" height="56" aria-hidden="true">
 
-            <a href="index.html" class="back-link">
-                <img src="assets/icons/arrow-left.svg" alt="" width="16" height="16">
-                Voltar ao início
-            </a>
-        </div>
+                    <h1 class="calendar-title">Conversa exploratória</h1>
+
+                    <p class="calendar-description">
+                        Sessão de cerca de 30 minutos para entender seu contexto em qualidade de software,
+                        testes ou adoção de IA — consultoria, mentoria ou parceria de conteúdo.
+                    </p>
+
+                    <p class="calendar-description">
+                        Ao continuar, você será direcionado(a) ao <strong>Google Calendar</strong> (Google LLC),
+                        que tratará os dados informados conforme a
+                        <a href="https://policies.google.com/privacy" rel="noopener noreferrer">política do Google</a>.
+                        Nenhum redirecionamento ocorre sem o seu clique.
+                    </p>
+
+                    <div class="calendar-buttons">
+                        <a href="https://calendar.app.google/uyhKVBde5vVGacNu9"
+                           class="calendar-button"
+                           rel="noopener noreferrer"
+                           target="_blank">
+                            <img src="assets/icons/external-link.svg" alt="" width="16" height="16">
+                            Escolher horário
+                        </a>
+
+                        <a href="https://calendar.google.com/calendar/u/0/embed?src=contato.railanepassos%40gmail.com"
+                           class="calendar-button calendar-button--secondary"
+                           rel="noopener noreferrer"
+                           target="_blank">
+                            Ver disponibilidade
+                        </a>
+                    </div>
+
+                    <p class="calendar-notice">
+                        Prefere e-mail? Escreva para
+                        <a href="mailto:privacy@railanepassos.tec.br">privacy@railanepassos.tec.br</a>.
+                        Detalhes na <a href="privacy-policy.html">Política de Privacidade</a>.
+                    </p>
+
+                    <a href="index.html" class="back-link">
+                        <img src="assets/icons/arrow-left.svg" alt="" width="16" height="16">
+                        Voltar ao início
+                    </a>
+                </article>
+            </div>
+        </main>
 
         <footer class="site-footer">
-            <p>&copy; 2026 Railane Passos</p>
+            <p>&copy; 2026 Workflow Tech Engineering</p>
             <p><a href="privacy-policy.html">Política de Privacidade</a></p>
         </footer>
     </div>

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Playbook da esteira
+    url: https://github.com/railanepassos/railanepassos.github.io/blob/main/PLAYBOOK.md
+    about: Princípios, TDD, segurança e LGPD do projeto
+  - name: Checklist LGPD
+    url: https://github.com/railanepassos/railanepassos.github.io/blob/main/docs/lgpd-checklist.md
+    about: DPIA leve por feature

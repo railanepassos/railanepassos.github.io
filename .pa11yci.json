@@ -1,0 +1,17 @@
+{
+  "defaults": {
+    "standard": "WCAG2AA",
+    "runners": ["axe"],
+    "chromeLaunchConfig": {
+      "args": ["--no-sandbox", "--disable-setuid-sandbox"]
+    },
+    "ignore": [
+      "color-contrast"
+    ]
+  },
+  "urls": [
+    "http://127.0.0.1:8080/index.html",
+    "http://127.0.0.1:8080/calendar.html",
+    "http://127.0.0.1:8080/privacy-policy.html"
+  ]
+}
