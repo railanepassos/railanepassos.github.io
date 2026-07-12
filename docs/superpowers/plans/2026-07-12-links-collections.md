@@ -1838,6 +1838,11 @@ export type CollectionsPickerHandle = {
 export function createCollectionsPickerSheet(): CollectionsPickerHandle {
   let opts: CollectionsPickerOpenOpts | null = null;
   let activeIds = new Set<string>();
+  // Bumped on every open() call. `opts` itself is intentionally reassigned
+  // to a new object mid-session (see onCreate's .then() below), so identity
+  // comparison against `opts` can't tell "reopened for a different link"
+  // apart from "same session, mutated in place" — this counter can.
+  let sessionId = 0;
 
   const overlay = document.createElement("div");
   overlay.className = "links-filter-sheet links-collections-sheet";
@@ -1917,6 +1922,7 @@ export function createCollectionsPickerSheet(): CollectionsPickerHandle {
 
     row.addEventListener("click", () => {
       const current = opts;
+      const session = sessionId;
       if (!current || row.disabled) return;
       const nextActive = !activeIds.has(collection.id);
       row.disabled = true;
@@ -1924,16 +1930,18 @@ export function createCollectionsPickerSheet(): CollectionsPickerHandle {
       void current
         .onToggle(collection.id, nextActive)
         .then(() => {
-          if (opts !== current) return;
+          if (sessionId !== session) return;
           if (nextActive) activeIds.add(collection.id);
           else activeIds.delete(collection.id);
           renderRows();
         })
         .catch((err) => {
+          if (sessionId !== session) return;
           error.textContent = pickerErrorMessage(err);
           error.hidden = false;
         })
         .finally(() => {
+          if (sessionId !== session) return;
           row.disabled = false;
         });
     });
@@ -1949,6 +1957,7 @@ export function createCollectionsPickerSheet(): CollectionsPickerHandle {
 
   function open(nextOpts: CollectionsPickerOpenOpts): void {
     opts = nextOpts;
+    sessionId += 1;
     activeIds = new Set(nextOpts.activeIds);
     error.hidden = true;
     createInput.value = "";
@@ -1960,6 +1969,7 @@ export function createCollectionsPickerSheet(): CollectionsPickerHandle {
   createRow.addEventListener("submit", (e) => {
     e.preventDefault();
     const current = opts;
+    const session = sessionId;
     if (!current) return;
     const name = createInput.value.trim();
     if (name.length === 0) return;
@@ -1968,17 +1978,19 @@ export function createCollectionsPickerSheet(): CollectionsPickerHandle {
     void current
       .onCreate(name)
       .then((created) => {
-        if (opts !== current) return;
+        if (sessionId !== session) return;
         opts = { ...current, collections: [...current.collections, created] };
         activeIds.add(created.id);
         createInput.value = "";
         renderRows();
       })
       .catch((err) => {
+        if (sessionId !== session) return;
         error.textContent = pickerErrorMessage(err);
         error.hidden = false;
       })
       .finally(() => {
+        if (sessionId !== session) return;
         createBtn.disabled = false;
       });
   });
