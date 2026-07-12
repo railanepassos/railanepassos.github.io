@@ -1261,28 +1261,44 @@ body.links-screen-open {
   line-height: 1.2;
 }
 
+/* Schedule sheet: content-sized form (no dead space under Remover). */
+.links-admin-modal__dialog--schedule {
+  background: var(--bg);
+}
+
+.links-admin-modal__dialog--schedule .links-admin-screen__header {
+  background: var(--surface);
+}
+
+.links-admin-form--schedule {
+  flex: 0 1 auto;
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px 16px max(16px, env(safe-area-inset-bottom, 0px));
+  gap: 12px;
+  background: var(--surface);
+}
+
+.links-admin-form--schedule .links-admin-form__hint {
+  margin-bottom: 0;
+}
+
+.links-admin-form--schedule .links-admin-form__actions--sticky {
+  position: static;
+  margin-top: 4px;
+  margin-bottom: 0;
+  padding: 0;
+  gap: 8px;
+  border-top: none;
+  background: none;
+}
+
 .links-admin-form--screen {
   flex: 1;
   overflow-y: auto;
   padding: 20px 16px calc(24px + env(safe-area-inset-bottom, 0px));
   gap: 18px;
-}
-
-/* Schedule sheet: tighter stack; sticky footer owns the bottom inset. */
-.links-admin-form--schedule {
-  padding: 16px 16px 0;
-  gap: 12px;
-}
-
-.links-admin-form--schedule .links-admin-form__hint {
-  margin-bottom: 4px;
-}
-
-.links-admin-form--schedule .links-admin-form__actions--sticky {
-  margin-top: 8px;
-  padding: 12px 0 max(10px, env(safe-area-inset-bottom, 0px));
-  gap: 8px;
-  background: var(--surface);
 }
 
 .links-admin-form__actions--sticky {
@@ -1377,7 +1393,8 @@ body.links-screen-open {
   }
 
   .links-admin-form--schedule {
-    padding: 16px 24px 8px;
+    padding: 16px 24px 24px;
+    max-height: none;
   }
 
   .links-admin-form__actions--sticky {
@@ -1392,7 +1409,7 @@ body.links-screen-open {
   .links-admin-form--schedule .links-admin-form__actions--sticky {
     flex-direction: column;
     align-items: stretch;
-    padding: 8px 0 16px;
+    padding: 0;
     gap: 8px;
   }
 

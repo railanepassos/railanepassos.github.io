@@ -1287,6 +1287,7 @@ export function createScheduleSheet(): ScheduleSheetHandle {
     "Agendar experiência",
     "dialog"
   );
+  dialog.classList.add("links-admin-modal__dialog--schedule");
 
   const form = document.createElement("form");
   form.className =
