@@ -2002,6 +2002,22 @@ body.links-screen-open {
   line-height: 1;
 }
 
+.links-admin-form__input-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.links-admin-form__input-row .links-admin-form__control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.links-admin-form__paste-btn {
+  flex: 0 0 auto;
+  padding: 0 16px;
+}
+
 .links-admin-form__email-row {
   display: flex;
   align-items: stretch;

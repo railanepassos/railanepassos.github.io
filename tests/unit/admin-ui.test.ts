@@ -1,8 +1,9 @@
 /**
  * @vitest-environment jsdom
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  createLinkFormModal,
   createScheduleSheet,
   createViewModal,
   renderAdminCard,
@@ -297,5 +298,76 @@ describe("createLinkFormModal Nome field", () => {
       "#links-form-label"
     ) as HTMLInputElement;
     expect(labelInput.required).toBe(false);
+  });
+});
+
+describe("createLinkFormModal paste button", () => {
+  afterEach(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("fills the URL field from the clipboard on click", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: { readText: vi.fn().mockResolvedValue("https://pasted.example.com/x") },
+      configurable: true,
+    });
+
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    modal.openCreate();
+
+    const pasteBtn = modal.element.querySelector(
+      '[data-action="paste-url"]'
+    ) as HTMLButtonElement;
+    expect(pasteBtn).toBeTruthy();
+    pasteBtn.click();
+
+    await vi.waitFor(() => {
+      const urlInput = modal.element.querySelector(
+        "#links-form-url"
+      ) as HTMLInputElement;
+      expect(urlInput.value).toBe("https://pasted.example.com/x");
+    });
+  });
+
+  it("shows an error banner when the clipboard read is rejected", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: { readText: vi.fn().mockRejectedValue(new Error("denied")) },
+      configurable: true,
+    });
+
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    modal.openCreate();
+
+    (
+      modal.element.querySelector(
+        '[data-action="paste-url"]'
+      ) as HTMLButtonElement
+    ).click();
+
+    await vi.waitFor(() => {
+      expect(modal.element.textContent).toContain(
+        "Não foi possível colar automaticamente."
+      );
+    });
+  });
+
+  it("does not render the button when the Clipboard API is unavailable", () => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: undefined,
+      configurable: true,
+    });
+
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    modal.openCreate();
+
+    expect(
+      modal.element.querySelector('[data-action="paste-url"]')
+    ).toBeNull();
   });
 });

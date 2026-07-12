@@ -1158,6 +1158,15 @@ export function createLinkFormModal(
   error.setAttribute("role", "alert");
   error.hidden = true;
 
+  attachPasteButton(urlField, (message) => {
+    if (message) {
+      error.textContent = message;
+      error.hidden = false;
+    } else {
+      clearError();
+    }
+  });
+
   const actions = document.createElement("div");
   actions.className = "links-admin-form__actions links-admin-form__actions--sticky";
 
@@ -1860,6 +1869,48 @@ function attachCharCounter(
   wrapper.appendChild(counter);
   update();
   return update;
+}
+
+/**
+ * Adds a "Colar" button beside a URL field that fills it from the
+ * clipboard. Renders nothing if the Clipboard read API isn't available
+ * (progressive enhancement — the field still works via normal paste).
+ */
+function attachPasteButton(
+  field: LabelledInput,
+  setError: (message: string | null) => void
+): void {
+  const clipboard = navigator.clipboard as
+    | { readText?: () => Promise<string> }
+    | undefined;
+  if (!clipboard?.readText) return;
+
+  const row = document.createElement("div");
+  row.className = "links-admin-form__input-row";
+  field.input.replaceWith(row);
+  row.append(field.input);
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "links-admin-button links-admin-button--ghost links-admin-form__paste-btn";
+  btn.textContent = "Colar";
+  btn.setAttribute("data-action", "paste-url");
+  row.append(btn);
+
+  btn.addEventListener("click", () => {
+    void (async () => {
+      try {
+        const text = await clipboard.readText!();
+        const trimmed = text.trim();
+        if (trimmed.length > 0) {
+          field.input.value = trimmed;
+          setError(null);
+        }
+      } catch {
+        setError("Não foi possível colar automaticamente. Cole manualmente.");
+      }
+    })();
+  });
 }
 
 function iconButton(text: string, ariaLabel: string): HTMLButtonElement {
