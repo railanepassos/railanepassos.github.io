@@ -28,7 +28,7 @@
     <div class="container container--wide">
         <article class="legal-content">
             <h1>Política de Privacidade e Proteção de Dados Pessoais</h1>
-            <p class="legal-meta"><strong>Última atualização:</strong> 18 de maio de 2026 &nbsp;|&nbsp; <strong>Versão:</strong> 2.2</p>
+            <p class="legal-meta"><strong>Última atualização:</strong> 11 de julho de 2026 &nbsp;|&nbsp; <strong>Versão:</strong> 2.3</p>
 
             <p>Esta Política descreve, de forma transparente, como <strong>Railane Passos</strong>, pessoa física responsável pela consultoria <strong>Workflow Tech Engineering</strong> (“<strong>nós</strong>”, “<strong>controladora</strong>”), trata dados pessoais no site <a href="https://railanepassos.tec.br/">https://railanepassos.tec.br/</a> (“<strong>Site</strong>”), em conformidade com a Lei Geral de Proteção de Dados Pessoais — LGPD (Lei nº 13.709/2018) e regulamentações da Autoridade Nacional de Proteção de Dados (ANPD).</p>
 
@@ -44,7 +44,8 @@
             </table>
 
             <h2 id="escopo">2. Escopo e público</h2>
-            <p>Esta Política aplica-se a visitantes do Site. O Site é o hub de links da consultoria <strong>Workflow Tech Engineering</strong> (workflow e engenharia de software). <strong>Não há</strong>, no momento, formulários embutidos, newsletter, login, comentários, analytics próprios ou perfilamento automatizado neste domínio. Agendamentos podem ocorrer via Google Calendar, mediante seu clique na página dedicada.</p>
+            <p>Esta Política aplica-se a visitantes do Site. O Site é o hub de links da consultoria <strong>Workflow Tech Engineering</strong> (workflow e engenharia de software). <strong>Não há</strong>, no momento, formulários embutidos, newsletter, comentários, analytics próprios ou perfilamento automatizado neste domínio. Agendamentos podem ocorrer via Google Calendar, mediante seu clique na página dedicada.</p>
+            <p>Existe uma área restrita de edição de links, acessível exclusivamente por editores autorizados previamente pela controladora. Visitantes comuns não têm acesso a essa área e não têm dados pessoais coletados por ela.</p>
             <p>O Site não é direcionado a crianças. Não coletamos intencionalmente dados de menores de 18 anos sem base legal adequada e consentimento do responsável, quando aplicável.</p>
 
             <h2 id="dados">3. Dados pessoais tratados, finalidades e bases legais</h2>
@@ -77,6 +78,12 @@
                         <td>Agendamento ou interação fora do Site</td>
                         <td>Responsabilidade do respectivo controlador (Google, Meta etc.); consulte a política deles</td>
                     </tr>
+                    <tr>
+                        <td>Credenciais e dados de autenticação de editores</td>
+                        <td>Endereço de e-mail e senha de editor; JWT de sessão; endereço IP registrado em logs de autenticação</td>
+                        <td>Autenticar editores autorizados na área restrita de edição de links do Site; manter sessão ativa durante o uso; garantir segurança e rastreabilidade de acessos</td>
+                        <td>Legítimo interesse da controladora (art. 7, IX), uma vez que o acesso é restrito a editores previamente autorizados, sem auto-cadastro público</td>
+                    </tr>
                 </tbody>
             </table>
             <p><strong>Importante:</strong> ao clicar em links externos (LinkedIn, GitHub, YouTube, Instagram, Dev.to, Medium, BSTQB, Google Calendar etc.), você passa a estar sujeito às políticas daquele serviço, que podem coletar dados por conta própria.</p>
@@ -106,6 +113,12 @@
                         <td>Estados Unidos e outros países</td>
                     </tr>
                     <tr>
+                        <td><a href="https://supabase.com/privacy" rel="noopener noreferrer">Supabase Inc.</a></td>
+                        <td>Operador — autenticação e base de dados da área restrita de edição de links</td>
+                        <td>Processamento de credenciais de login (e-mail/senha), emissão de JWT de sessão e registro de logs de acesso (IP) dos editores autorizados</td>
+                        <td>Estados Unidos</td>
+                    </tr>
+                    <tr>
                         <td>Redes sociais, Dev.to, Medium, BSTQB</td>
                         <td>Destinos de links</td>
                         <td>Conforme política de cada plataforma, após o clique</td>
@@ -116,17 +129,20 @@
             <p><strong>Não vendemos</strong> dados pessoais. Não compartilhamos dados com terceiros para publicidade comportamental neste Site. Não há programa de afiliados neste Site.</p>
 
             <h2 id="transferencia">5. Transferência internacional</h2>
-            <p>A hospedagem em GitHub Pages e serviços como Google podem implicar transferência de dados para os Estados Unidos e outros países. Adotamos fornecedores que declaram cláusulas contratuais e medidas de segurança compatíveis com a LGPD. Ao usar o Site ou links externos, você reconhece essa possibilidade.</p>
+            <p>A hospedagem em GitHub Pages, o uso de serviços como Google e a autenticação de editores via Supabase Inc. (infraestrutura sediada nos Estados Unidos) implicam transferência de dados para os Estados Unidos e outros países, nos termos do art. 33 da LGPD. Adotamos fornecedores que declaram cláusulas contratuais e medidas de segurança compatíveis com a LGPD. Ao usar o Site ou links externos, você reconhece essa possibilidade.</p>
 
             <h2 id="cookies">6. Cookies e tecnologias similares</h2>
-            <p><strong>Neste Site (railanepassos.tec.br):</strong> não utilizamos cookies próprios, localStorage, sessionStorage, pixels de analytics nem scripts de rastreamento de terceiros carregados automaticamente nas páginas HTML publicadas.</p>
+            <p><strong>Neste Site (railanepassos.tec.br) — páginas públicas:</strong> não utilizamos cookies próprios, localStorage, sessionStorage, pixels de analytics nem scripts de rastreamento de terceiros carregados automaticamente nas páginas HTML publicadas.</p>
+            <p><strong>Área restrita de edição de links — editores autorizados:</strong> ao realizar login na área restrita, o token JWT de sessão emitido pelo Supabase Auth é armazenado no <code>localStorage</code> do navegador do editor. Esse dado permanece no dispositivo do próprio editor e é utilizado exclusivamente para manter a sessão autenticada durante o uso da área restrita. Visitantes comuns do Site não são afetados.</p>
             <p><strong>Terceiros após o clique:</strong> plataformas externas (por exemplo, Google, redes sociais, BSTQB) podem definir cookies ou tecnologias equivalentes em seus domínios. O controle e o consentimento são de responsabilidade desses serviços.</p>
-            <p>Você pode gerenciar cookies nas configurações do seu navegador. A recusa de cookies em sites de terceiros pode limitar funcionalidades desses serviços, não do nosso Site estático.</p>
+            <p>Você pode gerenciar cookies e dados de armazenamento local nas configurações do seu navegador. A recusa de cookies em sites de terceiros pode limitar funcionalidades desses serviços, não do nosso Site estático.</p>
 
             <h2 id="retencao">7. Prazo de retenção</h2>
             <ul>
                 <li><strong>Logs de hospedagem (GitHub):</strong> mantidos pelo provedor pelo tempo necessário à segurança e obrigações legais, conforme a <a href="https://docs.github.com/pt/site-policy/privacy-policies/github-general-privacy-statement" rel="noopener noreferrer">Política de Privacidade do GitHub</a>.</li>
                 <li><strong>Comunicações por e-mail</strong> (solicitações a <a href="mailto:privacy@railanepassos.tec.br">privacy@railanepassos.tec.br</a>): mantidas pelo tempo necessário para atender seu pedido, cumprir obrigação legal ou resguardar direitos, em geral até 5 anos após o encerramento da solicitação, salvo prazo maior exigido por lei.</li>
+                <li><strong>Dados de autenticação de editores (Supabase):</strong> credenciais e logs de acesso retidos pelo tempo necessário à operação e segurança da área restrita, conforme a <a href="https://supabase.com/privacy" rel="noopener noreferrer">Política de Privacidade do Supabase</a>; contas de editor encerradas mediante solicitação à controladora.</li>
+                <li><strong>JWT de sessão em localStorage:</strong> removido do dispositivo do editor ao sair da sessão ou limpar os dados do navegador.</li>
                 <li><strong>Dados em serviços externos</strong> (Google Calendar etc.): regidos pelas políticas e prazos desses controladores.</li>
             </ul>
 
@@ -137,7 +153,8 @@
                 <li>Hospedagem em infraestrutura do GitHub Pages (HTTPS);</li>
                 <li>Ausência de scripts de terceiros embutidos nas páginas, reduzindo superfície de ataque;</li>
                 <li>Ícones e recursos visuais servidos do próprio domínio, sem CDN externo de fontes/scripts;</li>
-                <li>Revisão periódica de dependências e código com ferramentas de segurança (Snyk) no repositório.</li>
+                <li>Revisão periódica de dependências e código com ferramentas de segurança (Snyk) no repositório;</li>
+                <li>Autenticação de editores delegada ao Supabase Auth, que adota criptografia de senhas, TLS em trânsito e controles de acesso por JWT.</li>
             </ul>
             <p>Nenhum sistema é 100% seguro. Em caso de incidente de segurança com risco ou dano relevante aos titulares, comunicaremos a ANPD e os afetados conforme arts. 48 e 50 da LGPD.</p>
 
