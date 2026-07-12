@@ -5,9 +5,13 @@ create table if not exists public.links (
   label text not null check (char_length(label) between 1 and 200),
   description text check (description is null or char_length(description) <= 500),
   icon_preset text check (icon_preset is null or icon_preset in (
-    'instagram', 'github', 'linkedin', 'youtube', 'external-link', 'arrow-left'
+    'instagram', 'github', 'linkedin', 'youtube', 'google', 'external-link', 'arrow-left'
   )),
   icon_url text check (icon_url is null or icon_url ~ '^https://'),
+  category text check (category is null or category in (
+    'museu', 'evento', 'restaurante', 'trilha', 'praca', 'praia',
+    'ponto-turistico', 'passeio', 'outro'
+  )),
   sort_order integer not null,
   created_by uuid references auth.users (id),
   created_at timestamptz not null default now(),
@@ -57,12 +61,13 @@ create policy "links_delete_auth"
   using (true);
 
 -- Seed (link existente)
-insert into public.links (url, label, description, icon_preset, sort_order)
+insert into public.links (url, label, description, icon_preset, category, sort_order)
 values (
   'https://www.instagram.com/museudomar.aleixobelov/',
   'Museu do Mar',
   'Aleixobelov, AL',
   'instagram',
+  'museu',
   0
 )
 on conflict do nothing;

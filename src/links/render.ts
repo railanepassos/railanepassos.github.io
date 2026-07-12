@@ -1,5 +1,6 @@
 import type { LinkRow } from "./links-repo";
 import { resolveIconSrc } from "./icons";
+import { categoryLabel, resolveCategory } from "./category";
 
 /**
  * Static fallback shown when Supabase is not configured yet, or when the
@@ -12,9 +13,10 @@ export const FALLBACK_LINKS: LinkRow[] = [
     id: "fallback-museu-do-mar",
     url: "https://www.instagram.com/museudomar.aleixobelov/",
     label: "Museu do Mar",
-    description: "Aleixobelov, AL",
+    description: "Aleixobelov, AL · inspiração de viagem",
     icon_preset: "instagram",
     icon_url: null,
+    category: "museu",
     sort_order: 0,
   },
 ];
@@ -45,6 +47,11 @@ export function renderPublicCard(link: LinkRow): HTMLAnchorElement {
   label.className = "link-card__label";
   label.textContent = link.label;
   text.appendChild(label);
+
+  const cat = document.createElement("span");
+  cat.className = "link-card__category";
+  cat.textContent = categoryLabel(resolveCategory(link));
+  text.appendChild(cat);
 
   if (link.description && link.description.length > 0) {
     const desc = document.createElement("span");

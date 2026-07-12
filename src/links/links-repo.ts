@@ -8,6 +8,7 @@ export type LinkRow = {
   description: string | null;
   icon_preset: string | null;
   icon_url: string | null;
+  category: string | null;
   sort_order: number;
   created_by?: string | null;
   created_at?: string | null;
@@ -20,6 +21,7 @@ export type CreateLinkInput = {
   description?: string | null;
   icon_preset?: string | null;
   icon_url?: string | null;
+  category?: string | null;
   sort_order: number;
 };
 
@@ -29,6 +31,7 @@ export type UpdateLinkPatch = {
   description?: string | null;
   icon_preset?: string | null;
   icon_url?: string | null;
+  category?: string | null;
   sort_order?: number;
 };
 

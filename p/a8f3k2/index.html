@@ -2,16 +2,16 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Links.">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="description" content="Experience Bucket List — lugares, viagens e posts para viver e revisar depois.">
     <meta name="author" content="Railane Passos">
     <meta name="robots" content="noindex, nofollow">
 
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; img-src 'self' https: data:; font-src 'self'; connect-src 'self' https://*.supabase.co; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; script-src 'self'; upgrade-insecure-requests">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; img-src 'self' https: data:; font-src 'self'; connect-src 'self' https://*.supabase.co; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; script-src 'self'">
     <link rel="stylesheet" href="/styles.css">
-    <title>Links</title>
+    <title>Experience Bucket List</title>
 </head>
-<body class="page-sub">
+<body class="page-sub page-links-admin">
     <div class="page-shell">
         <header class="site-header">
             <div class="site-header__inner">
@@ -21,17 +21,77 @@
             </div>
         </header>
 
-        <main class="page-main">
-            <div class="container container--narrow">
-                <article class="sub-card">
-                    <h1 class="sub-title">Links</h1>
-                    <p class="sub-description">
-                        Referências externas. Abrem em nova aba ao clicar.
-                    </p>
+        <main class="page-main page-links-admin__main">
+            <div class="page-links-admin__content">
+                <h1 class="sub-title">Experience Bucket List</h1>
+                <p class="sub-description">
+                    Guia pessoal de viagens e experiências: salve posts, lugares e roteiros
+                    que quiser viver. Depois, volte aqui para revisar e priorizar o que
+                    ainda falta conhecer.
+                </p>
 
-                    <div id="links-admin-root"></div>
-                    <nav id="links-list" class="sub-list" aria-label="Links externos"></nav>
-                </article>
+                <div id="links-admin-root">
+                    <div class="links-skeleton links-skeleton--toolbar" role="status" aria-busy="true" aria-label="Carregando ações">
+                        <div class="links-skeleton__toolbar-row">
+                            <span class="links-skeleton__bone links-skeleton__icon" aria-hidden="true"></span>
+                            <span class="links-skeleton__bone links-skeleton__icon" aria-hidden="true"></span>
+                            <span class="links-skeleton__bone links-skeleton__icon" aria-hidden="true"></span>
+                            <span class="links-skeleton__bone links-skeleton__icon" aria-hidden="true"></span>
+                        </div>
+                    </div>
+                </div>
+                <nav id="links-list" class="sub-list" aria-label="Experiências salvas">
+                    <div class="links-skeleton" role="status" aria-busy="true" aria-label="Carregando experiências">
+                        <div class="links-skeleton__card">
+                            <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
+                            <div class="links-skeleton__text">
+                                <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
+                                <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
+                                <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
+                            </div>
+                        </div>
+                        <div class="links-skeleton__card">
+                            <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
+                            <div class="links-skeleton__text">
+                                <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
+                                <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
+                                <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
+                            </div>
+                        </div>
+                        <div class="links-skeleton__card">
+                            <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
+                            <div class="links-skeleton__text">
+                                <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
+                                <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
+                                <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
+                            </div>
+                        </div>
+                        <div class="links-skeleton__card">
+                            <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
+                            <div class="links-skeleton__text">
+                                <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
+                                <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
+                                <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
+                            </div>
+                        </div>
+                        <div class="links-skeleton__card">
+                            <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
+                            <div class="links-skeleton__text">
+                                <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
+                                <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
+                                <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
+                            </div>
+                        </div>
+                        <div class="links-skeleton__card">
+                            <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
+                            <div class="links-skeleton__text">
+                                <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
+                                <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
+                                <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
             </div>
         </main>
 

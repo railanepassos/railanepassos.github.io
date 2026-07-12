@@ -5,8 +5,8 @@ test.describe("Links admin page — unconfigured fallback", () => {
     await page.goto("/p/a8f3k2/");
   });
 
-  test("page loads with title 'Links'", async ({ page }) => {
-    await expect(page).toHaveTitle("Links");
+  test("page loads with Experience Bucket List title", async ({ page }) => {
+    await expect(page).toHaveTitle("Experience Bucket List");
   });
 
   test("meta CSP tag contains required directives", async ({ page }) => {
