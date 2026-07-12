@@ -243,9 +243,10 @@ body.page-links {
   color: var(--green);
 }
 
-/* Legal & calendar pages */
+/* Legal, calendar & bucket pages */
 body.page-legal,
-body.page-calendar {
+body.page-calendar,
+body.page-bucket {
   padding: 0;
 }
 
@@ -384,6 +385,31 @@ body.page-calendar {
   text-decoration: none;
   font-weight: 500;
   margin-top: 16px;
+}
+
+.bucket-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+  box-shadow: var(--shadow);
+}
+
+.bucket-title {
+  color: var(--navy);
+  margin: 0 0 12px;
+}
+
+.bucket-description {
+  color: var(--text-muted);
+  text-align: left;
+  margin: 0 0 24px;
+}
+
+.bucket-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .site-footer {

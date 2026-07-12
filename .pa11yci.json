@@ -12,6 +12,7 @@
   "urls": [
     "http://127.0.0.1:8080/index.html",
     "http://127.0.0.1:8080/calendar.html",
-    "http://127.0.0.1:8080/privacy-policy.html"
+    "http://127.0.0.1:8080/privacy-policy.html",
+    "http://127.0.0.1:8080/p/a8f3k2/experiences.html"
   ]
 }

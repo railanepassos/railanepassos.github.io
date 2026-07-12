@@ -32,13 +32,13 @@ jobs:
           node-version: "20"
 
       - name: Validate HTML
-        run: npx -y html-validate@9.4.0 --config .htmlvalidate.json index.html calendar.html privacy-policy.html
+        run: npx -y html-validate@9.4.0 --config .htmlvalidate.json index.html calendar.html privacy-policy.html p/a8f3k2/experiences.html
 
       - name: Verify Content-Security-Policy meta
         run: |
           set -euo pipefail
           missing=0
-          for file in index.html calendar.html privacy-policy.html; do
+          for file in index.html calendar.html privacy-policy.html p/a8f3k2/experiences.html; do
             if ! grep -q 'http-equiv="Content-Security-Policy"' "$file"; then
               echo "::error file=$file::Missing Content-Security-Policy meta tag"
               missing=1
@@ -55,6 +55,7 @@ jobs:
             http://127.0.0.1:8080/index.html \
             http://127.0.0.1:8080/calendar.html \
             http://127.0.0.1:8080/privacy-policy.html \
+            http://127.0.0.1:8080/p/a8f3k2/experiences.html \
             --recurse \
             --verbosity error \
             --skip "^(https?:)?//(www\\.)?(linkedin|github|youtube|instagram|dev\\.to|medium|amazon|google|digibee|bstqb|gov\\.br)"
