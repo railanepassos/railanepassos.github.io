@@ -79,7 +79,8 @@ export function renderPublicCard(link: LinkRow): HTMLAnchorElement {
 
 /**
  * Replace the contents of the list container with public cards for the given
- * links, in the order provided (caller sorts by sort_order).
+ * links, in the order provided (caller sorts — typically scheduled first,
+ * then most recent).
  */
 export function renderPublicList(container: HTMLElement, links: LinkRow[]): void {
   container.replaceChildren();

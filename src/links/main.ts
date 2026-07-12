@@ -30,6 +30,7 @@ import {
 } from "./admin-ui";
 import { filterLinksByCategory, type Category } from "./category";
 import { pickRandomItem } from "./pick-random";
+import { sortLinksForDisplay } from "./sort-links";
 import { buildIcs, downloadIcs } from "./ics";
 import {
   DEFAULT_END_TIME,
@@ -82,7 +83,7 @@ function renderMessage(container: HTMLElement, text: string): void {
 }
 
 function sortLinks(links: LinkRow[]): LinkRow[] {
-  return [...links].sort((a, b) => a.sort_order - b.sort_order);
+  return sortLinksForDisplay(links);
 }
 
 function icsFilename(link: LinkRow): string {
