@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getSupabaseConfig, isSupabaseConfigured, isBrowserSafeAnonKey } from "./config";
 import { createAuth, type Auth } from "./auth";
 import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
-import { FALLBACK_LINKS, renderPublicList } from "./render";
+import { renderGuestGate } from "./render";
 import { renderLinksSkeleton, renderToolbarSkeleton } from "./skeleton";
 import {
   createLoginButton,
@@ -46,14 +46,13 @@ import {
  *
  * States:
  *   Carregando  -> skeleton na toolbar + lista (#links-admin-root / #links-list).
- *   Público     -> #links-list shows public cards; "Entrar" button in
+ *   Visitante   -> gate na lista (“Entre para ver…”); "Entrar" in
  *                  #links-admin-root (only when Supabase is configured).
  *   Autenticado -> toolbar in #links-admin-root + admin cards in #links-list.
  *
  * Graceful degradation: if Supabase is not configured, or the initial
- * listLinks() throws, we render FALLBACK_LINKS and never show "Entrar" or any
- * admin affordance. This keeps the live page working before the Supabase
- * project exists.
+ * listLinks() throws for an anonymous session (expected after RLS), we keep
+ * the login affordance and never show experience cards to guests.
  */
 
 const GENERIC_ERROR = "Algo deu errado. Tente novamente.";
@@ -98,12 +97,11 @@ function icsFilename(link: LinkRow): string {
 }
 
 /**
- * Static-only mode: no Supabase, or initial load failed. Renders the fallback
- * list and nothing else.
+ * Offline / misconfigured mode: no experience cards for anyone.
  */
 function bootStatic(els: Els): void {
   els.adminRoot.replaceChildren();
-  renderPublicList(els.list, FALLBACK_LINKS);
+  renderGuestGate(els.list);
 }
 
 /**
@@ -465,30 +463,33 @@ function bootDynamic(
 
   function renderList(): void {
     els.list.replaceChildren();
-    const listLinks = visibleListLinks(links);
     if (!authenticated) {
-      renderPublicList(els.list, listLinks);
-    } else {
-      const visible = filterLinksByCategory(listLinks, categoryFilter);
-      if (visible.length === 0) {
-        const empty = document.createElement("p");
-        empty.className = "links-status";
-        empty.textContent =
-          categoryFilter.length > 0
-            ? "Nenhuma experiência nas categorias selecionadas."
-            : "Nenhuma experiência ainda.";
-        els.list.appendChild(empty);
-      } else {
-        visible.forEach((link) => {
-          els.list.appendChild(
-            renderAdminCard(link, {
-              onView: (l) => viewModal.open(l),
-              onEdit: (l) => formModal.openEdit(l),
-              onDelete: (l) => void deleteLink(l),
-            })
-          );
-        });
+      renderGuestGate(els.list);
+      if (notice) {
+        renderMessage(els.list, notice);
       }
+      return;
+    }
+    const listLinks = visibleListLinks(links);
+    const visible = filterLinksByCategory(listLinks, categoryFilter);
+    if (visible.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "links-status";
+      empty.textContent =
+        categoryFilter.length > 0
+          ? "Nenhuma experiência nas categorias selecionadas."
+          : "Nenhuma experiência ainda.";
+      els.list.appendChild(empty);
+    } else {
+      visible.forEach((link) => {
+        els.list.appendChild(
+          renderAdminCard(link, {
+            onView: (l) => viewModal.open(l),
+            onEdit: (l) => formModal.openEdit(l),
+            onDelete: (l) => void deleteLink(l),
+          })
+        );
+      });
     }
     if (notice) {
       renderMessage(els.list, notice);
@@ -500,10 +501,24 @@ function bootDynamic(
     renderList();
   }
 
-  // --- auth wiring: re-render affordances on every change ---
+  // --- auth wiring: reload private list on every session change ---
   auth.onAuthStateChange((_event, session) => {
-    authenticated = session != null;
-    render();
+    void (async () => {
+      authenticated = session != null;
+      if (authenticated) {
+        try {
+          links = sortLinks(await repo.listLinks());
+          notice = null;
+        } catch {
+          links = [];
+          notice =
+            "Não foi possível carregar links do Supabase. Confira a migration e a chave anon.";
+        }
+      } else {
+        links = [];
+      }
+      render();
+    })();
   });
 
   // Initial paint reflects whatever session may already be restored.
@@ -511,13 +526,26 @@ function bootDynamic(
     try {
       const session = await auth.getSession();
       authenticated = session != null;
+      if (authenticated) {
+        try {
+          links = sortLinks(await repo.listLinks());
+          notice = null;
+        } catch {
+          links = [];
+          notice =
+            "Não foi possível carregar links do Supabase. Confira a migration e a chave anon.";
+        }
+      } else {
+        links = [];
+      }
     } catch {
       authenticated = false;
+      links = [];
     }
     render();
   })();
 
-  // Paint immediately with public state while the session check resolves.
+  // Paint immediately with guest gate while the session check resolves.
   render();
 }
 
@@ -558,14 +586,8 @@ async function boot(): Promise<void> {
   try {
     initialLinks = await repo.listLinks();
   } catch {
-    bootDynamic(
-      els,
-      auth,
-      repo,
-      FALLBACK_LINKS,
-      "Não foi possível carregar links do Supabase. Confira a migration e a chave anon."
-    );
-    return;
+    // Anonymous SELECT is denied by RLS — empty list until login.
+    initialLinks = [];
   }
 
   bootDynamic(els, auth, repo, initialLinks);

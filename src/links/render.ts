@@ -5,10 +5,8 @@ import { formatScheduleChip } from "./schedule";
 import { categoryBackdropSrc, categoryCardClass } from "./card-theme";
 
 /**
- * Static fallback shown when Supabase is not configured yet, or when the
- * initial listLinks() call fails. Keeps the live page working after merge,
- * before the Supabase project exists. Kept as a single clearly-named constant
- * so it is easy to find and update.
+ * Historical sample row — not shown to guests (list is auth-only).
+ * Kept for fixtures/docs; do not render on the public page.
  */
 export const FALLBACK_LINKS: LinkRow[] = [
   {
@@ -103,6 +101,17 @@ export function renderPublicCard(link: LinkRow): HTMLAnchorElement {
 
   card.appendChild(text);
   return card;
+}
+
+/**
+ * Replace list contents with a login gate — no experience cards for guests.
+ */
+export function renderGuestGate(container: HTMLElement): void {
+  container.replaceChildren();
+  const status = document.createElement("p");
+  status.className = "links-status";
+  status.textContent = "Entre para ver as experiências.";
+  container.appendChild(status);
 }
 
 /**

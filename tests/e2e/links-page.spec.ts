@@ -29,24 +29,24 @@ test.describe("Links admin page — smoke", () => {
     expect(robots).toContain("noindex");
   });
 
-  test("nav#links-list eventually shows at least one .link-card", async ({
+  test("nav#links-list settles without public experience cards for guests", async ({
     page,
   }) => {
     const list = page.locator("nav#links-list");
     await expect(list).toBeVisible();
 
-    // Fallback = 1 card; configured = live Supabase rows. Both are valid.
-    await expect(list.locator(".link-card").first()).toBeVisible();
-    expect(await list.locator(".link-card").count()).toBeGreaterThanOrEqual(1);
+    // Guests never see .link-card; gate copy or empty/error status is fine.
+    await expect(list.locator(".link-card")).toHaveCount(0);
+    await expect(list.locator(".links-status").first()).toBeVisible();
   });
 
   test("#links-admin-root is present after list settles", async ({ page }) => {
     const adminRoot = page.locator("#links-admin-root");
     await expect(adminRoot).toBeAttached();
 
-    await expect(page.locator("nav#links-list .link-card").first()).toBeVisible();
+    await expect(page.locator("nav#links-list .links-status").first()).toBeVisible();
 
-    // Fallback: no buttons. Configured public: "Entrar". Either is fine for smoke.
+    // Fallback/misconfig: no buttons. Configured guest: "Entrar". Either OK.
     const buttons = adminRoot.locator("button");
     const count = await buttons.count();
     expect(count === 0 || count >= 1).toBe(true);
