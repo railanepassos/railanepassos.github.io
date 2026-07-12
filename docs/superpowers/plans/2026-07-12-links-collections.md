@@ -1654,7 +1654,10 @@ describe("createCollectionsPickerSheet", () => {
     expect(onToggle).toHaveBeenCalledWith("col-1", true);
 
     await vi.waitFor(() => {
-      expect(row.getAttribute("aria-pressed")).toBe("true");
+      const updatedRow = sheet.element.querySelector(
+        ".links-collections-sheet__row"
+      ) as HTMLElement;
+      expect(updatedRow.getAttribute("aria-pressed")).toBe("true");
     });
   });
 
