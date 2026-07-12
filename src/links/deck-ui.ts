@@ -1,5 +1,10 @@
 import type { LinkRow } from "./links-repo";
-import { categoryLabel, resolveCategory } from "./category";
+import {
+  CATEGORY_OPTIONS,
+  categoryLabel,
+  resolveCategory,
+} from "./category";
+import { categoryBackdropSrc, categoryCardClass } from "./card-theme";
 import { linksForDeck, skipFront, type DeckTab } from "./deck-queue";
 import { syncBodyScreenLock } from "./screen-lock";
 
@@ -20,7 +25,7 @@ export type DeckHandle = {
   refresh: (links: readonly LinkRow[]) => void;
 };
 
-const SWIPE_THRESHOLD = 80;
+const SWIPE_THRESHOLD = 88;
 
 export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
   let tab: DeckTab = "wishlist";
@@ -41,20 +46,20 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
   const dialog = document.createElement("div");
   dialog.className = "links-admin-modal__dialog links-deck-screen__dialog";
 
-  const header = document.createElement("div");
-  header.className = "links-admin-modal__header";
-
-  const title = document.createElement("h2");
-  title.id = "links-deck-title";
-  title.className = "links-admin-modal__title";
-  title.textContent = "Deck";
+  const header = document.createElement("header");
+  header.className = "links-admin-screen__header";
 
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
-  closeBtn.className = "links-admin-modal__back";
-  closeBtn.textContent = "Fechar";
+  closeBtn.className = "links-admin-screen__back";
+  closeBtn.textContent = "Voltar";
 
-  header.append(title, closeBtn);
+  const title = document.createElement("h2");
+  title.id = "links-deck-title";
+  title.className = "links-admin-modal__title links-admin-screen__title";
+  title.textContent = "Deck";
+
+  header.append(closeBtn, title);
 
   const tabs = document.createElement("div");
   tabs.className = "links-deck-screen__tabs";
@@ -64,28 +69,68 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
   wishTab.type = "button";
   wishTab.className = "links-deck-screen__tab";
   wishTab.setAttribute("role", "tab");
-  wishTab.textContent = "Wishlist";
+  wishTab.innerHTML = ""; // filled in syncTabs via textContent parts
+
+  const wishTabLabel = document.createElement("span");
+  wishTabLabel.textContent = "Wishlist";
+  const wishCount = document.createElement("span");
+  wishCount.className = "links-deck-screen__tab-count";
+  wishTab.append(wishTabLabel, wishCount);
 
   const doneTab = document.createElement("button");
   doneTab.type = "button";
   doneTab.className = "links-deck-screen__tab";
   doneTab.setAttribute("role", "tab");
-  doneTab.textContent = "Já feitas";
+  const doneTabLabel = document.createElement("span");
+  doneTabLabel.textContent = "Já feitas";
+  const doneCount = document.createElement("span");
+  doneCount.className = "links-deck-screen__tab-count";
+  doneTab.append(doneTabLabel, doneCount);
 
   tabs.append(wishTab, doneTab);
 
+  const progress = document.createElement("p");
+  progress.className = "links-deck-screen__progress";
+  progress.setAttribute("aria-live", "polite");
+
   const stage = document.createElement("div");
   stage.className = "links-deck-screen__stage";
+
+  const stackPeek = document.createElement("div");
+  stackPeek.className = "links-deck-screen__peek";
+  stackPeek.setAttribute("aria-hidden", "true");
 
   const card = document.createElement("div");
   card.className = "links-deck-screen__card";
   card.setAttribute("aria-live", "polite");
 
-  const empty = document.createElement("p");
+  const stampSkip = document.createElement("span");
+  stampSkip.className =
+    "links-deck-screen__stamp links-deck-screen__stamp--skip";
+  stampSkip.textContent = "Agora não";
+  stampSkip.setAttribute("aria-hidden", "true");
+
+  const stampWant = document.createElement("span");
+  stampWant.className =
+    "links-deck-screen__stamp links-deck-screen__stamp--want";
+  stampWant.textContent = "Quero";
+  stampWant.setAttribute("aria-hidden", "true");
+
+  const cardBody = document.createElement("div");
+  cardBody.className = "links-deck-screen__card-body";
+
+  card.append(stampSkip, stampWant, cardBody);
+
+  const empty = document.createElement("div");
   empty.className = "links-deck-screen__empty";
   empty.hidden = true;
+  const emptyTitle = document.createElement("p");
+  emptyTitle.className = "links-deck-screen__empty-title";
+  const emptyHint = document.createElement("p");
+  emptyHint.className = "links-deck-screen__empty-hint";
+  empty.append(emptyTitle, emptyHint);
 
-  stage.append(card, empty);
+  stage.append(stackPeek, card, empty);
 
   const controls = document.createElement("div");
   controls.className = "links-deck-screen__controls";
@@ -93,30 +138,60 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
   const skipBtn = document.createElement("button");
   skipBtn.type = "button";
   skipBtn.className = "links-deck-screen__btn links-deck-screen__btn--skip";
+  const skipIcon = document.createElement("span");
+  skipIcon.className = "links-deck-screen__btn-icon";
+  skipIcon.textContent = "✕";
+  const skipCaption = document.createElement("span");
+  skipCaption.className = "links-deck-screen__btn-caption";
+  skipCaption.textContent = "Agora não";
+  skipBtn.append(skipIcon, skipCaption);
   skipBtn.setAttribute("aria-label", "Agora não");
-  skipBtn.textContent = "✕";
 
   const doneBtn = document.createElement("button");
   doneBtn.type = "button";
   doneBtn.className = "links-deck-screen__btn links-deck-screen__btn--done";
-  doneBtn.textContent = "Já fiz";
+  const doneIcon = document.createElement("span");
+  doneIcon.className = "links-deck-screen__btn-icon";
+  doneIcon.textContent = "✓";
+  const doneCaption = document.createElement("span");
+  doneCaption.className = "links-deck-screen__btn-caption";
+  doneCaption.textContent = "Já fiz";
+  doneBtn.append(doneIcon, doneCaption);
+  doneBtn.setAttribute("aria-label", "Marcar como feita");
 
   const wantBtn = document.createElement("button");
   wantBtn.type = "button";
   wantBtn.className = "links-deck-screen__btn links-deck-screen__btn--want";
+  const wantIcon = document.createElement("span");
+  wantIcon.className = "links-deck-screen__btn-icon";
+  wantIcon.textContent = "♥";
+  const wantCaption = document.createElement("span");
+  wantCaption.className = "links-deck-screen__btn-caption";
+  wantCaption.textContent = "Quero";
+  wantBtn.append(wantIcon, wantCaption);
   wantBtn.setAttribute("aria-label", "Quero");
-  wantBtn.textContent = "♥";
 
   controls.append(skipBtn, doneBtn, wantBtn);
 
   const hint = document.createElement("p");
   hint.className = "links-deck-screen__hint";
 
-  dialog.append(header, tabs, stage, controls, hint);
+  dialog.append(header, tabs, progress, stage, controls, hint);
   overlay.appendChild(dialog);
 
   function current(): LinkRow | null {
     return queue[0] ?? null;
+  }
+
+  function tabTotal(next: DeckTab): number {
+    return linksForDeck(allLinks, next).length;
+  }
+
+  function prefersKeyboardHints(): boolean {
+    return (
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: fine)").matches
+    );
   }
 
   function syncTabs(): void {
@@ -124,11 +199,20 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
     doneTab.classList.toggle("links-deck-screen__tab--active", tab === "done");
     wishTab.setAttribute("aria-selected", String(tab === "wishlist"));
     doneTab.setAttribute("aria-selected", String(tab === "done"));
+    wishCount.textContent = String(tabTotal("wishlist"));
+    doneCount.textContent = String(tabTotal("done"));
     doneBtn.hidden = tab !== "wishlist";
-    hint.textContent =
-      tab === "wishlist"
-        ? "← Agora não · Quero → · Já fiz"
-        : "← Passar · Quer repetir →";
+    stampWant.textContent = tab === "wishlist" ? "Quero" : "Repetir";
+    wantCaption.textContent = tab === "wishlist" ? "Quero" : "Repetir";
+    skipCaption.textContent = tab === "wishlist" ? "Agora não" : "Passar";
+    if (prefersKeyboardHints()) {
+      hint.textContent =
+        tab === "wishlist"
+          ? "Use as setas. D marca como feita."
+          : "Use as setas ou deslize o card.";
+    } else {
+      hint.textContent = "Deslize o card ou use os botões.";
+    }
     skipBtn.setAttribute(
       "aria-label",
       tab === "wishlist" ? "Agora não" : "Só passar"
@@ -139,46 +223,86 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
     );
   }
 
+  function syncProgress(): void {
+    const total = tabTotal(tab);
+    const left = queue.length;
+    if (total === 0 || left === 0) {
+      progress.textContent = "";
+      progress.hidden = true;
+      return;
+    }
+    progress.hidden = false;
+    const seen = total - left + 1;
+    progress.textContent = `${seen} de ${total}`;
+  }
+
+  function syncPeek(): void {
+    stackPeek.hidden = queue.length < 2;
+  }
+
   function paintCard(): void {
-    const link = current();
-    card.replaceChildren();
-    card.classList.remove("links-deck-screen__card--dragging");
+    cardBody.replaceChildren();
+    card.classList.remove(
+      "links-deck-screen__card--dragging",
+      "links-deck-screen__card--lean-left",
+      "links-deck-screen__card--lean-right"
+    );
     card.style.removeProperty("--deck-drag-x");
     card.style.removeProperty("--deck-drag-rot");
+    card.style.removeProperty("--deck-stamp-skip");
+    card.style.removeProperty("--deck-stamp-want");
+    for (const cat of CATEGORY_OPTIONS) {
+      card.classList.remove(categoryCardClass(cat));
+    }
 
-    if (!link) {
+    if (!current()) {
       card.hidden = true;
       empty.hidden = false;
-      empty.textContent =
+      emptyTitle.textContent =
+        tab === "wishlist" ? "Wishlist vazia" : "Nenhuma memória ainda";
+      emptyHint.textContent =
         tab === "wishlist"
-          ? "Nada na wishlist."
-          : "Nenhuma experiência marcada como feita.";
+          ? "Adicione experiências na lista ou marque alguma como feita depois."
+          : "Quando marcar uma experiência como feita, ela aparece aqui.";
       controls.hidden = true;
+      syncProgress();
+      syncPeek();
       return;
     }
 
+    const link = current()!;
     empty.hidden = true;
     card.hidden = false;
     controls.hidden = false;
 
+    const category = resolveCategory(link);
+    card.classList.add(categoryCardClass(category));
+
     const media = document.createElement("div");
     media.className = "links-deck-screen__media";
-    if (link.image_url) {
+    media.classList.add(categoryCardClass(category));
+
+    const backdropSrc = categoryBackdropSrc(category, link.image_url);
+    if (backdropSrc) {
       const img = document.createElement("img");
       img.className = "links-deck-screen__img";
-      img.src = link.image_url;
+      img.src = backdropSrc;
       img.alt = "";
       media.appendChild(img);
     } else {
       media.classList.add("links-deck-screen__media--fallback");
     }
 
+    const scrim = document.createElement("span");
+    scrim.className = "links-deck-screen__scrim";
+    scrim.setAttribute("aria-hidden", "true");
+
     const meta = document.createElement("div");
     meta.className = "links-deck-screen__meta";
 
     const cat = document.createElement("p");
     cat.className = "links-deck-screen__category";
-    cat.textContent = categoryLabel(resolveCategory(link));
+    cat.textContent = categoryLabel(category);
 
     const name = document.createElement("h3");
     name.className = "links-deck-screen__name";
@@ -191,7 +315,9 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
     else blurb.hidden = true;
 
     meta.append(cat, name, blurb);
-    card.append(media, meta);
+    cardBody.append(media, scrim, meta);
+    syncProgress();
+    syncPeek();
   }
 
   function rebuildQueue(): void {
@@ -270,13 +396,25 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
   function applyDragVisual(): void {
     card.classList.add("links-deck-screen__card--dragging");
     card.style.setProperty("--deck-drag-x", `${dragX}px`);
-    card.style.setProperty("--deck-drag-rot", `${dragX / 20}deg`);
+    card.style.setProperty("--deck-drag-rot", `${dragX / 18}deg`);
+    const want = Math.min(1, Math.max(0, dragX / SWIPE_THRESHOLD));
+    const skip = Math.min(1, Math.max(0, -dragX / SWIPE_THRESHOLD));
+    card.style.setProperty("--deck-stamp-want", String(want));
+    card.style.setProperty("--deck-stamp-skip", String(skip));
+    card.classList.toggle("links-deck-screen__card--lean-right", want > 0.35);
+    card.classList.toggle("links-deck-screen__card--lean-left", skip > 0.35);
   }
 
   function endDrag(): void {
-    card.classList.remove("links-deck-screen__card--dragging");
+    card.classList.remove(
+      "links-deck-screen__card--dragging",
+      "links-deck-screen__card--lean-left",
+      "links-deck-screen__card--lean-right"
+    );
     card.style.removeProperty("--deck-drag-x");
     card.style.removeProperty("--deck-drag-rot");
+    card.style.removeProperty("--deck-stamp-skip");
+    card.style.removeProperty("--deck-stamp-want");
     const dx = dragX;
     dragX = 0;
     pointerId = null;

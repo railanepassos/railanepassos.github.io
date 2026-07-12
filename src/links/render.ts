@@ -2,6 +2,7 @@ import type { LinkRow } from "./links-repo";
 import { resolveIconSrc } from "./icons";
 import { categoryLabel, resolveCategory } from "./category";
 import { formatScheduleChip } from "./schedule";
+import { categoryBackdropSrc, categoryCardClass } from "./card-theme";
 
 /**
  * Static fallback shown when Supabase is not configured yet, or when the
@@ -30,10 +31,29 @@ export const FALLBACK_LINKS: LinkRow[] = [
   },
 ];
 
+function appendCardChrome(card: HTMLElement, link: LinkRow): void {
+  const category = resolveCategory(link);
+  card.classList.add("link-card--themed", categoryCardClass(category));
+
+  const backdropSrc = categoryBackdropSrc(category, link.image_url);
+  if (backdropSrc) {
+    const bg = document.createElement("img");
+    bg.className = "link-card__backdrop";
+    bg.src = backdropSrc;
+    bg.alt = "";
+    bg.setAttribute("aria-hidden", "true");
+    card.appendChild(bg);
+  }
+
+  const scrim = document.createElement("span");
+  scrim.className = "link-card__scrim";
+  scrim.setAttribute("aria-hidden", "true");
+  card.appendChild(scrim);
+}
+
 /**
- * Build a single public `.link-card` anchor element, structurally identical to
- * the static cards in p/a8f3k2/index.html. All text goes through textContent
- * (never innerHTML) so user-controlled content is escaped by construction.
+ * Build a single public `.link-card` anchor element. All text goes through
+ * textContent (never innerHTML) so user-controlled content is escaped.
  */
 export function renderPublicCard(link: LinkRow): HTMLAnchorElement {
   const card = document.createElement("a");
@@ -41,8 +61,10 @@ export function renderPublicCard(link: LinkRow): HTMLAnchorElement {
   card.href = link.url;
   card.rel = "noopener noreferrer";
   card.target = "_blank";
+  appendCardChrome(card, link);
 
   const img = document.createElement("img");
+  img.className = "link-card__icon";
   img.src = resolveIconSrc(link);
   img.alt = "";
   img.width = 24;

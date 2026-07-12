@@ -20,6 +20,7 @@ import { buildSpinLabels } from "./pick-random";
 import { setScreenBusy } from "./skeleton";
 import { formatScheduleChip, formatScheduleLabel } from "./schedule";
 import { syncBodyScreenLock } from "./screen-lock";
+import { categoryBackdropSrc, categoryCardClass } from "./card-theme";
 
 /**
  * DOM building blocks for the authenticated admin experience:
@@ -446,7 +447,26 @@ export function renderAdminCard(
   content.tabIndex = 0;
   content.setAttribute("aria-label", `Ver ${link.label}`);
 
+  const category = resolveCategory(link);
+  content.classList.add("link-card--themed", categoryCardClass(category));
+
+  const backdropSrc = categoryBackdropSrc(category, link.image_url);
+  if (backdropSrc) {
+    const bg = document.createElement("img");
+    bg.className = "link-card__backdrop";
+    bg.src = backdropSrc;
+    bg.alt = "";
+    bg.setAttribute("aria-hidden", "true");
+    content.appendChild(bg);
+  }
+
+  const scrim = document.createElement("span");
+  scrim.className = "link-card__scrim";
+  scrim.setAttribute("aria-hidden", "true");
+  content.appendChild(scrim);
+
   const img = document.createElement("img");
+  img.className = "link-card__icon";
   img.src = resolveIconSrc(link);
   img.alt = "";
   img.width = 24;

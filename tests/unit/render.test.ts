@@ -39,4 +39,14 @@ describe("renderPublicCard", () => {
     const chip = card.querySelector(".link-card__schedule");
     expect(chip?.textContent).toBe("3 ago · 9–17");
   });
+
+  it("applies category theme and trilha backdrop", () => {
+    const card = renderPublicCard(
+      row({ category: "trilha", label: "Pico do Itacolomi" })
+    );
+    expect(card.classList.contains("link-card--cat-trilha")).toBe(true);
+    expect(card.querySelector(".link-card__backdrop")?.getAttribute("src")).toBe(
+      "/assets/img/categories/trilha.jpg"
+    );
+  });
 });

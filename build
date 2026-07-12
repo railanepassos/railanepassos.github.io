@@ -1,0 +1,37 @@
+> vite build
+
+vite v6.4.3 building for production...
+✓ 54 modules transformed.
+p/a8f3k2/app.js  234.54 kB │ gzip: 61.27 kB
+✓ built in 279ms
+
+> serve
+> python3 -m http.server 8080 --bind 0.0.0.0
+
+Serving HTTP on 0.0.0.0 port 8080 (http://0.0.0.0:8080/) ...
+127.0.0.1 - - [11/Jul/2026 23:36:35] "GET /p/a8f3k2/ HTTP/1.1" 200 -
+127.0.0.1 - - [11/Jul/2026 23:36:35] "GET /styles.css HTTP/1.1" 304 -
+127.0.0.1 - - [11/Jul/2026 23:36:35] "GET /p/a8f3k2/app.js HTTP/1.1" 200 -
+127.0.0.1 - - [11/Jul/2026 23:37:44] "GET /p/a8f3k2/ HTTP/1.1" 200 -
+127.0.0.1 - - [11/Jul/2026 23:37:44] "GET /styles.css HTTP/1.1" 304 -
+127.0.0.1 - - [11/Jul/2026 23:37:44] "GET /p/a8f3k2/app.js HTTP/1.1" 304 -
+127.0.0.1 - - [11/Jul/2026 23:38:12] "GET /p/a8f3k2/ HTTP/1.1" 304 -
+127.0.0.1 - - [11/Jul/2026 23:38:12] "GET /assets/icons/instagram.svg HTTP/1.1" 304 -
+127.0.0.1 - - [11/Jul/2026 23:38:12] "GET /assets/icons/instagram.svg HTTP/1.1" 304 -
+127.0.0.1 - - [126127.0.0.1 - - [126127.0.0.1 - - [126127.0.0.1 - - [12612- [11/Jul/2026 23:38:12] "GET /p/a8f3k2/app.js HTTP/1.1" 200 -
+127.0.0.1 - - [11/Jul/2026 23:39:36] "GET /p/a8f3k2/?v=colors HTTP/1.1" 200 -
+127.0.0.1 - - [11/Jul/2026 23:39:36] "GET /assets/icons/instagram.svg HTTP/1.1" 304 -
+127.0.0.1 - - [11/Jul/2026 23:39:36] "GET /assets/icons/instagram.svg HTTP/1.1" 304 -
+127.0.0.1 - - [11/Jul/2026 23:39:36] "GET /styles.css HTTP/1.1" 200 -
+127.0.0.1 - - [11/Jul/2026 23:39:36] "GET /p/a8f3k2/app.js HTTP/1.1" 200 -
+192.168.0.158 - - [11/Jul/2026 23:39:37] "GET /styles.css HTTP/1.1" 200 -
+192.168.0.158 - - [11/Jul/2026 23:39:37] "GET /p/a8f3k2/app.js HTTP/1.1" 200 -
+192.168.0.158 - - [11/Jul/2026 23:39:38] "GET /assets/icons/instagram.svg HTTP/1.1" 200 -
+192.168.0.158 - - [11/Jul/2026 23:39:43] "GET /p/a8f3k2/ HTTP/1.1" 200 -
+192.168.0.158 - - [11/Jul/2026 23:39:43] "GET /styles.css HTTP/1.1" 304 -
+192.168.0.158 - - [11/Jul/2026 23:39:43] "GET /p/a8f3k2/app.js HTTP/1.1" 304 -
+127.0.0.1 - - [11/Jul/2026 23:39:46] "GET /p/a8f3k2/ HTTP/1.1" 200 -
+127.0.0.1 - - [11/Jul/2026 23:39:46] "GET /p/a8f3k2/app.js HTTP/1.1" 200 -
+127.0.0.1 - - [11/Jul/2026 23:39:46] "GET /styles.css HTTP/1.1" 200 -
+^C
+Keyboard interrupt received, exiting.

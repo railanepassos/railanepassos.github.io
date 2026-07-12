@@ -32,6 +32,30 @@ describe("inferCategory", () => {
     ).toBe("restaurante");
   });
 
+  it("detects barzinho / bar", () => {
+    expect(
+      inferCategory({ label: "O Cravinho", description: "barzinho no centro" })
+    ).toBe("bar");
+    expect(inferCategory({ label: "Boteco da esquina", description: null })).toBe(
+      "bar"
+    );
+  });
+
+  it("detects cafeteria", () => {
+    expect(inferCategory({ label: "Cafélier", description: null })).toBe(
+      "cafeteria"
+    );
+    expect(
+      inferCategory({ label: "Brunch", description: "cafeteria aconchegante" })
+    ).toBe("cafeteria");
+  });
+
+  it("does not treat barco as bar", () => {
+    expect(
+      inferCategory({ label: "Passeio de barco", description: "Larissa" })
+    ).toBe("passeio");
+  });
+
   it("detects trilha from note", () => {
     expect(
       inferCategory({
@@ -46,6 +70,12 @@ describe("inferCategory", () => {
     expect(inferCategory({ label: "Praça da Sé", description: null })).toBe(
       "praca"
     );
+  });
+
+  it("detects parque", () => {
+    expect(
+      inferCategory({ label: "Parque da Cidade", description: null })
+    ).toBe("parque");
   });
 
   it("detects praia", () => {

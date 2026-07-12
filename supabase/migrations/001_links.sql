@@ -9,8 +9,8 @@ create table if not exists public.links (
   )),
   icon_url text check (icon_url is null or icon_url ~ '^https://'),
   category text check (category is null or category in (
-    'museu', 'evento', 'restaurante', 'trilha', 'praca', 'praia',
-    'ponto-turistico', 'passeio', 'outro'
+    'museu', 'evento', 'restaurante', 'bar', 'cafeteria', 'trilha', 'praca', 'parque',
+    'praia', 'ponto-turistico', 'passeio', 'outro'
   )),
   scheduled_start timestamptz,
   scheduled_end timestamptz,
