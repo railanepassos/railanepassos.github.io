@@ -27,6 +27,12 @@ jobs:
         uses: snyk/actions/setup@master
 
       - name: Run Snyk Code
+        if: ${{ secrets.SNYK_TOKEN != '' }}
         run: snyk code test --severity-threshold=medium
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Skip Snyk (SNYK_TOKEN not configured)
+        if: ${{ secrets.SNYK_TOKEN == '' }}
+        run: |
+          echo "::warning::SNYK_TOKEN not set. Configure Snyk per PLAYBOOK.md (Pré-requisitos manuais)."
