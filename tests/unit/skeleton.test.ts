@@ -32,7 +32,7 @@ describe("renderToolbarSkeleton", () => {
   it("renders icon placeholders in the toolbar slot", () => {
     const root = document.createElement("div");
     renderToolbarSkeleton(root);
-    expect(root.querySelectorAll(".links-skeleton__icon")).toHaveLength(4);
+    expect(root.querySelectorAll(".links-skeleton__icon")).toHaveLength(5);
     expect(
       root.querySelector(".links-skeleton--toolbar")?.getAttribute("aria-busy")
     ).toBe("true");

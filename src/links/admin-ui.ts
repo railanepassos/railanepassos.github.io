@@ -18,26 +18,22 @@ import {
 } from "./swipe";
 import { buildSpinLabels } from "./pick-random";
 import { setScreenBusy } from "./skeleton";
+import { formatScheduleChip, formatScheduleLabel } from "./schedule";
+import { syncBodyScreenLock } from "./screen-lock";
+import { categoryBackdropSrc, categoryCardClass } from "./card-theme";
 
 /**
  * DOM building blocks for the authenticated admin experience:
  *   - a discreet "Entrar" button (shown when logged out)
  *   - full-screen login / form / delete screens (mobile-first)
  *   - a toolbar ("Novo link" / "Sair")
- *   - admin link cards (tap to view, swipe edit/delete, ↑↓ reorder)
+ *   - admin link cards (tap to view, swipe edit/delete)
  *
  * Every element is created via document.createElement + textContent. No
  * innerHTML with user data, no inline style attributes, no injected <style>
  * tags. Visibility is toggled via the `hidden` attribute / CSS classes only,
  * to satisfy the page CSP (style-src 'self', script-src 'self').
  */
-
-function syncBodyScreenLock(): void {
-  const anyOpen =
-    document.querySelector(".links-admin-modal:not([hidden])") != null ||
-    document.querySelector(".links-filter-sheet:not([hidden])") != null;
-  document.body.classList.toggle("links-screen-open", anyOpen);
-}
 
 type ScreenChrome = {
   overlay: HTMLElement;
@@ -90,6 +86,8 @@ export type LinkFormValues = {
   url: string;
   label: string;
   description: string;
+  image_url: string;
+  note: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -131,7 +129,7 @@ export function createLoginModal(
   const intro = document.createElement("p");
   intro.className = "links-admin-modal__body";
   intro.textContent =
-    "Acesso de editor para adicionar, reordenar e revisar experiências da bucket list.";
+    "Acesso de editor para adicionar, agendar e revisar experiências da bucket list.";
 
   const form = document.createElement("form");
   form.className = "links-admin-form links-admin-form--screen";
@@ -290,11 +288,21 @@ function iconShuffle(): SVGSVGElement {
   ]);
 }
 
+/** Cards / layers — Deck. */
+function iconDeck(): SVGSVGElement {
+  return strokeIcon([
+    "M2 7h16",
+    "M4 12h16",
+    "M6 17h14",
+  ]);
+}
+
 export function createToolbar(
   onNew: () => void,
   onSignOut: () => void,
   onFilter: () => void,
   onDraw: () => void,
+  onDeck: () => void,
   activeCategories: readonly Category[] = []
 ): HTMLElement {
   const toolbar = document.createElement("div");
@@ -339,6 +347,15 @@ export function createToolbar(
   drawBtn.appendChild(iconShuffle());
   drawBtn.addEventListener("click", onDraw);
 
+  const deckBtn = document.createElement("button");
+  deckBtn.type = "button";
+  deckBtn.className =
+    "links-admin-button links-admin-button--ghost links-admin-button--icon";
+  deckBtn.setAttribute("aria-label", "Abrir Deck");
+  deckBtn.title = "Deck";
+  deckBtn.appendChild(iconDeck());
+  deckBtn.addEventListener("click", onDeck);
+
   const signOutBtn = document.createElement("button");
   signOutBtn.type = "button";
   signOutBtn.className =
@@ -348,29 +365,25 @@ export function createToolbar(
   signOutBtn.appendChild(iconLogout());
   signOutBtn.addEventListener("click", onSignOut);
 
-  row.append(newBtn, filterBtn, drawBtn, signOutBtn);
+  row.append(newBtn, filterBtn, drawBtn, deckBtn, signOutBtn);
 
   const tip = document.createElement("p");
   tip.className = "links-admin-tip";
   tip.textContent =
-    "Toque para ver · Deslize → editar · ← excluir · Filtrar · Sortear · ↑↓ reordenar";
+    "Toque para ver · Deslize → editar · ← excluir · Filtrar · Sortear · Deck";
 
   toolbar.append(row, tip);
   return toolbar;
 }
 
 // ---------------------------------------------------------------------------
-// Admin card: tap to view, swipe → edit / ← delete, ↑↓ (and desktop drag) reorder.
+// Admin card: tap to view, swipe → edit / ← delete.
 // ---------------------------------------------------------------------------
 
 export type AdminCardCallbacks = {
   onView: (link: LinkRow) => void;
   onEdit: (link: LinkRow) => void;
   onDelete: (link: LinkRow) => void;
-  onMoveUp: (link: LinkRow) => void;
-  onMoveDown: (link: LinkRow) => void;
-  onDragStart: (link: LinkRow, ev: DragEvent) => void;
-  onDrop: (link: LinkRow, ev: DragEvent) => void;
 };
 
 let openSwipeContent: HTMLElement | null = null;
@@ -390,14 +403,11 @@ function closeOpenSwipe(): void {
 
 export function renderAdminCard(
   link: LinkRow,
-  index: number,
-  total: number,
   cb: AdminCardCallbacks
 ): HTMLElement {
   const row = document.createElement("div");
   row.className = "swipe-row";
   row.dataset.id = link.id;
-  row.dataset.index = String(index);
 
   const editActions = document.createElement("div");
   editActions.className = "swipe-row__actions swipe-row__actions--edit";
@@ -433,27 +443,30 @@ export function renderAdminCard(
 
   const content = document.createElement("div");
   content.className = "swipe-row__content link-card link-card--admin";
-  content.draggable = window.matchMedia("(pointer: fine)").matches;
   content.setAttribute("role", "button");
   content.tabIndex = 0;
   content.setAttribute("aria-label", `Ver ${link.label}`);
 
-  content.addEventListener("dragstart", (ev) => {
-    cb.onDragStart(link, ev);
-  });
-  content.addEventListener("dragover", (ev) => ev.preventDefault());
-  content.addEventListener("drop", (ev) => {
-    ev.preventDefault();
-    cb.onDrop(link, ev);
-  });
+  const category = resolveCategory(link);
+  content.classList.add("link-card--themed", categoryCardClass(category));
 
-  const handle = document.createElement("span");
-  handle.className = "link-card__drag-handle";
-  handle.setAttribute("aria-hidden", "true");
-  handle.textContent = "⠿";
-  content.appendChild(handle);
+  const backdropSrc = categoryBackdropSrc(category, link.image_url);
+  if (backdropSrc) {
+    const bg = document.createElement("img");
+    bg.className = "link-card__backdrop";
+    bg.src = backdropSrc;
+    bg.alt = "";
+    bg.setAttribute("aria-hidden", "true");
+    content.appendChild(bg);
+  }
+
+  const scrim = document.createElement("span");
+  scrim.className = "link-card__scrim";
+  scrim.setAttribute("aria-hidden", "true");
+  content.appendChild(scrim);
 
   const img = document.createElement("img");
+  img.className = "link-card__icon";
   img.src = resolveIconSrc(link);
   img.alt = "";
   img.width = 24;
@@ -473,6 +486,16 @@ export function renderAdminCard(
   cat.textContent = categoryLabel(resolveCategory(link));
   textEl.appendChild(cat);
 
+  if (link.scheduled_start && link.scheduled_end) {
+    const schedule = document.createElement("span");
+    schedule.className = "link-card__schedule";
+    schedule.textContent = formatScheduleChip(
+      link.scheduled_start,
+      link.scheduled_end
+    );
+    textEl.appendChild(schedule);
+  }
+
   if (link.description && link.description.length > 0) {
     const desc = document.createElement("span");
     desc.className = "link-card__desc";
@@ -484,22 +507,6 @@ export function renderAdminCard(
   const keyActions = document.createElement("div");
   keyActions.className = "link-card__actions";
 
-  const upBtn = iconButton("↑", "Mover para cima");
-  upBtn.classList.add("link-card__action--move");
-  upBtn.disabled = index === 0;
-  upBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    cb.onMoveUp(link);
-  });
-
-  const downBtn = iconButton("↓", "Mover para baixo");
-  downBtn.classList.add("link-card__action--move");
-  downBtn.disabled = index === total - 1;
-  downBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    cb.onMoveDown(link);
-  });
-
   const deleteKeyBtn = iconButton("Excluir", "Excluir experiência");
   deleteKeyBtn.classList.add("link-card__action--delete");
   deleteKeyBtn.addEventListener("click", (e) => {
@@ -507,7 +514,7 @@ export function renderAdminCard(
     cb.onDelete(link);
   });
 
-  keyActions.append(upBtn, downBtn, deleteKeyBtn);
+  keyActions.append(deleteKeyBtn);
   content.appendChild(keyActions);
 
   content.addEventListener("keydown", (ev) => {
@@ -1125,10 +1132,25 @@ export function createLinkFormModal(
 
   const descField = labelledInput(
     "links-form-desc",
-    "Nota (opcional) — por que salvar, região, época…",
+    "Nota da lista (opcional) — por que salvar, região, época…",
     "text"
   );
   descField.input.maxLength = 500;
+
+  const imageField = labelledInput(
+    "links-form-image",
+    "Foto (opcional) — URL https://",
+    "url"
+  );
+  imageField.input.placeholder = "https://...";
+  imageField.input.setAttribute("inputmode", "url");
+
+  const memoryField = labelledInput(
+    "links-form-note",
+    "Memória (opcional) — após visitar",
+    "text"
+  );
+  memoryField.input.maxLength = 500;
 
   const error = document.createElement("p");
   error.className = "links-admin-form__error";
@@ -1148,6 +1170,8 @@ export function createLinkFormModal(
     urlField.wrapper,
     labelField.wrapper,
     descField.wrapper,
+    imageField.wrapper,
+    memoryField.wrapper,
     error,
     actions
   );
@@ -1191,6 +1215,8 @@ export function createLinkFormModal(
     urlField.input.value = link.url;
     labelField.input.value = link.label;
     descField.input.value = link.description ?? "";
+    imageField.input.value = link.image_url ?? "";
+    memoryField.input.value = link.note ?? "";
     afterOpen();
   }
 
@@ -1201,6 +1227,8 @@ export function createLinkFormModal(
         url: urlField.input.value.trim(),
         label: labelField.input.value.trim(),
         description: descField.input.value.trim(),
+        image_url: imageField.input.value.trim(),
+        note: memoryField.input.value.trim(),
       },
       editingId
     );
@@ -1232,8 +1260,298 @@ export function createLinkFormModal(
 }
 
 // ---------------------------------------------------------------------------
+// Schedule sheet.
+// ---------------------------------------------------------------------------
+
+export type ScheduleSheetValues = {
+  date: string;
+  startTime: string;
+  endTime: string;
+};
+
+export type ScheduleSheetOpenOpts = {
+  title?: string;
+  initial: ScheduleSheetValues;
+  /** When true, show Baixar ICS + Remover (existing schedule). */
+  hasSchedule: boolean;
+  onSave: (values: ScheduleSheetValues) => void | Promise<void>;
+  onDownloadIcs?: () => void;
+  onRemove?: () => void | Promise<void>;
+};
+
+export type ScheduleSheetHandle = {
+  element: HTMLElement;
+  open: (opts: ScheduleSheetOpenOpts) => void;
+  close: () => void;
+  setError: (message: string) => void;
+  setBusy: (busy: boolean) => void;
+  /** Keep sheet open after save; optional Desfazer. */
+  showSuccess: (message: string, onUndo?: () => void | Promise<void>) => void;
+  /** Reveal ICS/remove after a first successful save. */
+  setHasSchedule: (has: boolean) => void;
+};
+
+export function createScheduleSheet(): ScheduleSheetHandle {
+  let previouslyFocused: HTMLElement | null = null;
+  let onSaveCb: ((values: ScheduleSheetValues) => void | Promise<void>) | null =
+    null;
+  let onDownloadCb: (() => void) | null = null;
+  let onRemoveCb: (() => void | Promise<void>) | null = null;
+  let onUndoCb: (() => void | Promise<void>) | null = null;
+
+  const { overlay, dialog, title, backBtn } = createScreenChrome(
+    "links-schedule-title",
+    "Agendar experiência",
+    "dialog"
+  );
+  dialog.classList.add("links-admin-modal__dialog--schedule");
+
+  const form = document.createElement("form");
+  form.className =
+    "links-admin-form links-admin-form--screen links-admin-form--schedule";
+  form.noValidate = true;
+
+  const dateField = labelledInput("links-schedule-date", "Data", "date");
+  dateField.input.required = true;
+
+  const startField = labelledInput("links-schedule-start", "Início", "time");
+  startField.input.required = true;
+
+  const endField = labelledInput("links-schedule-end", "Fim", "time");
+  endField.input.required = true;
+
+  const hint = document.createElement("p");
+  hint.className = "links-admin-form__hint";
+  hint.textContent =
+    "Padrão: deslocamento incluso (9h–17h). No local ~10h–16h.";
+
+  const success = document.createElement("div");
+  success.className = "links-admin-form__success";
+  success.setAttribute("role", "status");
+  success.hidden = true;
+
+  const successText = document.createElement("p");
+  successText.className = "links-admin-form__success-text";
+
+  const undoBtn = document.createElement("button");
+  undoBtn.type = "button";
+  undoBtn.className = "links-admin-button links-admin-button--ghost";
+  undoBtn.dataset.action = "undo-schedule";
+  undoBtn.textContent = "Desfazer";
+  undoBtn.hidden = true;
+
+  success.append(successText, undoBtn);
+
+  const error = document.createElement("p");
+  error.className = "links-admin-form__error";
+  error.setAttribute("role", "alert");
+  error.hidden = true;
+
+  const actions = document.createElement("div");
+  actions.className =
+    "links-admin-form__actions links-admin-form__actions--sticky";
+
+  const submitBtn = document.createElement("button");
+  submitBtn.type = "submit";
+  submitBtn.className =
+    "links-admin-button links-admin-button--primary links-admin-button--block";
+  submitBtn.textContent = "Salvar agendamento";
+
+  const downloadBtn = document.createElement("button");
+  downloadBtn.type = "button";
+  downloadBtn.className =
+    "links-admin-button links-admin-button--ghost links-admin-button--block";
+  downloadBtn.dataset.action = "download-ics";
+  downloadBtn.textContent = "Baixar ICS";
+  downloadBtn.hidden = true;
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className =
+    "links-admin-button links-admin-button--ghost links-admin-button--block";
+  removeBtn.dataset.action = "remove-schedule";
+  removeBtn.textContent = "Remover agendamento";
+  removeBtn.hidden = true;
+
+  actions.append(submitBtn, downloadBtn, removeBtn);
+  form.append(
+    success,
+    dateField.wrapper,
+    startField.wrapper,
+    endField.wrapper,
+    hint,
+    error,
+    actions
+  );
+  dialog.appendChild(form);
+
+  let successTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearSuccessTimer(): void {
+    if (successTimer != null) {
+      clearTimeout(successTimer);
+      successTimer = null;
+    }
+  }
+
+  function clearError(): void {
+    error.hidden = true;
+    error.textContent = "";
+  }
+
+  function clearSuccess(): void {
+    clearSuccessTimer();
+    success.hidden = true;
+    successText.textContent = "";
+    undoBtn.hidden = true;
+    onUndoCb = null;
+  }
+
+  function setHasSchedule(has: boolean): void {
+    downloadBtn.hidden = !has;
+    removeBtn.hidden = !has;
+  }
+
+  function close(): void {
+    overlay.hidden = true;
+    clearError();
+    clearSuccess();
+    form.reset();
+    onSaveCb = null;
+    onDownloadCb = null;
+    onRemoveCb = null;
+    setBusy(false);
+    syncBodyScreenLock();
+    if (previouslyFocused) {
+      previouslyFocused.focus();
+      previouslyFocused = null;
+    }
+  }
+
+  function setBusy(busy: boolean): void {
+    submitBtn.disabled = busy;
+    backBtn.disabled = busy;
+    downloadBtn.disabled = busy;
+    removeBtn.disabled = busy;
+    undoBtn.disabled = busy;
+    dateField.input.disabled = busy;
+    startField.input.disabled = busy;
+    endField.input.disabled = busy;
+    setScreenBusy(dialog, busy);
+  }
+
+  function setError(message: string): void {
+    clearSuccess();
+    error.textContent = message;
+    error.hidden = false;
+  }
+
+  function showSuccess(
+    message: string,
+    onUndo?: () => void | Promise<void>
+  ): void {
+    clearError();
+    clearSuccessTimer();
+    successText.textContent = message;
+    success.hidden = false;
+    onUndoCb = onUndo ?? null;
+    undoBtn.hidden = !onUndo;
+    form.scrollTop = 0;
+    if (typeof success.scrollIntoView === "function") {
+      success.scrollIntoView({ block: "nearest" });
+    }
+    successTimer = setTimeout(() => {
+      clearSuccess();
+    }, 30_000);
+  }
+
+  function open(opts: ScheduleSheetOpenOpts): void {
+    previouslyFocused = document.activeElement as HTMLElement | null;
+    title.textContent = opts.title ?? "Agendar experiência";
+    dateField.input.value = opts.initial.date;
+    startField.input.value = opts.initial.startTime;
+    endField.input.value = opts.initial.endTime;
+    onSaveCb = opts.onSave;
+    onDownloadCb = opts.onDownloadIcs ?? null;
+    onRemoveCb = opts.onRemove ?? null;
+    clearError();
+    clearSuccess();
+    setHasSchedule(opts.hasSchedule);
+    setBusy(false);
+    overlay.hidden = false;
+    syncBodyScreenLock();
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (!onSaveCb) return;
+    clearError();
+    const values = {
+      date: dateField.input.value,
+      startTime: startField.input.value,
+      endTime: endField.input.value,
+    };
+    void Promise.resolve(onSaveCb(values)).catch((err: unknown) => {
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível salvar."
+      );
+    });
+  });
+
+  downloadBtn.addEventListener("click", () => {
+    onDownloadCb?.();
+  });
+  removeBtn.addEventListener("click", () => {
+    if (!onRemoveCb) return;
+    void Promise.resolve(onRemoveCb()).catch((err: unknown) => {
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível remover."
+      );
+    });
+  });
+  undoBtn.addEventListener("click", () => {
+    if (!onUndoCb) return;
+    void Promise.resolve(onUndoCb()).catch((err: unknown) => {
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível desfazer."
+      );
+    });
+  });
+
+  backBtn.addEventListener("click", close);
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      close();
+    }
+  });
+
+  return {
+    element: overlay,
+    open,
+    close,
+    setError,
+    setBusy,
+    showSuccess,
+    setHasSchedule,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // View experience (read-only) → Editar opens the form.
 // ---------------------------------------------------------------------------
+
+export type ViewModalCallbacks = {
+  onEdit: (link: LinkRow) => void;
+  onSchedule: (link: LinkRow) => void;
+  onMarkDone: (link: LinkRow) => void;
+};
 
 export type ViewModalHandle = {
   element: HTMLElement;
@@ -1241,9 +1559,7 @@ export type ViewModalHandle = {
   close: () => void;
 };
 
-export function createViewModal(
-  onEdit: (link: LinkRow) => void
-): ViewModalHandle {
+export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   let current: LinkRow | null = null;
 
   const { overlay, dialog, title, backBtn } = createScreenChrome(
@@ -1290,25 +1606,52 @@ export function createViewModal(
   linkAnchor.rel = "noopener noreferrer";
   linkAnchor.target = "_blank";
 
+  const scheduleBlock = document.createElement("div");
+  scheduleBlock.className = "links-admin-view__block";
+
+  const scheduleLabel = document.createElement("p");
+  scheduleLabel.className = "links-admin-view__label";
+  scheduleLabel.textContent = "Agendado";
+
+  const scheduleValue = document.createElement("p");
+  scheduleValue.className = "links-admin-view__value";
+
+  scheduleBlock.append(scheduleLabel, scheduleValue);
+
   body.append(
     nameLabel,
     nameValue,
     categoryLabelEl,
     categoryValue,
+    scheduleBlock,
     noteBlock,
     linkLabel,
     linkAnchor
   );
 
   const actions = document.createElement("div");
-  actions.className = "links-admin-form__actions links-admin-form__actions--sticky";
+  actions.className =
+    "links-admin-form__actions links-admin-form__actions--sticky";
+
+  const scheduleBtn = document.createElement("button");
+  scheduleBtn.type = "button";
+  scheduleBtn.className =
+    "links-admin-button links-admin-button--primary links-admin-button--block";
+  scheduleBtn.textContent = "Agendar";
+
+  const markDoneBtn = document.createElement("button");
+  markDoneBtn.type = "button";
+  markDoneBtn.className =
+    "links-admin-button links-admin-button--ghost links-admin-button--block";
+  markDoneBtn.textContent = "Marcar como feita";
 
   const editBtn = document.createElement("button");
   editBtn.type = "button";
-  editBtn.className = "links-admin-button links-admin-button--primary links-admin-button--block";
+  editBtn.className =
+    "links-admin-button links-admin-button--ghost links-admin-button--block";
   editBtn.textContent = "Editar";
 
-  actions.append(editBtn);
+  actions.append(scheduleBtn, markDoneBtn, editBtn);
   dialog.append(body, actions);
 
   function close(): void {
@@ -1322,6 +1665,19 @@ export function createViewModal(
     title.textContent = link.label || "Experiência";
     nameValue.textContent = link.label;
     categoryValue.textContent = categoryLabel(resolveCategory(link));
+    const hasSchedule = Boolean(link.scheduled_start && link.scheduled_end);
+    if (hasSchedule && link.scheduled_start && link.scheduled_end) {
+      scheduleBlock.hidden = false;
+      scheduleValue.textContent = formatScheduleLabel(
+        link.scheduled_start,
+        link.scheduled_end
+      );
+      scheduleBtn.textContent = "Agenda";
+    } else {
+      scheduleBlock.hidden = true;
+      scheduleValue.textContent = "";
+      scheduleBtn.textContent = "Agendar";
+    }
     if (link.description && link.description.length > 0) {
       noteBlock.hidden = false;
       noteValue.textContent = link.description;
@@ -1329,6 +1685,7 @@ export function createViewModal(
       noteBlock.hidden = true;
       noteValue.textContent = "";
     }
+    markDoneBtn.hidden = link.status === "done";
     linkAnchor.href = link.url;
     linkAnchor.textContent = link.url;
     overlay.hidden = false;
@@ -1339,7 +1696,19 @@ export function createViewModal(
     if (!current) return;
     const link = current;
     close();
-    onEdit(link);
+    cb.onEdit(link);
+  });
+  scheduleBtn.addEventListener("click", () => {
+    if (!current) return;
+    const link = current;
+    close();
+    cb.onSchedule(link);
+  });
+  markDoneBtn.addEventListener("click", () => {
+    if (!current) return;
+    const link = current;
+    close();
+    cb.onMarkDone(link);
   });
   backBtn.addEventListener("click", close);
   overlay.addEventListener("keydown", (e) => {
@@ -1366,6 +1735,8 @@ export function toCreateInput(values: LinkFormValues, sortOrder: number): Create
     icon_url: null,
     category: inferCategory(values),
     sort_order: sortOrder,
+    image_url: values.image_url.length > 0 ? values.image_url : null,
+    note: values.note.length > 0 ? values.note : null,
   };
 }
 
@@ -1378,6 +1749,8 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
     icon_preset: inferIconPreset(values.url),
     icon_url: null,
     category: inferCategory(values),
+    image_url: values.image_url.length > 0 ? values.image_url : null,
+    note: values.note.length > 0 ? values.note : null,
   };
 }
 
@@ -1387,6 +1760,9 @@ function assertFormValues(values: LinkFormValues): void {
   }
   if (values.label.length < 1) {
     throw new Error("O título é obrigatório.");
+  }
+  if (values.image_url.length > 0 && !isHttpsUrl(values.image_url)) {
+    throw new Error("A foto precisa ser uma URL https válida.");
   }
 }
 

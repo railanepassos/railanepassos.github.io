@@ -53,8 +53,8 @@ function makeFakeClient(resultOverrides: Partial<Record<string, FakeResult>> = {
 describe("listLinks", () => {
   it("selects from links table ordered by sort_order ascending", async () => {
     const rows = [
-      { id: "1", url: "https://a.com", label: "A", description: null, icon_preset: null, icon_url: null, sort_order: 0 },
-      { id: "2", url: "https://b.com", label: "B", description: null, icon_preset: null, icon_url: null, sort_order: 1 },
+      { id: "1", url: "https://a.com", label: "A", description: null, icon_preset: null, icon_url: null, sort_order: 0, scheduled_start: null, scheduled_end: null },
+      { id: "2", url: "https://b.com", label: "B", description: null, icon_preset: null, icon_url: null, sort_order: 1, scheduled_start: null, scheduled_end: null },
     ];
     const client = makeFakeClient({ links: { data: rows, error: null } });
     const repo = createLinksRepo(client);
@@ -64,7 +64,10 @@ describe("listLinks", () => {
     const builder = (client.from as ReturnType<typeof vi.fn>).mock.results[0].value;
     expect(builder.select).toHaveBeenCalled();
     expect(builder.order).toHaveBeenCalledWith("sort_order", { ascending: true });
-    expect(result).toEqual(rows);
+    expect(result).toHaveLength(2);
+    expect(result[0].status).toBe("wishlist");
+    expect(result[0].priority).toBe(0);
+    expect(result[0].label).toBe("A");
   });
 
   it("throws when supabase returns an error", async () => {
@@ -84,6 +87,8 @@ describe("createLink", () => {
     icon_preset: null,
     icon_url: null,
     sort_order: 0,
+    scheduled_start: null,
+    scheduled_end: null,
   };
 
   it("passes valid payloads through to supabase", async () => {
@@ -95,7 +100,9 @@ describe("createLink", () => {
     expect(client.from).toHaveBeenCalledWith("links");
     const builder = (client.from as ReturnType<typeof vi.fn>).mock.results[0].value;
     expect(builder.insert).toHaveBeenCalled();
-    expect(result).toEqual(createdRow);
+    expect(result.id).toBe("new-id");
+    expect(result.label).toBe("Example");
+    expect(result.status).toBe("wishlist");
   });
 
   it("rejects http:// url", async () => {
@@ -154,6 +161,22 @@ describe("createLink", () => {
     await expect(
       repo.createLink({ ...validInput, icon_url: null })
     ).resolves.not.toThrow();
+  });
+
+  it("rejects non-https image_url", async () => {
+    const client = makeFakeClient();
+    const repo = createLinksRepo(client);
+    await expect(
+      repo.createLink({ ...validInput, image_url: "http://cdn.example.com/photo.jpg" })
+    ).rejects.toThrow(/image_url/i);
+  });
+
+  it("rejects note exceeding 500 characters", async () => {
+    const client = makeFakeClient();
+    const repo = createLinksRepo(client);
+    await expect(
+      repo.createLink({ ...validInput, note: "x".repeat(501) })
+    ).rejects.toThrow(/note/i);
   });
 
   it("accepts label of exactly 200 characters", async () => {
@@ -218,128 +241,5 @@ describe("deleteLink", () => {
     const builder = (client.from as ReturnType<typeof vi.fn>).mock.results[0].value;
     expect(builder.delete).toHaveBeenCalled();
     expect(builder.eq).toHaveBeenCalledWith("id", "del-id");
-  });
-});
-
-// ─── saveOrder ───────────────────────────────────────────────────────────────
-
-describe("saveOrder", () => {
-  it("performs two-phase update: negatives first, then finals", async () => {
-    const callLog: Array<{ phase: string; id: string; sort_order: number }> = [];
-
-    // We need to intercept the actual update+eq calls in sequence
-    let callCount = 0;
-    const fromMock = vi.fn(() => {
-      callCount++;
-      const currentCall = callCount;
-      const builder: Record<string, unknown> = {};
-
-      builder["update"] = vi.fn((patch: { sort_order: number }) => {
-        const phase = patch.sort_order < 0 ? "negative" : "final";
-        return {
-          eq: vi.fn((col: string, id: string) => {
-            callLog.push({ phase, id, sort_order: patch.sort_order });
-            return Promise.resolve({ data: {}, error: null });
-          }),
-        };
-      });
-
-      return builder;
-    });
-
-    const client = { from: fromMock } as unknown as SupabaseClient;
-    const repo = createLinksRepo(client);
-
-    const items = [
-      { id: "a", sort_order: 0 },
-      { id: "b", sort_order: 1 },
-      { id: "c", sort_order: 2 },
-    ];
-
-    await repo.saveOrder(items);
-
-    // Phase 1: all negative updates
-    const negativeUpdates = callLog.filter((e) => e.phase === "negative");
-    const finalUpdates = callLog.filter((e) => e.phase === "final");
-
-    expect(negativeUpdates).toHaveLength(3);
-    expect(finalUpdates).toHaveLength(3);
-
-    // All negatives must appear before any final
-    const lastNegIndex = callLog.findLastIndex((e) => e.phase === "negative");
-    const firstFinalIndex = callLog.findIndex((e) => e.phase === "final");
-    expect(lastNegIndex).toBeLessThan(firstFinalIndex);
-
-    // Negatives use -(index+1)
-    expect(negativeUpdates[0].sort_order).toBe(-1);
-    expect(negativeUpdates[1].sort_order).toBe(-2);
-    expect(negativeUpdates[2].sort_order).toBe(-3);
-
-    // Finals use the provided sort_order values
-    expect(finalUpdates.map((e) => e.sort_order).sort((a, b) => a - b)).toEqual([0, 1, 2]);
-  });
-
-  it("throws on first error in phase 1", async () => {
-    let callIndex = 0;
-    const fromMock = vi.fn(() => {
-      callIndex++;
-      const idx = callIndex;
-      return {
-        update: vi.fn(() => ({
-          eq: vi.fn(() =>
-            Promise.resolve({
-              data: null,
-              error: idx === 2 ? { message: "Phase 1 error" } : null,
-            })
-          ),
-        })),
-      };
-    });
-
-    const client = { from: fromMock } as unknown as SupabaseClient;
-    const repo = createLinksRepo(client);
-
-    const items = [
-      { id: "a", sort_order: 0 },
-      { id: "b", sort_order: 1 },
-    ];
-
-    await expect(repo.saveOrder(items)).rejects.toThrow("Phase 1 error");
-  });
-
-  it("throws on first error in phase 2", async () => {
-    const items = [
-      { id: "a", sort_order: 0 },
-      { id: "b", sort_order: 1 },
-    ];
-    // Total calls: 2 phase-1 (negative) + 2 phase-2 (final) = 4
-    // Make the 3rd call (first phase-2 update) fail
-    let callIndex = 0;
-    const fromMock = vi.fn(() => {
-      callIndex++;
-      const idx = callIndex;
-      return {
-        update: vi.fn(() => ({
-          eq: vi.fn(() =>
-            Promise.resolve({
-              data: null,
-              error: idx === 3 ? { message: "Phase 2 error" } : null,
-            })
-          ),
-        })),
-      };
-    });
-
-    const client = { from: fromMock } as unknown as SupabaseClient;
-    const repo = createLinksRepo(client);
-
-    await expect(repo.saveOrder(items)).rejects.toThrow("Phase 2 error");
-  });
-
-  it("resolves immediately with empty items array", async () => {
-    const client = makeFakeClient();
-    const repo = createLinksRepo(client);
-    await expect(repo.saveOrder([])).resolves.toBeUndefined();
-    expect(client.from).not.toHaveBeenCalled();
   });
 });

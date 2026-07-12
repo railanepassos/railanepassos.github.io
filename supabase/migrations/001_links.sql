@@ -9,9 +9,17 @@ create table if not exists public.links (
   )),
   icon_url text check (icon_url is null or icon_url ~ '^https://'),
   category text check (category is null or category in (
-    'museu', 'evento', 'restaurante', 'trilha', 'praca', 'praia',
-    'ponto-turistico', 'passeio', 'outro'
+    'museu', 'evento', 'restaurante', 'bar', 'cafeteria', 'trilha', 'praca', 'parque',
+    'praia', 'ponto-turistico', 'passeio', 'outro'
   )),
+  scheduled_start timestamptz,
+  scheduled_end timestamptz,
+  status text not null default 'wishlist',
+  priority integer not null default 0,
+  want_again boolean not null default false,
+  image_url text,
+  note text,
+  completed_at timestamptz,
   sort_order integer not null,
   created_by uuid references auth.users (id),
   created_at timestamptz not null default now(),
@@ -71,3 +79,30 @@ values (
   0
 )
 on conflict do nothing;
+
+alter table public.links drop constraint if exists links_schedule_order;
+alter table public.links
+  add constraint links_schedule_order
+  check (
+    (scheduled_start is null and scheduled_end is null)
+    or (
+      scheduled_start is not null
+      and scheduled_end is not null
+      and scheduled_end > scheduled_start
+    )
+  );
+
+alter table public.links drop constraint if exists links_status_check;
+alter table public.links
+  add constraint links_status_check
+  check (status in ('wishlist', 'done'));
+
+alter table public.links drop constraint if exists links_image_url_https;
+alter table public.links
+  add constraint links_image_url_https
+  check (image_url is null or image_url ~ '^https://');
+
+alter table public.links drop constraint if exists links_note_len;
+alter table public.links
+  add constraint links_note_len
+  check (note is null or char_length(note) <= 500);

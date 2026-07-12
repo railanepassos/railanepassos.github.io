@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isHttpsUrl } from "./validate";
 
+export type LinkStatus = "wishlist" | "done";
+
 export type LinkRow = {
   id: string;
   url: string;
@@ -10,6 +12,14 @@ export type LinkRow = {
   icon_url: string | null;
   category: string | null;
   sort_order: number;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  status: LinkStatus;
+  priority: number;
+  want_again: boolean;
+  image_url: string | null;
+  note: string | null;
+  completed_at: string | null;
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -23,6 +33,14 @@ export type CreateLinkInput = {
   icon_url?: string | null;
   category?: string | null;
   sort_order: number;
+  scheduled_start?: string | null;
+  scheduled_end?: string | null;
+  status?: LinkStatus;
+  priority?: number;
+  want_again?: boolean;
+  image_url?: string | null;
+  note?: string | null;
+  completed_at?: string | null;
 };
 
 export type UpdateLinkPatch = {
@@ -33,13 +51,49 @@ export type UpdateLinkPatch = {
   icon_url?: string | null;
   category?: string | null;
   sort_order?: number;
+  scheduled_start?: string | null;
+  scheduled_end?: string | null;
+  status?: LinkStatus;
+  priority?: number;
+  want_again?: boolean;
+  image_url?: string | null;
+  note?: string | null;
+  completed_at?: string | null;
 };
+
+export function normalizeLinkRow(
+  row: Partial<LinkRow> & Pick<LinkRow, "id" | "url" | "label">
+): LinkRow {
+  return {
+    id: row.id,
+    url: row.url,
+    label: row.label,
+    description: row.description ?? null,
+    icon_preset: row.icon_preset ?? null,
+    icon_url: row.icon_url ?? null,
+    category: row.category ?? null,
+    sort_order: row.sort_order ?? 0,
+    scheduled_start: row.scheduled_start ?? null,
+    scheduled_end: row.scheduled_end ?? null,
+    status: row.status === "done" ? "done" : "wishlist",
+    priority: typeof row.priority === "number" ? row.priority : 0,
+    want_again: Boolean(row.want_again),
+    image_url: row.image_url ?? null,
+    note: row.note ?? null,
+    completed_at: row.completed_at ?? null,
+    created_by: row.created_by,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
 
 function validateLinkFields(fields: {
   url?: string;
   label?: string;
   description?: string | null;
   icon_url?: string | null;
+  image_url?: string | null;
+  note?: string | null;
 }): void {
   if (fields.url !== undefined) {
     if (!isHttpsUrl(fields.url)) {
@@ -68,6 +122,18 @@ function validateLinkFields(fields: {
       throw new Error("icon_url must be a valid https URL");
     }
   }
+
+  if (fields.image_url != null) {
+    if (!isHttpsUrl(fields.image_url)) {
+      throw new Error("image_url must be a valid https URL");
+    }
+  }
+
+  if (fields.note != null) {
+    if (fields.note.length > 500) {
+      throw new Error("note must not exceed 500 characters");
+    }
+  }
 }
 
 export interface LinksRepo {
@@ -75,7 +141,6 @@ export interface LinksRepo {
   createLink(input: CreateLinkInput): Promise<LinkRow>;
   updateLink(id: string, patch: UpdateLinkPatch): Promise<void>;
   deleteLink(id: string): Promise<void>;
-  saveOrder(items: Array<{ id: string; sort_order: number }>): Promise<void>;
 }
 
 export function createLinksRepo(client: SupabaseClient): LinksRepo {
@@ -85,12 +150,12 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         .from("links")
         .select("*")
         .order("sort_order", { ascending: true }) as unknown as Promise<{
-        data: LinkRow[] | null;
+        data: Array<Partial<LinkRow> & Pick<LinkRow, "id" | "url" | "label">> | null;
         error: { message: string } | null;
       }>);
 
       if (result.error) throw new Error(result.error.message);
-      return result.data ?? [];
+      return (result.data ?? []).map(normalizeLinkRow);
     },
 
     async createLink(input: CreateLinkInput): Promise<LinkRow> {
@@ -99,6 +164,8 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         label: input.label,
         description: input.description,
         icon_url: input.icon_url,
+        image_url: input.image_url,
+        note: input.note,
       });
 
       const trimmedLabel = input.label.trim();
@@ -108,12 +175,12 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         .insert({ ...input, label: trimmedLabel })
         .select()
         .single() as unknown as Promise<{
-        data: LinkRow | null;
+        data: (Partial<LinkRow> & Pick<LinkRow, "id" | "url" | "label">) | null;
         error: { message: string } | null;
       }>);
 
       if (result.error) throw new Error(result.error.message);
-      return result.data!;
+      return normalizeLinkRow(result.data!);
     },
 
     async updateLink(id: string, patch: UpdateLinkPatch): Promise<void> {
@@ -122,6 +189,8 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         label: patch.label,
         description: patch.description,
         icon_url: patch.icon_url,
+        image_url: patch.image_url,
+        note: patch.note,
       });
 
       const sanitized =
@@ -150,35 +219,6 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
       }>);
 
       if (result.error) throw new Error(result.error.message);
-    },
-
-    async saveOrder(items: Array<{ id: string; sort_order: number }>): Promise<void> {
-      if (items.length === 0) return;
-
-      // Phase 1: set temporary negative values to avoid UNIQUE constraint collisions
-      for (let i = 0; i < items.length; i++) {
-        const tempOrder = -(i + 1);
-        const result = await (client
-          .from("links")
-          .update({ sort_order: tempOrder })
-          .eq("id", items[i].id) as unknown as Promise<{
-          data: unknown;
-          error: { message: string } | null;
-        }>);
-        if (result.error) throw new Error(result.error.message);
-      }
-
-      // Phase 2: set final sort_order values
-      for (const item of items) {
-        const result = await (client
-          .from("links")
-          .update({ sort_order: item.sort_order })
-          .eq("id", item.id) as unknown as Promise<{
-          data: unknown;
-          error: { message: string } | null;
-        }>);
-        if (result.error) throw new Error(result.error.message);
-      }
     },
   };
 }
