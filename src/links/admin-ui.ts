@@ -18,6 +18,7 @@ import {
 } from "./swipe";
 import { buildSpinLabels } from "./pick-random";
 import { setScreenBusy } from "./skeleton";
+import { formatScheduleChip, formatScheduleLabel } from "./schedule";
 
 /**
  * DOM building blocks for the authenticated admin experience:
@@ -472,6 +473,16 @@ export function renderAdminCard(
   cat.className = "link-card__category";
   cat.textContent = categoryLabel(resolveCategory(link));
   textEl.appendChild(cat);
+
+  if (link.scheduled_start && link.scheduled_end) {
+    const schedule = document.createElement("span");
+    schedule.className = "link-card__schedule";
+    schedule.textContent = formatScheduleChip(
+      link.scheduled_start,
+      link.scheduled_end
+    );
+    textEl.appendChild(schedule);
+  }
 
   if (link.description && link.description.length > 0) {
     const desc = document.createElement("span");
@@ -1232,8 +1243,172 @@ export function createLinkFormModal(
 }
 
 // ---------------------------------------------------------------------------
+// Schedule sheet.
+// ---------------------------------------------------------------------------
+
+export type ScheduleSheetValues = {
+  date: string;
+  startTime: string;
+  endTime: string;
+};
+
+export type ScheduleSheetHandle = {
+  element: HTMLElement;
+  open: (opts: {
+    title?: string;
+    initial: ScheduleSheetValues;
+    onSave: (values: ScheduleSheetValues) => void | Promise<void>;
+  }) => void;
+  close: () => void;
+  setError: (message: string) => void;
+  setBusy: (busy: boolean) => void;
+};
+
+export function createScheduleSheet(): ScheduleSheetHandle {
+  let previouslyFocused: HTMLElement | null = null;
+  let onSaveCb: ((values: ScheduleSheetValues) => void | Promise<void>) | null =
+    null;
+
+  const { overlay, dialog, title, backBtn } = createScreenChrome(
+    "links-schedule-title",
+    "Agendar experiência",
+    "dialog"
+  );
+
+  const form = document.createElement("form");
+  form.className = "links-admin-form links-admin-form--screen";
+  form.noValidate = true;
+
+  const dateField = labelledInput("links-schedule-date", "Data", "date");
+  dateField.input.required = true;
+
+  const startField = labelledInput("links-schedule-start", "Início", "time");
+  startField.input.required = true;
+
+  const endField = labelledInput("links-schedule-end", "Fim", "time");
+  endField.input.required = true;
+
+  const hint = document.createElement("p");
+  hint.className = "links-admin-form__hint";
+  hint.textContent =
+    "Padrão: deslocamento incluso (9h–17h). No local ~10h–16h.";
+
+  const error = document.createElement("p");
+  error.className = "links-admin-form__error";
+  error.setAttribute("role", "alert");
+  error.hidden = true;
+
+  const actions = document.createElement("div");
+  actions.className = "links-admin-form__actions links-admin-form__actions--sticky";
+
+  const submitBtn = document.createElement("button");
+  submitBtn.type = "submit";
+  submitBtn.className =
+    "links-admin-button links-admin-button--primary links-admin-button--block";
+  submitBtn.textContent = "Salvar agendamento";
+
+  actions.append(submitBtn);
+  form.append(
+    dateField.wrapper,
+    startField.wrapper,
+    endField.wrapper,
+    hint,
+    error,
+    actions
+  );
+  dialog.appendChild(form);
+
+  function clearError(): void {
+    error.hidden = true;
+    error.textContent = "";
+  }
+
+  function close(): void {
+    overlay.hidden = true;
+    clearError();
+    form.reset();
+    onSaveCb = null;
+    setBusy(false);
+    syncBodyScreenLock();
+    if (previouslyFocused) {
+      previouslyFocused.focus();
+      previouslyFocused = null;
+    }
+  }
+
+  function setBusy(busy: boolean): void {
+    submitBtn.disabled = busy;
+    backBtn.disabled = busy;
+    dateField.input.disabled = busy;
+    startField.input.disabled = busy;
+    endField.input.disabled = busy;
+    setScreenBusy(dialog, busy);
+  }
+
+  function setError(message: string): void {
+    error.textContent = message;
+    error.hidden = false;
+  }
+
+  function open(opts: {
+    title?: string;
+    initial: ScheduleSheetValues;
+    onSave: (values: ScheduleSheetValues) => void | Promise<void>;
+  }): void {
+    previouslyFocused = document.activeElement as HTMLElement | null;
+    title.textContent = opts.title ?? "Agendar experiência";
+    dateField.input.value = opts.initial.date;
+    startField.input.value = opts.initial.startTime;
+    endField.input.value = opts.initial.endTime;
+    onSaveCb = opts.onSave;
+    clearError();
+    setBusy(false);
+    overlay.hidden = false;
+    syncBodyScreenLock();
+    // No autofocus: avoid opening the mobile date/time picker immediately.
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (!onSaveCb) return;
+    clearError();
+    const values = {
+      date: dateField.input.value,
+      startTime: startField.input.value,
+      endTime: endField.input.value,
+    };
+    void Promise.resolve(onSaveCb(values)).catch((err: unknown) => {
+      setError(err instanceof Error && err.message ? err.message : "Não foi possível salvar.");
+    });
+  });
+
+  backBtn.addEventListener("click", close);
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      close();
+    }
+  });
+
+  return {
+    element: overlay,
+    open,
+    close,
+    setError,
+    setBusy,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // View experience (read-only) → Editar opens the form.
 // ---------------------------------------------------------------------------
+
+export type ViewModalCallbacks = {
+  onEdit: (link: LinkRow) => void;
+  onSchedule: (link: LinkRow) => void;
+  onDownloadIcs: (link: LinkRow) => void;
+  onClearSchedule: (link: LinkRow) => void;
+};
 
 export type ViewModalHandle = {
   element: HTMLElement;
@@ -1241,9 +1416,7 @@ export type ViewModalHandle = {
   close: () => void;
 };
 
-export function createViewModal(
-  onEdit: (link: LinkRow) => void
-): ViewModalHandle {
+export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   let current: LinkRow | null = null;
 
   const { overlay, dialog, title, backBtn } = createScreenChrome(
@@ -1290,11 +1463,24 @@ export function createViewModal(
   linkAnchor.rel = "noopener noreferrer";
   linkAnchor.target = "_blank";
 
+  const scheduleBlock = document.createElement("div");
+  scheduleBlock.className = "links-admin-view__block";
+
+  const scheduleLabel = document.createElement("p");
+  scheduleLabel.className = "links-admin-view__label";
+  scheduleLabel.textContent = "Agendado";
+
+  const scheduleValue = document.createElement("p");
+  scheduleValue.className = "links-admin-view__value";
+
+  scheduleBlock.append(scheduleLabel, scheduleValue);
+
   body.append(
     nameLabel,
     nameValue,
     categoryLabelEl,
     categoryValue,
+    scheduleBlock,
     noteBlock,
     linkLabel,
     linkAnchor
@@ -1303,12 +1489,42 @@ export function createViewModal(
   const actions = document.createElement("div");
   actions.className = "links-admin-form__actions links-admin-form__actions--sticky";
 
+  const scheduleBtn = document.createElement("button");
+  scheduleBtn.type = "button";
+  scheduleBtn.className =
+    "links-admin-button links-admin-button--primary links-admin-button--block";
+  scheduleBtn.textContent = "Agendar";
+
+  const downloadIcsBtn = document.createElement("button");
+  downloadIcsBtn.type = "button";
+  downloadIcsBtn.className =
+    "links-admin-button links-admin-button--primary links-admin-button--block";
+  downloadIcsBtn.textContent = "Baixar ICS";
+
+  const changeScheduleBtn = document.createElement("button");
+  changeScheduleBtn.type = "button";
+  changeScheduleBtn.className =
+    "links-admin-button links-admin-button--ghost links-admin-button--block";
+  changeScheduleBtn.textContent = "Alterar data";
+
+  const clearScheduleBtn = document.createElement("button");
+  clearScheduleBtn.type = "button";
+  clearScheduleBtn.className =
+    "links-admin-button links-admin-button--ghost links-admin-button--block";
+  clearScheduleBtn.textContent = "Remover agendamento";
+
   const editBtn = document.createElement("button");
   editBtn.type = "button";
-  editBtn.className = "links-admin-button links-admin-button--primary links-admin-button--block";
+  editBtn.className = "links-admin-button links-admin-button--ghost links-admin-button--block";
   editBtn.textContent = "Editar";
 
-  actions.append(editBtn);
+  actions.append(
+    scheduleBtn,
+    downloadIcsBtn,
+    changeScheduleBtn,
+    clearScheduleBtn,
+    editBtn
+  );
   dialog.append(body, actions);
 
   function close(): void {
@@ -1322,6 +1538,21 @@ export function createViewModal(
     title.textContent = link.label || "Experiência";
     nameValue.textContent = link.label;
     categoryValue.textContent = categoryLabel(resolveCategory(link));
+    const hasSchedule = Boolean(link.scheduled_start && link.scheduled_end);
+    if (hasSchedule && link.scheduled_start && link.scheduled_end) {
+      scheduleBlock.hidden = false;
+      scheduleValue.textContent = formatScheduleLabel(
+        link.scheduled_start,
+        link.scheduled_end
+      );
+    } else {
+      scheduleBlock.hidden = true;
+      scheduleValue.textContent = "";
+    }
+    scheduleBtn.hidden = hasSchedule;
+    downloadIcsBtn.hidden = !hasSchedule;
+    changeScheduleBtn.hidden = !hasSchedule;
+    clearScheduleBtn.hidden = !hasSchedule;
     if (link.description && link.description.length > 0) {
       noteBlock.hidden = false;
       noteValue.textContent = link.description;
@@ -1339,7 +1570,31 @@ export function createViewModal(
     if (!current) return;
     const link = current;
     close();
-    onEdit(link);
+    cb.onEdit(link);
+  });
+  scheduleBtn.addEventListener("click", () => {
+    if (!current) return;
+    const link = current;
+    close();
+    cb.onSchedule(link);
+  });
+  downloadIcsBtn.addEventListener("click", () => {
+    if (!current) return;
+    const link = current;
+    close();
+    cb.onDownloadIcs(link);
+  });
+  changeScheduleBtn.addEventListener("click", () => {
+    if (!current) return;
+    const link = current;
+    close();
+    cb.onSchedule(link);
+  });
+  clearScheduleBtn.addEventListener("click", () => {
+    if (!current) return;
+    const link = current;
+    close();
+    cb.onClearSchedule(link);
   });
   backBtn.addEventListener("click", close);
   overlay.addEventListener("keydown", (e) => {

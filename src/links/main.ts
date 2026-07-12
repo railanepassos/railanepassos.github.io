@@ -130,7 +130,12 @@ function bootDynamic(
   });
 
   const deleteSheet: DeleteSheetHandle = createDeleteConfirmSheet();
-  const viewModal: ViewModalHandle = createViewModal((l) => formModal.openEdit(l));
+  const viewModal: ViewModalHandle = createViewModal({
+    onEdit: (l) => formModal.openEdit(l),
+    onSchedule: () => undefined,
+    onDownloadIcs: () => undefined,
+    onClearSchedule: () => undefined,
+  });
   const filterSheet: CategoryFilterHandle = createCategoryFilterSheet((cats) => {
     categoryFilter = cats;
     render();

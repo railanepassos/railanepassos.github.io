@@ -194,6 +194,18 @@ body.page-links {
   letter-spacing: 0.02em;
 }
 
+.link-card__schedule {
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--green-light);
+  color: var(--green-dark);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 .links-footer {
   margin-top: 32px;
   text-align: center;
@@ -1465,6 +1477,12 @@ body.links-screen-open {
 
 .links-admin-form__error[hidden] {
   display: none;
+}
+
+.links-admin-form__hint {
+  margin: 0 0 16px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
 }
 
 .links-admin-form__actions {
