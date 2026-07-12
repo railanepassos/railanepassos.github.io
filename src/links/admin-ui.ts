@@ -1289,7 +1289,8 @@ export function createScheduleSheet(): ScheduleSheetHandle {
   );
 
   const form = document.createElement("form");
-  form.className = "links-admin-form links-admin-form--screen";
+  form.className =
+    "links-admin-form links-admin-form--screen links-admin-form--schedule";
   form.noValidate = true;
 
   const dateField = labelledInput("links-schedule-date", "Data", "date");
