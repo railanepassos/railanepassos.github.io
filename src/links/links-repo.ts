@@ -81,7 +81,6 @@ export interface LinksRepo {
   createLink(input: CreateLinkInput): Promise<LinkRow>;
   updateLink(id: string, patch: UpdateLinkPatch): Promise<void>;
   deleteLink(id: string): Promise<void>;
-  saveOrder(items: Array<{ id: string; sort_order: number }>): Promise<void>;
 }
 
 export function createLinksRepo(client: SupabaseClient): LinksRepo {
@@ -156,35 +155,6 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
       }>);
 
       if (result.error) throw new Error(result.error.message);
-    },
-
-    async saveOrder(items: Array<{ id: string; sort_order: number }>): Promise<void> {
-      if (items.length === 0) return;
-
-      // Phase 1: set temporary negative values to avoid UNIQUE constraint collisions
-      for (let i = 0; i < items.length; i++) {
-        const tempOrder = -(i + 1);
-        const result = await (client
-          .from("links")
-          .update({ sort_order: tempOrder })
-          .eq("id", items[i].id) as unknown as Promise<{
-          data: unknown;
-          error: { message: string } | null;
-        }>);
-        if (result.error) throw new Error(result.error.message);
-      }
-
-      // Phase 2: set final sort_order values
-      for (const item of items) {
-        const result = await (client
-          .from("links")
-          .update({ sort_order: item.sort_order })
-          .eq("id", item.id) as unknown as Promise<{
-          data: unknown;
-          error: { message: string } | null;
-        }>);
-        if (result.error) throw new Error(result.error.message);
-      }
     },
   };
 }

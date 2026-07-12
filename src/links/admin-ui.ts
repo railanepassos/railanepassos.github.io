@@ -132,7 +132,7 @@ export function createLoginModal(
   const intro = document.createElement("p");
   intro.className = "links-admin-modal__body";
   intro.textContent =
-    "Acesso de editor para adicionar, reordenar e revisar experiências da bucket list.";
+    "Acesso de editor para adicionar, agendar e revisar experiências da bucket list.";
 
   const form = document.createElement("form");
   form.className = "links-admin-form links-admin-form--screen";

@@ -1023,15 +1023,6 @@ body.page-links-admin .links-admin-button {
   transform: none;
 }
 
-.link-card__drag-handle {
-  flex-shrink: 0;
-  color: var(--text-muted);
-  font-size: 1.1rem;
-  line-height: 1;
-  cursor: grab;
-  user-select: none;
-}
-
 .link-card__actions {
   display: flex;
   gap: 6px;
@@ -1159,17 +1150,13 @@ body.links-screen-open {
 }
 
 @media (pointer: coarse) {
-  /* Swipe covers edit/delete; tap opens view; keep ↑↓ for reorder */
+  /* Swipe covers edit/delete; tap opens view */
   .link-card__action--delete {
     display: none;
   }
 
-  .link-card__drag-handle {
-    display: none;
-  }
-
   .link-card__actions {
-    display: flex;
+    display: none;
   }
 
   .links-admin-toolbar {
