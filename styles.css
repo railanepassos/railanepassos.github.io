@@ -1995,6 +1995,13 @@ body.links-screen-open {
   overflow-y: auto;
 }
 
+.links-admin-form__counter {
+  align-self: flex-end;
+  font-size: 0.72rem;
+  color: var(--text-muted, #5a6570);
+  line-height: 1;
+}
+
 .links-admin-form__email-row {
   display: flex;
   align-items: stretch;

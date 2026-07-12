@@ -1129,12 +1129,14 @@ export function createLinkFormModal(
   const labelField = labelledInput("links-form-label", "Nome do lugar ou experiência", "text");
   labelField.input.required = true;
   labelField.input.maxLength = 200;
+  const updateLabelCounter = attachCharCounter(labelField.wrapper, labelField.input, 200);
 
   const descField = labelledTextarea(
     "links-form-desc",
     "Nota da lista (opcional) — por que salvar, região, época…"
   );
   descField.input.maxLength = 2000;
+  const updateDescCounter = attachCharCounter(descField.wrapper, descField.input, 2000);
 
   const imageField = labelledInput(
     "links-form-image",
@@ -1150,6 +1152,7 @@ export function createLinkFormModal(
     "text"
   );
   memoryField.input.maxLength = 500;
+  const updateMemoryCounter = attachCharCounter(memoryField.wrapper, memoryField.input, 500);
 
   const error = document.createElement("p");
   error.className = "links-admin-form__error";
@@ -1206,6 +1209,9 @@ export function createLinkFormModal(
     title.textContent = "Nova experiência";
     form.reset();
     descField.syncHeight();
+    updateLabelCounter();
+    updateDescCounter();
+    updateMemoryCounter();
     afterOpen();
   }
 
@@ -1218,6 +1224,9 @@ export function createLinkFormModal(
     imageField.input.value = link.image_url ?? "";
     memoryField.input.value = link.note ?? "";
     descField.syncHeight();
+    updateLabelCounter();
+    updateDescCounter();
+    updateMemoryCounter();
     afterOpen();
   }
 
@@ -1824,6 +1833,25 @@ function labelledTextarea(id: string, labelText: string): LabelledTextarea {
 
   wrapper.append(label, input);
   return { wrapper, input, syncHeight: autoGrow };
+}
+
+/** Appends a discreet "N / MAX" counter under a field; returns a fn to refresh it. */
+function attachCharCounter(
+  wrapper: HTMLElement,
+  input: HTMLInputElement | HTMLTextAreaElement,
+  max: number
+): () => void {
+  const counter = document.createElement("span");
+  counter.className = "links-admin-form__counter";
+  counter.setAttribute("aria-hidden", "true");
+
+  const update = (): void => {
+    counter.textContent = `${input.value.length} / ${max}`;
+  };
+  input.addEventListener("input", update);
+  wrapper.appendChild(counter);
+  update();
+  return update;
 }
 
 function iconButton(text: string, ariaLabel: string): HTMLButtonElement {
