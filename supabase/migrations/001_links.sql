@@ -12,6 +12,8 @@ create table if not exists public.links (
     'museu', 'evento', 'restaurante', 'trilha', 'praca', 'praia',
     'ponto-turistico', 'passeio', 'outro'
   )),
+  scheduled_start timestamptz,
+  scheduled_end timestamptz,
   sort_order integer not null,
   created_by uuid references auth.users (id),
   created_at timestamptz not null default now(),
@@ -71,3 +73,15 @@ values (
   0
 )
 on conflict do nothing;
+
+alter table public.links drop constraint if exists links_schedule_order;
+alter table public.links
+  add constraint links_schedule_order
+  check (
+    (scheduled_start is null and scheduled_end is null)
+    or (
+      scheduled_start is not null
+      and scheduled_end is not null
+      and scheduled_end > scheduled_start
+    )
+  );
