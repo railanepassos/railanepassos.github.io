@@ -1150,10 +1150,52 @@ import { setScreenBusy } from "./skeleton";
 import { syncBodyScreenLock } from "./screen-lock";
 
 // ---------------------------------------------------------------------------
-// Create / rename form (full-screen, mirrors admin-ui.ts's own screens — this
-// module intentionally builds its own chrome rather than importing from
-// admin-ui.ts, matching the existing deck-ui.ts precedent of self-contained
-// screen modules composed together only in main.ts).
+// Shared full-screen chrome (overlay/dialog/header/back/title). Kept local
+// rather than imported from admin-ui.ts — this module intentionally builds
+// its own chrome, matching the existing deck-ui.ts precedent of
+// self-contained screen modules composed together only in main.ts. Shared
+// here, within this module, so the three screens below don't triple it.
+// ---------------------------------------------------------------------------
+
+type ScreenShell = {
+  overlay: HTMLElement;
+  dialog: HTMLElement;
+  header: HTMLElement;
+  backBtn: HTMLButtonElement;
+  title: HTMLHeadingElement;
+};
+
+function createScreenShell(titleId: string): ScreenShell {
+  const overlay = document.createElement("div");
+  overlay.className = "links-admin-modal";
+  overlay.hidden = true;
+
+  const dialog = document.createElement("div");
+  dialog.className = "links-admin-modal__dialog";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-labelledby", titleId);
+
+  const header = document.createElement("header");
+  header.className = "links-admin-screen__header";
+
+  const backBtn = document.createElement("button");
+  backBtn.type = "button";
+  backBtn.className = "links-admin-screen__back";
+  backBtn.textContent = "Voltar";
+
+  const title = document.createElement("h2");
+  title.className = "links-admin-modal__title links-admin-screen__title";
+  title.id = titleId;
+
+  header.append(backBtn, title);
+  overlay.appendChild(dialog);
+
+  return { overlay, dialog, header, backBtn, title };
+}
+
+// ---------------------------------------------------------------------------
+// Create / rename form.
 // ---------------------------------------------------------------------------
 
 export type CollectionFormHandle = {
@@ -1170,29 +1212,9 @@ export function createCollectionFormSheet(
 ): CollectionFormHandle {
   let editingId: string | null = null;
 
-  const overlay = document.createElement("div");
-  overlay.className = "links-admin-modal";
-  overlay.hidden = true;
-
-  const dialog = document.createElement("div");
-  dialog.className = "links-admin-modal__dialog";
-  dialog.setAttribute("role", "dialog");
-  dialog.setAttribute("aria-modal", "true");
-  dialog.setAttribute("aria-labelledby", "links-collection-form-title");
-
-  const header = document.createElement("header");
-  header.className = "links-admin-screen__header";
-
-  const backBtn = document.createElement("button");
-  backBtn.type = "button";
-  backBtn.className = "links-admin-screen__back";
-  backBtn.textContent = "Voltar";
-
-  const title = document.createElement("h2");
-  title.className = "links-admin-modal__title links-admin-screen__title";
-  title.id = "links-collection-form-title";
-
-  header.append(backBtn, title);
+  const { overlay, dialog, header, backBtn, title } = createScreenShell(
+    "links-collection-form-title"
+  );
 
   const form = document.createElement("form");
   form.className = "links-admin-form links-admin-form--screen";
@@ -1231,7 +1253,6 @@ export function createCollectionFormSheet(
   actions.append(submitBtn);
   form.append(field, error, actions);
   dialog.append(header, form);
-  overlay.appendChild(dialog);
 
   function close(): void {
     overlay.hidden = true;
@@ -1329,30 +1350,10 @@ export function createCollectionsListScreen(cb: {
   onOpenCollection: (collection: Collection) => void;
   onCreate: () => void;
 }): CollectionsListHandle {
-  const overlay = document.createElement("div");
-  overlay.className = "links-admin-modal";
-  overlay.hidden = true;
-
-  const dialog = document.createElement("div");
-  dialog.className = "links-admin-modal__dialog";
-  dialog.setAttribute("role", "dialog");
-  dialog.setAttribute("aria-modal", "true");
-  dialog.setAttribute("aria-labelledby", "links-collections-title");
-
-  const header = document.createElement("header");
-  header.className = "links-admin-screen__header";
-
-  const backBtn = document.createElement("button");
-  backBtn.type = "button";
-  backBtn.className = "links-admin-screen__back";
-  backBtn.textContent = "Voltar";
-
-  const title = document.createElement("h2");
-  title.className = "links-admin-modal__title links-admin-screen__title";
-  title.id = "links-collections-title";
+  const { overlay, dialog, header, backBtn, title } = createScreenShell(
+    "links-collections-title"
+  );
   title.textContent = "Collections";
-
-  header.append(backBtn, title);
 
   const newBtn = document.createElement("button");
   newBtn.type = "button";
@@ -1365,7 +1366,6 @@ export function createCollectionsListScreen(cb: {
   list.className = "links-collections-list";
 
   dialog.append(header, newBtn, list);
-  overlay.appendChild(dialog);
 
   function renderRow(summary: CollectionSummary): HTMLElement {
     const row = document.createElement("button");
@@ -1741,29 +1741,9 @@ export function createCollectionDetailScreen(cb: {
 }): CollectionDetailHandle {
   let current: Collection | null = null;
 
-  const overlay = document.createElement("div");
-  overlay.className = "links-admin-modal";
-  overlay.hidden = true;
-
-  const dialog = document.createElement("div");
-  dialog.className = "links-admin-modal__dialog";
-  dialog.setAttribute("role", "dialog");
-  dialog.setAttribute("aria-modal", "true");
-  dialog.setAttribute("aria-labelledby", "links-collection-detail-title");
-
-  const header = document.createElement("header");
-  header.className = "links-admin-screen__header";
-
-  const backBtn = document.createElement("button");
-  backBtn.type = "button";
-  backBtn.className = "links-admin-screen__back";
-  backBtn.textContent = "Voltar";
-
-  const title = document.createElement("h2");
-  title.className = "links-admin-modal__title links-admin-screen__title";
-  title.id = "links-collection-detail-title";
-
-  header.append(backBtn, title);
+  const { overlay, dialog, header, backBtn, title } = createScreenShell(
+    "links-collection-detail-title"
+  );
 
   const list = document.createElement("div");
   list.className = "links-collections-detail__list";
@@ -1784,7 +1764,6 @@ export function createCollectionDetailScreen(cb: {
 
   actions.append(renameBtn, deleteBtn);
   dialog.append(header, list, actions);
-  overlay.appendChild(dialog);
 
   function close(): void {
     overlay.hidden = true;
