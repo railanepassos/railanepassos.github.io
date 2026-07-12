@@ -116,7 +116,6 @@ function bootDynamic(
 ): void {
   let links: LinkRow[] = sortLinks(initialLinks);
   let authenticated = false;
-  let dragId: string | null = null;
   let notice = warning ?? null;
   let categoryFilter: Category[] = [];
 
