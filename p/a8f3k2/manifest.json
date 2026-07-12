@@ -1,0 +1,22 @@
+{
+  "name": "Experience Bucket List",
+  "short_name": "Bucket List",
+  "start_url": "/p/a8f3k2/",
+  "scope": "/p/a8f3k2/",
+  "display": "standalone",
+  "background_color": "#f8fafb",
+  "theme_color": "#1a365d",
+  "icons": [
+    {
+      "src": "/assets/icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "share_target": {
+    "action": "/p/a8f3k2/",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
+}
