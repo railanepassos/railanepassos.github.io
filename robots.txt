@@ -1,5 +1,6 @@
 User-agent: *
 Allow: /
+Disallow: /p/a8f3k2/
 
 # Sitemap
 Sitemap: https://railanepassos.tec.br/sitemap.xml
