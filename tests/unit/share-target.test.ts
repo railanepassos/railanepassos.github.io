@@ -37,4 +37,12 @@ describe("pickSharedUrl", () => {
     });
     expect(pickSharedUrl(params)).toBe("https://secure.example.com");
   });
+
+  it("rejects an unparsable URL extracted from text and falls through to title", () => {
+    const params = new URLSearchParams({
+      text: "olha isso: https://[oops confira",
+      title: "Confira https://maps.example.com/place",
+    });
+    expect(pickSharedUrl(params)).toBe("https://maps.example.com/place");
+  });
 });

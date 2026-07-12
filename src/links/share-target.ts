@@ -23,5 +23,6 @@ function extractHttpsUrl(value: string | null): string | null {
   if (!value) return null;
   const match = value.match(/https:\/\/\S+/);
   if (!match) return null;
-  return match[0].replace(/[.,;:!?)\]}]+$/, "");
+  const candidate = match[0].replace(/[.,;:!?)\]}]+$/, "");
+  return isHttpsUrl(candidate) ? candidate : null;
 }
