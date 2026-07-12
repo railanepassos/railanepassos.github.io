@@ -269,10 +269,12 @@ function bootDynamic(
             scheduled_start: null,
             scheduled_end: null,
           });
-          links = links.map((row) =>
-            row.id === link.id
-              ? { ...row, scheduled_start: null, scheduled_end: null }
-              : row
+          links = sortLinks(
+            links.map((row) =>
+              row.id === link.id
+                ? { ...row, scheduled_start: null, scheduled_end: null }
+                : row
+            )
           );
           renderList();
           scheduleSheet.close();
@@ -308,10 +310,12 @@ function bootDynamic(
             scheduled_start: startIso,
             scheduled_end: endIso,
           });
-          links = links.map((row) =>
-            row.id === link.id
-              ? { ...row, scheduled_start: startIso, scheduled_end: endIso }
-              : row
+          links = sortLinks(
+            links.map((row) =>
+              row.id === link.id
+                ? { ...row, scheduled_start: startIso, scheduled_end: endIso }
+                : row
+            )
           );
           renderList();
           scheduleSheet.setHasSchedule(true);
@@ -322,14 +326,16 @@ function bootDynamic(
                 scheduled_start: undoStart,
                 scheduled_end: undoEnd,
               });
-              links = links.map((row) =>
-                row.id === link.id
-                  ? {
-                      ...row,
-                      scheduled_start: undoStart,
-                      scheduled_end: undoEnd,
-                    }
-                  : row
+              links = sortLinks(
+                links.map((row) =>
+                  row.id === link.id
+                    ? {
+                        ...row,
+                        scheduled_start: undoStart,
+                        scheduled_end: undoEnd,
+                      }
+                    : row
+                )
               );
               renderList();
               openSchedule(findLink(link.id) ?? {
