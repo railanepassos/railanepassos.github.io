@@ -19,6 +19,24 @@ permissions:
   pull-requests: read
 
 jobs:
+  build-links:
+    name: Build links bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - name: Build app.js
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: npm run build
+      - name: Verify app.js exists
+        run: test -f p/a8f3k2/app.js
+
   lint-html:
     name: Lint HTML + CSP + links
     runs-on: ubuntu-latest
@@ -253,6 +271,7 @@ jobs:
     name: CI success
     runs-on: ubuntu-latest
     needs:
+      - build-links
       - lint-html
       - lint-css
       - a11y
@@ -280,6 +299,7 @@ jobs:
               echo "$name $result"
             fi
           }
+          check "${{ needs.build-links.result }}" "build-links"
           check "${{ needs.lint-html.result }}" "lint-html"
           check "${{ needs.lint-css.result }}" "lint-css"
           check "${{ needs.a11y.result }}" "a11y"
