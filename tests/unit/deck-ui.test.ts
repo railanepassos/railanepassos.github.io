@@ -183,6 +183,35 @@ describe("createDeckScreen motion", () => {
     await vi.waitFor(() => expect(onWant).toHaveBeenCalledTimes(1));
   });
 
+  it("does not call onMarkDone until fly animation ends", async () => {
+    stubMotion(false);
+    const onMarkDone = vi.fn();
+    const deck = createDeckScreen({
+      onWant: vi.fn(),
+      onSkip: vi.fn(),
+      onMarkDone,
+      onWantAgain: vi.fn(),
+      onClose: vi.fn(),
+    });
+    document.body.appendChild(deck.element);
+    deck.open([row()], "wishlist");
+
+    const doneBtn = deck.element.querySelector(
+      ".links-deck-screen__btn--done"
+    ) as HTMLButtonElement;
+    doneBtn.click();
+
+    expect(onMarkDone).not.toHaveBeenCalled();
+    const card = deck.element.querySelector(
+      ".links-deck-screen__card"
+    ) as HTMLElement;
+    expect(card.classList.contains("links-deck-screen__card--fly-up")).toBe(
+      true
+    );
+    card.dispatchEvent(new Event("animationend"));
+    await vi.waitFor(() => expect(onMarkDone).toHaveBeenCalledTimes(1));
+  });
+
   it("calls onWant immediately when reduced motion", async () => {
     stubMotion(true);
     const onWant = vi.fn();
