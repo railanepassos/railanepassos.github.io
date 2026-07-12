@@ -257,8 +257,15 @@ function bootDynamic(
       onSave: async (values) => {
         scheduleSheet.setBusy(true);
         try {
-          const startIso = buildScheduleIso(values.date, values.startTime);
-          const endIso = buildScheduleIso(values.date, values.endTime);
+          let startIso: string;
+          let endIso: string;
+          try {
+            startIso = buildScheduleIso(values.date, values.startTime);
+            endIso = buildScheduleIso(values.date, values.endTime);
+          } catch {
+            scheduleSheet.setError("Data ou horário inválido.");
+            return;
+          }
           const scheduleError = validateScheduleRange(startIso, endIso);
           if (scheduleError) {
             scheduleSheet.setError(scheduleError);

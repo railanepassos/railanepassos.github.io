@@ -62,13 +62,25 @@ describe("splitScheduleLocal", () => {
 });
 
 describe("formatters", () => {
-  it("formats chip and label", () => {
+  it("formats chip with compact hours when minutes are :00", () => {
     expect(
       formatScheduleChip(
         "2026-07-20T09:00:00-03:00",
         "2026-07-20T17:00:00-03:00"
       )
     ).toBe("20 jul · 9–17");
+  });
+
+  it("formats chip with minutes when any minute is nonzero", () => {
+    expect(
+      formatScheduleChip(
+        "2026-07-20T10:30:00-03:00",
+        "2026-07-20T16:15:00-03:00"
+      )
+    ).toBe("20 jul · 10:30–16:15");
+  });
+
+  it("formats label", () => {
     expect(
       formatScheduleLabel(
         "2026-07-20T09:00:00-03:00",

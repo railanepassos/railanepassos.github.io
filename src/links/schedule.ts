@@ -72,10 +72,19 @@ function hourLabel(h: number): string {
   return String(h);
 }
 
+function padMinute(m: number): string {
+  return String(m).padStart(2, "0");
+}
+
+function timeChipLabel(h: number, m: number): string {
+  if (m === 0) return hourLabel(h);
+  return `${h}:${padMinute(m)}`;
+}
+
 export function formatScheduleChip(startIso: string, endIso: string): string {
   const s = parts(startIso);
   const e = parts(endIso);
-  return `${s.day} ${MONTHS_PT[s.monthIdx]} · ${hourLabel(s.hour)}–${hourLabel(e.hour)}`;
+  return `${s.day} ${MONTHS_PT[s.monthIdx]} · ${timeChipLabel(s.hour, s.minute)}–${timeChipLabel(e.hour, e.minute)}`;
 }
 
 export function formatScheduleLabel(startIso: string, endIso: string): string {
