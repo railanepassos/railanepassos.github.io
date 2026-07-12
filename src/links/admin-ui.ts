@@ -1356,15 +1356,24 @@ export function createScheduleSheet(): ScheduleSheetHandle {
 
   actions.append(submitBtn, downloadBtn, removeBtn);
   form.append(
+    success,
     dateField.wrapper,
     startField.wrapper,
     endField.wrapper,
     hint,
-    success,
     error,
     actions
   );
   dialog.appendChild(form);
+
+  let successTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearSuccessTimer(): void {
+    if (successTimer != null) {
+      clearTimeout(successTimer);
+      successTimer = null;
+    }
+  }
 
   function clearError(): void {
     error.hidden = true;
@@ -1372,6 +1381,7 @@ export function createScheduleSheet(): ScheduleSheetHandle {
   }
 
   function clearSuccess(): void {
+    clearSuccessTimer();
     success.hidden = true;
     successText.textContent = "";
     undoBtn.hidden = true;
@@ -1422,10 +1432,18 @@ export function createScheduleSheet(): ScheduleSheetHandle {
     onUndo?: () => void | Promise<void>
   ): void {
     clearError();
+    clearSuccessTimer();
     successText.textContent = message;
     success.hidden = false;
     onUndoCb = onUndo ?? null;
     undoBtn.hidden = !onUndo;
+    form.scrollTop = 0;
+    if (typeof success.scrollIntoView === "function") {
+      success.scrollIntoView({ block: "nearest" });
+    }
+    successTimer = setTimeout(() => {
+      clearSuccess();
+    }, 30_000);
   }
 
   function open(opts: ScheduleSheetOpenOpts): void {

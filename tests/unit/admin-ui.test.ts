@@ -84,6 +84,7 @@ describe("createScheduleSheet", () => {
   });
 
   it("shows ICS and remove when hasSchedule, and success with undo after save feedback", () => {
+    vi.useFakeTimers();
     const onDownloadIcs = vi.fn();
     const onRemove = vi.fn();
     const onUndo = vi.fn();
@@ -111,6 +112,13 @@ describe("createScheduleSheet", () => {
     expect(onDownloadIcs).toHaveBeenCalled();
 
     sheet.showSuccess("Agendamento salvo.", onUndo);
+    const success = sheet.element.querySelector(
+      ".links-admin-form__success"
+    ) as HTMLElement;
+    const dateField = sheet.element.querySelector(
+      "#links-schedule-date"
+    ) as HTMLElement;
+    expect(success.compareDocumentPosition(dateField) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(sheet.element.textContent).toContain("Agendamento salvo.");
     const undoBtn = sheet.element.querySelector(
       '[data-action="undo-schedule"]'
@@ -118,6 +126,12 @@ describe("createScheduleSheet", () => {
     expect(undoBtn.hidden).toBe(false);
     undoBtn.click();
     expect(onUndo).toHaveBeenCalled();
+
+    sheet.showSuccess("Agendamento salvo.");
+    expect(success.hidden).toBe(false);
+    vi.advanceTimersByTime(30_000);
+    expect(success.hidden).toBe(true);
+    vi.useRealTimers();
   });
 
   it("shows form errors and toggles screen busy", () => {
