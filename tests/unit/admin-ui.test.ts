@@ -6,8 +6,22 @@ import {
   createScheduleSheet,
   createViewModal,
   renderAdminCard,
+  toCreateInput,
+  toUpdatePatch,
+  type LinkFormValues,
 } from "../../src/links/admin-ui";
 import type { LinkRow } from "../../src/links/links-repo";
+
+function formValues(partial: Partial<LinkFormValues> = {}): LinkFormValues {
+  return {
+    url: "https://www.example.com/path",
+    label: "",
+    description: "",
+    image_url: "",
+    note: "",
+    ...partial,
+  };
+}
 
 function row(partial: Partial<LinkRow> = {}): LinkRow {
   return {
@@ -245,5 +259,43 @@ describe("renderAdminCard", () => {
 
     const chip = card.querySelector(".link-card__schedule");
     expect(chip?.textContent).toBe("3 ago · 9–17");
+  });
+});
+
+describe("toCreateInput label fallback", () => {
+  it("falls back to the URL hostname when label is blank", () => {
+    const input = toCreateInput(formValues(), 0);
+    expect(input.label).toBe("example.com");
+  });
+
+  it("keeps the provided label when present", () => {
+    const input = toCreateInput(formValues({ label: "Museu" }), 0);
+    expect(input.label).toBe("Museu");
+  });
+
+  it("still rejects an invalid URL even though label can fall back", () => {
+    expect(() => toCreateInput(formValues({ url: "not-a-url" }), 0)).toThrow(
+      /URL https/
+    );
+  });
+});
+
+describe("toUpdatePatch label fallback", () => {
+  it("falls back to the URL hostname when label is blank", () => {
+    const patch = toUpdatePatch(formValues());
+    expect(patch.label).toBe("example.com");
+  });
+});
+
+describe("createLinkFormModal Nome field", () => {
+  it("is not required", async () => {
+    const { createLinkFormModal } = await import("../../src/links/admin-ui");
+    const modal = createLinkFormModal(() => undefined);
+    document.body.appendChild(modal.element);
+    modal.openCreate();
+    const labelInput = modal.element.querySelector(
+      "#links-form-label"
+    ) as HTMLInputElement;
+    expect(labelInput.required).toBe(false);
   });
 });

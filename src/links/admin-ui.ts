@@ -7,7 +7,7 @@ import {
   categoryLabel,
   type Category,
 } from "./category";
-import { isHttpsUrl } from "./validate";
+import { deriveLabelFromUrl, isHttpsUrl } from "./validate";
 import { composeEditorEmail, EDITOR_EMAIL_DOMAIN } from "./editor-email";
 import {
   ACTIONS_WIDTH_PX,
@@ -1126,8 +1126,7 @@ export function createLinkFormModal(
   urlField.input.placeholder = "https://...";
   urlField.input.setAttribute("inputmode", "url");
 
-  const labelField = labelledInput("links-form-label", "Nome do lugar ou experiência", "text");
-  labelField.input.required = true;
+  const labelField = labelledInput("links-form-label", "Nome do lugar ou experiência (opcional)", "text");
   labelField.input.maxLength = 200;
   const updateLabelCounter = attachCharCounter(labelField.wrapper, labelField.input, 200);
 
@@ -1736,32 +1735,41 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
 // ---------------------------------------------------------------------------
 
 export function toCreateInput(values: LinkFormValues, sortOrder: number): CreateLinkInput {
-  assertFormValues(values);
+  const resolved = withResolvedLabel(values);
+  assertFormValues(resolved);
   return {
-    url: values.url,
-    label: values.label,
-    description: values.description.length > 0 ? values.description : null,
-    icon_preset: inferIconPreset(values.url),
+    url: resolved.url,
+    label: resolved.label,
+    description: resolved.description.length > 0 ? resolved.description : null,
+    icon_preset: inferIconPreset(resolved.url),
     icon_url: null,
-    category: inferCategory(values),
+    category: inferCategory(resolved),
     sort_order: sortOrder,
-    image_url: values.image_url.length > 0 ? values.image_url : null,
-    note: values.note.length > 0 ? values.note : null,
+    image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
+    note: resolved.note.length > 0 ? resolved.note : null,
   };
 }
 
 export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
-  assertFormValues(values);
+  const resolved = withResolvedLabel(values);
+  assertFormValues(resolved);
   return {
-    url: values.url,
-    label: values.label,
-    description: values.description.length > 0 ? values.description : null,
-    icon_preset: inferIconPreset(values.url),
+    url: resolved.url,
+    label: resolved.label,
+    description: resolved.description.length > 0 ? resolved.description : null,
+    icon_preset: inferIconPreset(resolved.url),
     icon_url: null,
-    category: inferCategory(values),
-    image_url: values.image_url.length > 0 ? values.image_url : null,
-    note: values.note.length > 0 ? values.note : null,
+    category: inferCategory(resolved),
+    image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
+    note: resolved.note.length > 0 ? resolved.note : null,
   };
+}
+
+/** Blank Nome falls back to the URL's hostname so quick-add can skip typing one. */
+function withResolvedLabel(values: LinkFormValues): LinkFormValues {
+  const label = values.label.trim();
+  if (label.length > 0) return { ...values, label };
+  return { ...values, label: deriveLabelFromUrl(values.url) };
 }
 
 function assertFormValues(values: LinkFormValues): void {
