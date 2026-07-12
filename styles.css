@@ -2168,9 +2168,15 @@ body.links-screen-open {
   background: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
-  transform: scale(0.96) translateY(10px);
+  transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+  transform: scale(0.94) translateY(10px);
   opacity: 0.7;
   pointer-events: none;
+}
+
+.links-deck-screen__peek--rising {
+  transform: scale(1) translateY(0);
+  opacity: 1;
 }
 
 .links-deck-screen__peek[hidden] {
@@ -2198,6 +2204,61 @@ body.links-screen-open {
 .links-deck-screen__card--dragging {
   cursor: grabbing;
   transition: none;
+}
+
+@keyframes links-deck-fly-right {
+  to {
+    transform: translateX(120vw) rotate(18deg);
+    opacity: 0.85;
+  }
+}
+
+@keyframes links-deck-fly-left {
+  to {
+    transform: translateX(-120vw) rotate(-18deg);
+    opacity: 0.85;
+  }
+}
+
+@keyframes links-deck-fly-up {
+  to {
+    transform: translateY(-120vh) rotate(-6deg);
+    opacity: 0.85;
+  }
+}
+
+@keyframes links-deck-enter {
+  from {
+    transform: scale(0.94);
+    opacity: 0.65;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.links-deck-screen__card--fly-right {
+  transition: none;
+  animation: links-deck-fly-right 300ms ease-in forwards;
+}
+
+.links-deck-screen__card--fly-left {
+  transition: none;
+  animation: links-deck-fly-left 300ms ease-in forwards;
+}
+
+.links-deck-screen__card--fly-up {
+  transition: none;
+  animation: links-deck-fly-up 300ms ease-in forwards;
+}
+
+.links-deck-screen__card--snap {
+  /* relies on existing transform transition 0.22s when --deck-drag-* cleared */
+}
+
+.links-deck-screen__card--enter {
+  animation: links-deck-enter 180ms ease-out;
 }
 
 .links-deck-screen__card-body {
@@ -2443,9 +2504,15 @@ body.links-screen-open {
 
 @media (prefers-reduced-motion: reduce) {
   .links-deck-screen__card,
+  .links-deck-screen__card--fly-right,
+  .links-deck-screen__card--fly-left,
+  .links-deck-screen__card--fly-up,
+  .links-deck-screen__card--enter,
+  .links-deck-screen__peek,
   .links-deck-screen__tab,
   .links-deck-screen__btn-icon {
-    transition: none;
+    transition: none !important;
+    animation: none !important;
   }
 }
 
