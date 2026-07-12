@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { LinkRow } from "../../src/links/links-repo";
-import { renderPublicCard } from "../../src/links/render";
+import { renderGuestGate, renderPublicCard } from "../../src/links/render";
 
 function row(partial: Partial<LinkRow> = {}): LinkRow {
   return {
@@ -26,6 +26,19 @@ function row(partial: Partial<LinkRow> = {}): LinkRow {
     ...partial,
   };
 }
+
+describe("renderGuestGate", () => {
+  it("shows login prompt and no experience cards", () => {
+    const container = document.createElement("nav");
+    container.appendChild(document.createElement("a")).className = "link-card";
+
+    renderGuestGate(container);
+
+    expect(container.querySelectorAll(".link-card")).toHaveLength(0);
+    const status = container.querySelector(".links-status");
+    expect(status?.textContent).toBe("Entre para ver as experiências.");
+  });
+});
 
 describe("renderPublicCard", () => {
   it("renders a schedule chip when start and end are present", () => {
