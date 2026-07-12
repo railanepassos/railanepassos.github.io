@@ -1,0 +1,47 @@
+name: Supabase keepalive
+
+on:
+  schedule:
+    # Segunda e quinta, 12:00 UTC (~09:00 BRT). Máx ~3,5 dias entre pings.
+    - cron: "0 12 * * 1,4"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    name: Ping Supabase health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_ANON_KEY}" ]; then
+            echo "::error::Missing SUPABASE_URL or SUPABASE_ANON_KEY repository secret."
+            exit 1
+          fi
+
+      - name: GET /auth/v1/health
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          http_code=$(curl -sS -o /tmp/supabase-health.json -w "%{http_code}" \
+            "${SUPABASE_URL}/auth/v1/health" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
+          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+            echo "::error::Supabase health check failed (HTTP ${http_code})"
+            cat /tmp/supabase-health.json || true
+            exit 1
+          fi
+          echo "Supabase is awake (HTTP ${http_code})"
