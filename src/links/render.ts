@@ -18,6 +18,8 @@ export const FALLBACK_LINKS: LinkRow[] = [
     icon_url: null,
     category: "museu",
     sort_order: 0,
+    scheduled_start: null,
+    scheduled_end: null,
   },
 ];
 

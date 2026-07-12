@@ -53,8 +53,8 @@ function makeFakeClient(resultOverrides: Partial<Record<string, FakeResult>> = {
 describe("listLinks", () => {
   it("selects from links table ordered by sort_order ascending", async () => {
     const rows = [
-      { id: "1", url: "https://a.com", label: "A", description: null, icon_preset: null, icon_url: null, sort_order: 0 },
-      { id: "2", url: "https://b.com", label: "B", description: null, icon_preset: null, icon_url: null, sort_order: 1 },
+      { id: "1", url: "https://a.com", label: "A", description: null, icon_preset: null, icon_url: null, sort_order: 0, scheduled_start: null, scheduled_end: null },
+      { id: "2", url: "https://b.com", label: "B", description: null, icon_preset: null, icon_url: null, sort_order: 1, scheduled_start: null, scheduled_end: null },
     ];
     const client = makeFakeClient({ links: { data: rows, error: null } });
     const repo = createLinksRepo(client);
@@ -84,6 +84,8 @@ describe("createLink", () => {
     icon_preset: null,
     icon_url: null,
     sort_order: 0,
+    scheduled_start: null,
+    scheduled_end: null,
   };
 
   it("passes valid payloads through to supabase", async () => {

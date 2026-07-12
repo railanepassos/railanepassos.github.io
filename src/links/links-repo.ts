@@ -10,6 +10,8 @@ export type LinkRow = {
   icon_url: string | null;
   category: string | null;
   sort_order: number;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -23,6 +25,8 @@ export type CreateLinkInput = {
   icon_url?: string | null;
   category?: string | null;
   sort_order: number;
+  scheduled_start?: string | null;
+  scheduled_end?: string | null;
 };
 
 export type UpdateLinkPatch = {
@@ -33,6 +37,8 @@ export type UpdateLinkPatch = {
   icon_url?: string | null;
   category?: string | null;
   sort_order?: number;
+  scheduled_start?: string | null;
+  scheduled_end?: string | null;
 };
 
 function validateLinkFields(fields: {
