@@ -1,7 +1,25 @@
 /**
  * @vitest-environment jsdom
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+beforeAll(() => {
+  if (typeof globalThis.PointerEvent === "undefined") {
+    class PointerEventPolyfill extends MouseEvent {
+      public readonly pointerId: number;
+      constructor(type: string, init?: PointerEventInit) {
+        super(type, init as MouseEventInit);
+        this.pointerId = (init as PointerEventInit)?.pointerId ?? 0;
+      }
+    }
+    (globalThis as unknown as Record<string, unknown>).PointerEvent =
+      PointerEventPolyfill;
+  }
+  if (typeof HTMLElement.prototype.setPointerCapture === "undefined") {
+    HTMLElement.prototype.setPointerCapture = () => {};
+    HTMLElement.prototype.releasePointerCapture = () => {};
+  }
+});
 import { createDeckScreen } from "../../src/links/deck-ui";
 import type { LinkRow } from "../../src/links/links-repo";
 
@@ -122,5 +140,95 @@ describe("createDeckScreen category art", () => {
     expect(deck.element.querySelector(".links-deck-screen__hint")?.textContent).toBe(
       "Use as setas. D marca como feita."
     );
+  });
+});
+
+describe("createDeckScreen motion", () => {
+  function stubMotion(reduced: boolean) {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((q: string) => ({
+        matches: reduced && q.includes("prefers-reduced-motion"),
+        media: q,
+      }))
+    );
+  }
+
+  it("does not call onWant until fly animation ends", async () => {
+    stubMotion(false);
+    const onWant = vi.fn();
+    const deck = createDeckScreen({
+      onWant,
+      onSkip: vi.fn(),
+      onMarkDone: vi.fn(),
+      onWantAgain: vi.fn(),
+      onClose: vi.fn(),
+    });
+    document.body.appendChild(deck.element);
+    deck.open([row({ id: "a" }), row({ id: "b", label: "B" })], "wishlist");
+
+    const wantBtn = deck.element.querySelector(
+      ".links-deck-screen__btn--want"
+    ) as HTMLButtonElement;
+    wantBtn.click();
+
+    expect(onWant).not.toHaveBeenCalled();
+    const card = deck.element.querySelector(
+      ".links-deck-screen__card"
+    ) as HTMLElement;
+    expect(card.classList.contains("links-deck-screen__card--fly-right")).toBe(
+      true
+    );
+    card.dispatchEvent(new Event("animationend"));
+    await vi.waitFor(() => expect(onWant).toHaveBeenCalledTimes(1));
+  });
+
+  it("calls onWant immediately when reduced motion", async () => {
+    stubMotion(true);
+    const onWant = vi.fn();
+    const deck = createDeckScreen({
+      onWant,
+      onSkip: vi.fn(),
+      onMarkDone: vi.fn(),
+      onWantAgain: vi.fn(),
+      onClose: vi.fn(),
+    });
+    document.body.appendChild(deck.element);
+    deck.open([row()], "wishlist");
+    (
+      deck.element.querySelector(
+        ".links-deck-screen__btn--want"
+      ) as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() => expect(onWant).toHaveBeenCalledTimes(1));
+  });
+
+  it("snap-back does not call onSkip or onWant", async () => {
+    stubMotion(false);
+    const onWant = vi.fn();
+    const onSkip = vi.fn();
+    const deck = createDeckScreen({
+      onWant,
+      onSkip,
+      onMarkDone: vi.fn(),
+      onWantAgain: vi.fn(),
+      onClose: vi.fn(),
+    });
+    document.body.appendChild(deck.element);
+    deck.open([row()], "wishlist");
+    const card = deck.element.querySelector(
+      ".links-deck-screen__card"
+    ) as HTMLElement;
+    card.dispatchEvent(
+      new PointerEvent("pointerdown", { pointerId: 1, button: 0, clientX: 100 })
+    );
+    card.dispatchEvent(
+      new PointerEvent("pointermove", { pointerId: 1, clientX: 120 })
+    );
+    card.dispatchEvent(
+      new PointerEvent("pointerup", { pointerId: 1, clientX: 120 })
+    );
+    expect(onWant).not.toHaveBeenCalled();
+    expect(onSkip).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,11 @@ import {
 import { categoryBackdropSrc, categoryCardClass } from "./card-theme";
 import { linksForDeck, skipFront, type DeckTab } from "./deck-queue";
 import { syncBodyScreenLock } from "./screen-lock";
+import {
+  prefersDeckMotion,
+  waitForMotion,
+  type DeckFlyDirection,
+} from "./deck-motion";
 
 export type DeckHandlers = {
   onWant: (link: LinkRow) => void | Promise<void>;
@@ -245,7 +250,12 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
     card.classList.remove(
       "links-deck-screen__card--dragging",
       "links-deck-screen__card--lean-left",
-      "links-deck-screen__card--lean-right"
+      "links-deck-screen__card--lean-right",
+      "links-deck-screen__card--fly-left",
+      "links-deck-screen__card--fly-right",
+      "links-deck-screen__card--fly-up",
+      "links-deck-screen__card--snap",
+      "links-deck-screen__card--enter",
     );
     card.style.removeProperty("--deck-drag-x");
     card.style.removeProperty("--deck-drag-rot");
@@ -371,26 +381,74 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
     wantBtn.disabled = busy;
   }
 
+  const FLY_CLASS: Record<DeckFlyDirection, string> = {
+    left: "links-deck-screen__card--fly-left",
+    right: "links-deck-screen__card--fly-right",
+    up: "links-deck-screen__card--fly-up",
+  };
+
+  async function playExit(direction: DeckFlyDirection): Promise<void> {
+    if (!prefersDeckMotion()) return;
+    stackPeek.classList.add("links-deck-screen__peek--rising");
+    card.style.setProperty(
+      direction === "left" ? "--deck-stamp-skip" : "--deck-stamp-want",
+      "1"
+    );
+    await waitForMotion(card, {
+      className: FLY_CLASS[direction],
+      timeoutMs: 500,
+      event: "animationend",
+    });
+    stackPeek.classList.remove("links-deck-screen__peek--rising");
+  }
+
+  async function afterExit(
+    direction: DeckFlyDirection,
+    commit: () => void | Promise<void>
+  ): Promise<void> {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await playExit(direction);
+      await commit();
+      if (prefersDeckMotion() && current()) {
+        void waitForMotion(card, {
+          className: "links-deck-screen__card--enter",
+          timeoutMs: 400,
+          event: "animationend",
+        });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function actWant(): Promise<void> {
     const link = current();
     if (!link || busy) return;
-    if (tab === "wishlist") await handlers.onWant(link);
-    else await handlers.onWantAgain(link);
-    advancePast(link.id);
+    await afterExit("right", async () => {
+      if (tab === "wishlist") await handlers.onWant(link);
+      else await handlers.onWantAgain(link);
+      advancePast(link.id);
+    });
   }
 
   async function actDone(): Promise<void> {
     const link = current();
     if (!link || busy || tab !== "wishlist") return;
-    await handlers.onMarkDone(link);
-    advancePast(link.id);
+    await afterExit("up", async () => {
+      await handlers.onMarkDone(link);
+      advancePast(link.id);
+    });
   }
 
-  function actSkip(): void {
+  async function actSkip(): Promise<void> {
     if (!current() || busy) return;
-    queue = skipFront(queue);
-    paintCard();
-    handlers.onSkip();
+    await afterExit("left", () => {
+      queue = skipFront(queue);
+      paintCard();
+      handlers.onSkip();
+    });
   }
 
   function applyDragVisual(): void {
@@ -411,19 +469,33 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
       "links-deck-screen__card--lean-left",
       "links-deck-screen__card--lean-right"
     );
-    card.style.removeProperty("--deck-drag-x");
-    card.style.removeProperty("--deck-drag-rot");
-    card.style.removeProperty("--deck-stamp-skip");
-    card.style.removeProperty("--deck-stamp-want");
     const dx = dragX;
     dragX = 0;
     pointerId = null;
     if (Math.abs(dx) < SWIPE_THRESHOLD) {
-      paintCard();
+      if (prefersDeckMotion()) {
+        card.classList.add("links-deck-screen__card--snap");
+        requestAnimationFrame(() => {
+          card.style.removeProperty("--deck-drag-x");
+          card.style.removeProperty("--deck-drag-rot");
+          card.style.removeProperty("--deck-stamp-skip");
+          card.style.removeProperty("--deck-stamp-want");
+        });
+        void waitForMotion(card, {
+          className: "links-deck-screen__card--snap",
+          event: "transitionend",
+          timeoutMs: 400,
+          keepClass: false,
+        }).then(() => {
+          card.classList.remove("links-deck-screen__card--snap");
+        });
+      } else {
+        paintCard();
+      }
       return;
     }
     if (dx > 0) void actWant();
-    else actSkip();
+    else void actSkip();
   }
 
   card.addEventListener("pointerdown", (e) => {
@@ -463,7 +535,7 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
     rebuildQueue();
   });
 
-  skipBtn.addEventListener("click", () => actSkip());
+  skipBtn.addEventListener("click", () => void actSkip());
   doneBtn.addEventListener("click", () => void actDone());
   wantBtn.addEventListener("click", () => void actWant());
   closeBtn.addEventListener("click", close);
@@ -477,7 +549,7 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
     if (busy) return;
     if (e.key === "ArrowLeft") {
       e.preventDefault();
-      actSkip();
+      void actSkip();
     } else if (e.key === "ArrowRight") {
       e.preventDefault();
       void actWant();
