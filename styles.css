@@ -1987,6 +1987,14 @@ body.links-screen-open {
   outline-offset: 1px;
 }
 
+.links-admin-form__control--textarea {
+  resize: vertical;
+  min-height: 84px;
+  max-height: 50vh;
+  line-height: 1.4;
+  overflow-y: auto;
+}
+
 .links-admin-form__email-row {
   display: flex;
   align-items: stretch;

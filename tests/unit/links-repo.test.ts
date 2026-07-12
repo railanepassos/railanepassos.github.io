@@ -129,11 +129,11 @@ describe("createLink", () => {
     ).rejects.toThrow(/label/i);
   });
 
-  it("rejects description exceeding 500 characters", async () => {
+  it("rejects description exceeding 2000 characters", async () => {
     const client = makeFakeClient();
     const repo = createLinksRepo(client);
     await expect(
-      repo.createLink({ ...validInput, description: "x".repeat(501) })
+      repo.createLink({ ...validInput, description: "x".repeat(2001) })
     ).rejects.toThrow(/description/i);
   });
 
@@ -188,12 +188,12 @@ describe("createLink", () => {
     ).resolves.not.toThrow();
   });
 
-  it("accepts description of exactly 500 characters", async () => {
-    const createdRow = { id: "new-id", ...validInput, description: "x".repeat(500) };
+  it("accepts description of exactly 2000 characters", async () => {
+    const createdRow = { id: "new-id", ...validInput, description: "x".repeat(2000) };
     const client = makeFakeClient({ links: { data: createdRow, error: null } });
     const repo = createLinksRepo(client);
     await expect(
-      repo.createLink({ ...validInput, description: "x".repeat(500) })
+      repo.createLink({ ...validInput, description: "x".repeat(2000) })
     ).resolves.not.toThrow();
   });
 });

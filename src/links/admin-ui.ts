@@ -1130,12 +1130,11 @@ export function createLinkFormModal(
   labelField.input.required = true;
   labelField.input.maxLength = 200;
 
-  const descField = labelledInput(
+  const descField = labelledTextarea(
     "links-form-desc",
-    "Nota da lista (opcional) — por que salvar, região, época…",
-    "text"
+    "Nota da lista (opcional) — por que salvar, região, época…"
   );
-  descField.input.maxLength = 500;
+  descField.input.maxLength = 2000;
 
   const imageField = labelledInput(
     "links-form-image",
@@ -1206,6 +1205,7 @@ export function createLinkFormModal(
     editingId = null;
     title.textContent = "Nova experiência";
     form.reset();
+    descField.syncHeight();
     afterOpen();
   }
 
@@ -1217,6 +1217,7 @@ export function createLinkFormModal(
     descField.input.value = link.description ?? "";
     imageField.input.value = link.image_url ?? "";
     memoryField.input.value = link.note ?? "";
+    descField.syncHeight();
     afterOpen();
   }
 
@@ -1791,6 +1792,38 @@ function labelledInput(id: string, labelText: string, type: string): LabelledInp
 
   wrapper.append(label, input);
   return { wrapper, input };
+}
+
+type LabelledTextarea = {
+  wrapper: HTMLElement;
+  input: HTMLTextAreaElement;
+  syncHeight: () => void;
+};
+
+function labelledTextarea(id: string, labelText: string): LabelledTextarea {
+  const wrapper = document.createElement("div");
+  wrapper.className = "links-admin-form__field";
+
+  const label = document.createElement("label");
+  label.className = "links-admin-form__label";
+  label.htmlFor = id;
+  label.textContent = labelText;
+
+  const input = document.createElement("textarea");
+  input.className = "links-admin-form__control links-admin-form__control--textarea";
+  input.id = id;
+  input.rows = 3;
+
+  // Grow the textarea to fit its content so long notes stay fully visible
+  // instead of scrolling inside a fixed-height box.
+  const autoGrow = (): void => {
+    input.style.height = "auto";
+    input.style.height = `${input.scrollHeight}px`;
+  };
+  input.addEventListener("input", autoGrow);
+
+  wrapper.append(label, input);
+  return { wrapper, input, syncHeight: autoGrow };
 }
 
 function iconButton(text: string, ariaLabel: string): HTMLButtonElement {

@@ -112,8 +112,8 @@ function validateLinkFields(fields: {
   }
 
   if (fields.description != null) {
-    if (fields.description.length > 500) {
-      throw new Error("description must not exceed 500 characters");
+    if (fields.description.length > 2000) {
+      throw new Error("description must not exceed 2000 characters");
     }
   }
 
