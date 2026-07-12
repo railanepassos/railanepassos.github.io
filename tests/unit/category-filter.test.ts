@@ -12,6 +12,14 @@ function row(
     icon_url: null,
     category: null,
     sort_order: 0,
+    scheduled_start: null,
+    scheduled_end: null,
+    status: "wishlist",
+    priority: 0,
+    want_again: false,
+    image_url: null,
+    note: null,
+    completed_at: null,
     ...partial,
   };
 }

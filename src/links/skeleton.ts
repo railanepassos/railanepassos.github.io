@@ -55,7 +55,7 @@ export function renderToolbarSkeleton(container: HTMLElement): void {
 
   const row = document.createElement("div");
   row.className = "links-skeleton__toolbar-row";
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 5; i++) {
     row.appendChild(bone("links-skeleton__icon"));
   }
   wrap.appendChild(row);
