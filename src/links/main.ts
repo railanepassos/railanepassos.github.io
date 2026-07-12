@@ -3,7 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 import { getSupabaseConfig, isSupabaseConfigured, isBrowserSafeAnonKey } from "./config";
 import { createAuth, type Auth } from "./auth";
 import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
-import { applyReorder } from "./reorder";
 import { FALLBACK_LINKS, renderPublicList } from "./render";
 import { renderLinksSkeleton, renderToolbarSkeleton } from "./skeleton";
 import {
@@ -358,27 +357,6 @@ function bootDynamic(
     });
   }
 
-  async function move(link: LinkRow, direction: -1 | 1): Promise<void> {
-    const current = links.findIndex((l) => l.id === link.id);
-    if (current === -1) return;
-    const target = current + direction;
-    if (target < 0 || target >= links.length) return;
-    await reorderTo(link.id, target);
-  }
-
-  async function reorderTo(movedId: string, targetIndex: number): Promise<void> {
-    const previous = links;
-    const reordered = applyReorder(links, movedId, targetIndex);
-    links = sortLinks(reordered); // optimistic
-    renderList();
-    try {
-      await repo.saveOrder(reordered.map((l) => ({ id: l.id, sort_order: l.sort_order })));
-    } catch (err) {
-      links = previous;
-      await reloadFromServer(messageOf(err, "Não foi possível salvar a ordem."));
-    }
-  }
-
   async function reloadFromServer(errorText: string): Promise<void> {
     try {
       links = sortLinks(await repo.listLinks());
@@ -429,25 +407,11 @@ function bootDynamic(
         els.list.appendChild(empty);
       } else {
         visible.forEach((link) => {
-          const fullIndex = links.findIndex((l) => l.id === link.id);
           els.list.appendChild(
-            renderAdminCard(link, fullIndex, links.length, {
+            renderAdminCard(link, {
               onView: (l) => viewModal.open(l),
               onEdit: (l) => formModal.openEdit(l),
               onDelete: (l) => void deleteLink(l),
-              onMoveUp: (l) => void move(l, -1),
-              onMoveDown: (l) => void move(l, 1),
-              onDragStart: (l, ev) => {
-                dragId = l.id;
-                ev.dataTransfer?.setData("text/plain", l.id);
-              },
-              onDrop: (l) => {
-                if (!dragId || dragId === l.id) return;
-                const targetIndex = links.findIndex((x) => x.id === l.id);
-                const moved = dragId;
-                dragId = null;
-                if (targetIndex !== -1) void reorderTo(moved, targetIndex);
-              },
             })
           );
         });

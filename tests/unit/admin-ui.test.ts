@@ -229,16 +229,10 @@ describe("renderAdminCard", () => {
         scheduled_start: "2026-08-03T09:00:00-03:00",
         scheduled_end: "2026-08-03T17:00:00-03:00",
       }),
-      0,
-      1,
       {
         onView: vi.fn(),
         onEdit: vi.fn(),
         onDelete: vi.fn(),
-        onMoveUp: vi.fn(),
-        onMoveDown: vi.fn(),
-        onDragStart: vi.fn(),
-        onDrop: vi.fn(),
       }
     );
 

@@ -25,7 +25,7 @@ import { formatScheduleChip, formatScheduleLabel } from "./schedule";
  *   - a discreet "Entrar" button (shown when logged out)
  *   - full-screen login / form / delete screens (mobile-first)
  *   - a toolbar ("Novo link" / "Sair")
- *   - admin link cards (tap to view, swipe edit/delete, ↑↓ reorder)
+ *   - admin link cards (tap to view, swipe edit/delete)
  *
  * Every element is created via document.createElement + textContent. No
  * innerHTML with user data, no inline style attributes, no injected <style>
@@ -354,24 +354,20 @@ export function createToolbar(
   const tip = document.createElement("p");
   tip.className = "links-admin-tip";
   tip.textContent =
-    "Toque para ver · Deslize → editar · ← excluir · Filtrar · Sortear · ↑↓ reordenar";
+    "Toque para ver · Deslize → editar · ← excluir · Filtrar · Sortear";
 
   toolbar.append(row, tip);
   return toolbar;
 }
 
 // ---------------------------------------------------------------------------
-// Admin card: tap to view, swipe → edit / ← delete, ↑↓ (and desktop drag) reorder.
+// Admin card: tap to view, swipe → edit / ← delete.
 // ---------------------------------------------------------------------------
 
 export type AdminCardCallbacks = {
   onView: (link: LinkRow) => void;
   onEdit: (link: LinkRow) => void;
   onDelete: (link: LinkRow) => void;
-  onMoveUp: (link: LinkRow) => void;
-  onMoveDown: (link: LinkRow) => void;
-  onDragStart: (link: LinkRow, ev: DragEvent) => void;
-  onDrop: (link: LinkRow, ev: DragEvent) => void;
 };
 
 let openSwipeContent: HTMLElement | null = null;
@@ -391,14 +387,11 @@ function closeOpenSwipe(): void {
 
 export function renderAdminCard(
   link: LinkRow,
-  index: number,
-  total: number,
   cb: AdminCardCallbacks
 ): HTMLElement {
   const row = document.createElement("div");
   row.className = "swipe-row";
   row.dataset.id = link.id;
-  row.dataset.index = String(index);
 
   const editActions = document.createElement("div");
   editActions.className = "swipe-row__actions swipe-row__actions--edit";
@@ -434,25 +427,9 @@ export function renderAdminCard(
 
   const content = document.createElement("div");
   content.className = "swipe-row__content link-card link-card--admin";
-  content.draggable = window.matchMedia("(pointer: fine)").matches;
   content.setAttribute("role", "button");
   content.tabIndex = 0;
   content.setAttribute("aria-label", `Ver ${link.label}`);
-
-  content.addEventListener("dragstart", (ev) => {
-    cb.onDragStart(link, ev);
-  });
-  content.addEventListener("dragover", (ev) => ev.preventDefault());
-  content.addEventListener("drop", (ev) => {
-    ev.preventDefault();
-    cb.onDrop(link, ev);
-  });
-
-  const handle = document.createElement("span");
-  handle.className = "link-card__drag-handle";
-  handle.setAttribute("aria-hidden", "true");
-  handle.textContent = "⠿";
-  content.appendChild(handle);
 
   const img = document.createElement("img");
   img.src = resolveIconSrc(link);
@@ -495,22 +472,6 @@ export function renderAdminCard(
   const keyActions = document.createElement("div");
   keyActions.className = "link-card__actions";
 
-  const upBtn = iconButton("↑", "Mover para cima");
-  upBtn.classList.add("link-card__action--move");
-  upBtn.disabled = index === 0;
-  upBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    cb.onMoveUp(link);
-  });
-
-  const downBtn = iconButton("↓", "Mover para baixo");
-  downBtn.classList.add("link-card__action--move");
-  downBtn.disabled = index === total - 1;
-  downBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    cb.onMoveDown(link);
-  });
-
   const deleteKeyBtn = iconButton("Excluir", "Excluir experiência");
   deleteKeyBtn.classList.add("link-card__action--delete");
   deleteKeyBtn.addEventListener("click", (e) => {
@@ -518,7 +479,7 @@ export function renderAdminCard(
     cb.onDelete(link);
   });
 
-  keyActions.append(upBtn, downBtn, deleteKeyBtn);
+  keyActions.append(deleteKeyBtn);
   content.appendChild(keyActions);
 
   content.addEventListener("keydown", (ev) => {
