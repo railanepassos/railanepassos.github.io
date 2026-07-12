@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LinkRow } from "../../src/links/links-repo";
-import { sortLinksForDisplay } from "../../src/links/sort-links";
+import { sortLinksForDisplay, visibleListLinks } from "../../src/links/sort-links";
 
 function row(partial: Partial<LinkRow>): LinkRow {
   return {
@@ -14,6 +14,12 @@ function row(partial: Partial<LinkRow>): LinkRow {
     sort_order: 0,
     scheduled_start: null,
     scheduled_end: null,
+    status: "wishlist",
+    priority: 0,
+    want_again: false,
+    image_url: null,
+    note: null,
+    completed_at: null,
     created_at: null,
     ...partial,
   };
@@ -84,5 +90,13 @@ describe("sortLinksForDisplay", () => {
       "late",
       "early",
     ]);
+  });
+});
+
+describe("visibleListLinks", () => {
+  it("omits done items", () => {
+    const open = row({ id: "open", status: "wishlist" });
+    const done = row({ id: "done", status: "done" });
+    expect(visibleListLinks([open, done]).map((l) => l.id)).toEqual(["open"]);
   });
 });

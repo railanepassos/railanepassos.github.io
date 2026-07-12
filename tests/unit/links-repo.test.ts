@@ -64,7 +64,10 @@ describe("listLinks", () => {
     const builder = (client.from as ReturnType<typeof vi.fn>).mock.results[0].value;
     expect(builder.select).toHaveBeenCalled();
     expect(builder.order).toHaveBeenCalledWith("sort_order", { ascending: true });
-    expect(result).toEqual(rows);
+    expect(result).toHaveLength(2);
+    expect(result[0].status).toBe("wishlist");
+    expect(result[0].priority).toBe(0);
+    expect(result[0].label).toBe("A");
   });
 
   it("throws when supabase returns an error", async () => {
@@ -97,7 +100,9 @@ describe("createLink", () => {
     expect(client.from).toHaveBeenCalledWith("links");
     const builder = (client.from as ReturnType<typeof vi.fn>).mock.results[0].value;
     expect(builder.insert).toHaveBeenCalled();
-    expect(result).toEqual(createdRow);
+    expect(result.id).toBe("new-id");
+    expect(result.label).toBe("Example");
+    expect(result.status).toBe("wishlist");
   });
 
   it("rejects http:// url", async () => {
@@ -156,6 +161,22 @@ describe("createLink", () => {
     await expect(
       repo.createLink({ ...validInput, icon_url: null })
     ).resolves.not.toThrow();
+  });
+
+  it("rejects non-https image_url", async () => {
+    const client = makeFakeClient();
+    const repo = createLinksRepo(client);
+    await expect(
+      repo.createLink({ ...validInput, image_url: "http://cdn.example.com/photo.jpg" })
+    ).rejects.toThrow(/image_url/i);
+  });
+
+  it("rejects note exceeding 500 characters", async () => {
+    const client = makeFakeClient();
+    const repo = createLinksRepo(client);
+    await expect(
+      repo.createLink({ ...validInput, note: "x".repeat(501) })
+    ).rejects.toThrow(/note/i);
   });
 
   it("accepts label of exactly 200 characters", async () => {

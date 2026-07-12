@@ -25,3 +25,8 @@ export function compareLinksForDisplay(a: LinkRow, b: LinkRow): number {
 export function sortLinksForDisplay(links: readonly LinkRow[]): LinkRow[] {
   return [...links].sort(compareLinksForDisplay);
 }
+
+/** Main list: exclude done experiences. */
+export function visibleListLinks(links: readonly LinkRow[]): LinkRow[] {
+  return sortLinksForDisplay(links.filter((l) => (l.status ?? "wishlist") !== "done"));
+}

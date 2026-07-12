@@ -19,6 +19,7 @@ import {
 import { buildSpinLabels } from "./pick-random";
 import { setScreenBusy } from "./skeleton";
 import { formatScheduleChip, formatScheduleLabel } from "./schedule";
+import { syncBodyScreenLock } from "./screen-lock";
 
 /**
  * DOM building blocks for the authenticated admin experience:
@@ -32,13 +33,6 @@ import { formatScheduleChip, formatScheduleLabel } from "./schedule";
  * tags. Visibility is toggled via the `hidden` attribute / CSS classes only,
  * to satisfy the page CSP (style-src 'self', script-src 'self').
  */
-
-function syncBodyScreenLock(): void {
-  const anyOpen =
-    document.querySelector(".links-admin-modal:not([hidden])") != null ||
-    document.querySelector(".links-filter-sheet:not([hidden])") != null;
-  document.body.classList.toggle("links-screen-open", anyOpen);
-}
 
 type ScreenChrome = {
   overlay: HTMLElement;
@@ -91,6 +85,8 @@ export type LinkFormValues = {
   url: string;
   label: string;
   description: string;
+  image_url: string;
+  note: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -291,11 +287,21 @@ function iconShuffle(): SVGSVGElement {
   ]);
 }
 
+/** Cards / layers — Deck. */
+function iconDeck(): SVGSVGElement {
+  return strokeIcon([
+    "M2 7h16",
+    "M4 12h16",
+    "M6 17h14",
+  ]);
+}
+
 export function createToolbar(
   onNew: () => void,
   onSignOut: () => void,
   onFilter: () => void,
   onDraw: () => void,
+  onDeck: () => void,
   activeCategories: readonly Category[] = []
 ): HTMLElement {
   const toolbar = document.createElement("div");
@@ -340,6 +346,15 @@ export function createToolbar(
   drawBtn.appendChild(iconShuffle());
   drawBtn.addEventListener("click", onDraw);
 
+  const deckBtn = document.createElement("button");
+  deckBtn.type = "button";
+  deckBtn.className =
+    "links-admin-button links-admin-button--ghost links-admin-button--icon";
+  deckBtn.setAttribute("aria-label", "Abrir Deck");
+  deckBtn.title = "Deck";
+  deckBtn.appendChild(iconDeck());
+  deckBtn.addEventListener("click", onDeck);
+
   const signOutBtn = document.createElement("button");
   signOutBtn.type = "button";
   signOutBtn.className =
@@ -349,12 +364,12 @@ export function createToolbar(
   signOutBtn.appendChild(iconLogout());
   signOutBtn.addEventListener("click", onSignOut);
 
-  row.append(newBtn, filterBtn, drawBtn, signOutBtn);
+  row.append(newBtn, filterBtn, drawBtn, deckBtn, signOutBtn);
 
   const tip = document.createElement("p");
   tip.className = "links-admin-tip";
   tip.textContent =
-    "Toque para ver · Deslize → editar · ← excluir · Filtrar · Sortear";
+    "Toque para ver · Deslize → editar · ← excluir · Filtrar · Sortear · Deck";
 
   toolbar.append(row, tip);
   return toolbar;
@@ -1097,10 +1112,25 @@ export function createLinkFormModal(
 
   const descField = labelledInput(
     "links-form-desc",
-    "Nota (opcional) — por que salvar, região, época…",
+    "Nota da lista (opcional) — por que salvar, região, época…",
     "text"
   );
   descField.input.maxLength = 500;
+
+  const imageField = labelledInput(
+    "links-form-image",
+    "Foto (opcional) — URL https://",
+    "url"
+  );
+  imageField.input.placeholder = "https://...";
+  imageField.input.setAttribute("inputmode", "url");
+
+  const memoryField = labelledInput(
+    "links-form-note",
+    "Memória (opcional) — após visitar",
+    "text"
+  );
+  memoryField.input.maxLength = 500;
 
   const error = document.createElement("p");
   error.className = "links-admin-form__error";
@@ -1120,6 +1150,8 @@ export function createLinkFormModal(
     urlField.wrapper,
     labelField.wrapper,
     descField.wrapper,
+    imageField.wrapper,
+    memoryField.wrapper,
     error,
     actions
   );
@@ -1163,6 +1195,8 @@ export function createLinkFormModal(
     urlField.input.value = link.url;
     labelField.input.value = link.label;
     descField.input.value = link.description ?? "";
+    imageField.input.value = link.image_url ?? "";
+    memoryField.input.value = link.note ?? "";
     afterOpen();
   }
 
@@ -1173,6 +1207,8 @@ export function createLinkFormModal(
         url: urlField.input.value.trim(),
         label: labelField.input.value.trim(),
         description: descField.input.value.trim(),
+        image_url: imageField.input.value.trim(),
+        note: memoryField.input.value.trim(),
       },
       editingId
     );
@@ -1494,6 +1530,7 @@ export function createScheduleSheet(): ScheduleSheetHandle {
 export type ViewModalCallbacks = {
   onEdit: (link: LinkRow) => void;
   onSchedule: (link: LinkRow) => void;
+  onMarkDone: (link: LinkRow) => void;
 };
 
 export type ViewModalHandle = {
@@ -1582,13 +1619,19 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     "links-admin-button links-admin-button--primary links-admin-button--block";
   scheduleBtn.textContent = "Agendar";
 
+  const markDoneBtn = document.createElement("button");
+  markDoneBtn.type = "button";
+  markDoneBtn.className =
+    "links-admin-button links-admin-button--ghost links-admin-button--block";
+  markDoneBtn.textContent = "Marcar como feita";
+
   const editBtn = document.createElement("button");
   editBtn.type = "button";
   editBtn.className =
     "links-admin-button links-admin-button--ghost links-admin-button--block";
   editBtn.textContent = "Editar";
 
-  actions.append(scheduleBtn, editBtn);
+  actions.append(scheduleBtn, markDoneBtn, editBtn);
   dialog.append(body, actions);
 
   function close(): void {
@@ -1622,6 +1665,7 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
       noteBlock.hidden = true;
       noteValue.textContent = "";
     }
+    markDoneBtn.hidden = link.status === "done";
     linkAnchor.href = link.url;
     linkAnchor.textContent = link.url;
     overlay.hidden = false;
@@ -1639,6 +1683,12 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     const link = current;
     close();
     cb.onSchedule(link);
+  });
+  markDoneBtn.addEventListener("click", () => {
+    if (!current) return;
+    const link = current;
+    close();
+    cb.onMarkDone(link);
   });
   backBtn.addEventListener("click", close);
   overlay.addEventListener("keydown", (e) => {
@@ -1665,6 +1715,8 @@ export function toCreateInput(values: LinkFormValues, sortOrder: number): Create
     icon_url: null,
     category: inferCategory(values),
     sort_order: sortOrder,
+    image_url: values.image_url.length > 0 ? values.image_url : null,
+    note: values.note.length > 0 ? values.note : null,
   };
 }
 
@@ -1677,6 +1729,8 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
     icon_preset: inferIconPreset(values.url),
     icon_url: null,
     category: inferCategory(values),
+    image_url: values.image_url.length > 0 ? values.image_url : null,
+    note: values.note.length > 0 ? values.note : null,
   };
 }
 
@@ -1686,6 +1740,9 @@ function assertFormValues(values: LinkFormValues): void {
   }
   if (values.label.length < 1) {
     throw new Error("O título é obrigatório.");
+  }
+  if (values.image_url.length > 0 && !isHttpsUrl(values.image_url)) {
+    throw new Error("A foto precisa ser uma URL https válida.");
   }
 }
 

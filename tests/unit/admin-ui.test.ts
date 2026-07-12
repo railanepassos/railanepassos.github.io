@@ -21,6 +21,12 @@ function row(partial: Partial<LinkRow> = {}): LinkRow {
     sort_order: 0,
     scheduled_start: null,
     scheduled_end: null,
+    status: "wishlist",
+    priority: 0,
+    want_again: false,
+    image_url: null,
+    note: null,
+    completed_at: null,
     ...partial,
   };
 }
@@ -167,7 +173,8 @@ describe("createViewModal", () => {
   it("shows Agendar above Editar when the link has no schedule", () => {
     const onEdit = vi.fn();
     const onSchedule = vi.fn();
-    const modal = createViewModal({ onEdit, onSchedule });
+    const onMarkDone = vi.fn();
+    const modal = createViewModal({ onEdit, onSchedule, onMarkDone });
     document.body.appendChild(modal.element);
 
     modal.open(row());
@@ -177,7 +184,7 @@ describe("createViewModal", () => {
         ".links-admin-form__actions button"
       ),
     ].map((btn) => btn.textContent?.trim());
-    expect(actionButtons).toEqual(["Agendar", "Editar"]);
+    expect(actionButtons).toEqual(["Agendar", "Marcar como feita", "Editar"]);
 
     (
       modal.element.querySelector(
@@ -191,7 +198,7 @@ describe("createViewModal", () => {
   });
 
   it("shows Agenda label and opens schedule sheet callback when scheduled", () => {
-    const callbacks = { onEdit: vi.fn(), onSchedule: vi.fn() };
+    const callbacks = { onEdit: vi.fn(), onSchedule: vi.fn(), onMarkDone: vi.fn() };
     const modal = createViewModal(callbacks);
     document.body.appendChild(modal.element);
 
@@ -209,7 +216,7 @@ describe("createViewModal", () => {
         ".links-admin-form__actions button"
       ),
     ].map((btn) => btn.textContent?.trim());
-    expect(actionButtons).toEqual(["Agenda", "Editar"]);
+    expect(actionButtons).toEqual(["Agenda", "Marcar como feita", "Editar"]);
     expect(modal.element.textContent).not.toContain("Baixar ICS");
     expect(modal.element.textContent).not.toContain("Remover agendamento");
 

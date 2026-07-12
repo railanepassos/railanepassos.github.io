@@ -29,8 +29,10 @@ import {
 } from "./admin-ui";
 import { filterLinksByCategory, type Category } from "./category";
 import { pickRandomItem } from "./pick-random";
-import { sortLinksForDisplay } from "./sort-links";
+import { sortLinksForDisplay, visibleListLinks } from "./sort-links";
 import { buildIcs, downloadIcs } from "./ics";
+import { createDeckScreen, type DeckHandle } from "./deck-ui";
+import { nextPriority } from "./deck-queue";
 import {
   DEFAULT_END_TIME,
   DEFAULT_START_TIME,
@@ -153,6 +155,7 @@ function bootDynamic(
   const viewModal: ViewModalHandle = createViewModal({
     onEdit: (l) => formModal.openEdit(l),
     onSchedule: (l) => openSchedule(l),
+    onMarkDone: (l) => void markDone(l),
   });
   const filterSheet: CategoryFilterHandle = createCategoryFilterSheet((cats) => {
     categoryFilter = cats;
@@ -164,6 +167,14 @@ function bootDynamic(
     onRedraw: () => runDraw(),
   });
 
+  const deckScreen: DeckHandle = createDeckScreen({
+    onWant: (l) => void wantLink(l),
+    onSkip: () => undefined,
+    onMarkDone: (l) => void markDone(l),
+    onWantAgain: (l) => void wantAgain(l),
+    onClose: () => undefined,
+  });
+
   document.body.append(
     loginModal.element,
     formModal.element,
@@ -171,11 +182,12 @@ function bootDynamic(
     viewModal.element,
     scheduleSheet.element,
     filterSheet.element,
-    drawSheet.element
+    drawSheet.element,
+    deckScreen.element
   );
 
   function runDraw(): void {
-    const pool = filterLinksByCategory(links, categoryFilter);
+    const pool = filterLinksByCategory(visibleListLinks(links), categoryFilter);
     if (pool.length === 0) {
       drawSheet.openEmpty(
         categoryFilter.length > 0
@@ -198,13 +210,16 @@ function bootDynamic(
     const created = await repo.createLink(toCreateInput(values, nextOrder));
     links = sortLinks([...links, created]);
     renderList();
+    deckScreen.refresh(links);
   }
 
   async function submitEdit(id: string, values: LinkFormValues): Promise<void> {
     const patch = toUpdatePatch(values);
     await repo.updateLink(id, patch);
     links = links.map((l) => (l.id === id ? { ...l, ...patch } : l));
+    links = sortLinks(links);
     renderList();
+    deckScreen.refresh(links);
   }
 
   async function deleteLink(link: LinkRow): Promise<void> {
@@ -213,10 +228,67 @@ function bootDynamic(
         await repo.deleteLink(link.id);
         links = sortLinks(links.filter((l) => l.id !== link.id));
         renderList();
+        deckScreen.refresh(links);
       } catch (err) {
         await reloadFromServer(messageOf(err, GENERIC_ERROR));
       }
     });
+  }
+
+  async function markDone(link: LinkRow): Promise<void> {
+    deckScreen.setBusy(true);
+    try {
+      const completed_at = new Date().toISOString();
+      await repo.updateLink(link.id, { status: "done", completed_at });
+      links = sortLinks(
+        links.map((row) =>
+          row.id === link.id
+            ? { ...row, status: "done" as const, completed_at }
+            : row
+        )
+      );
+      renderList();
+      deckScreen.refresh(links);
+    } catch (err) {
+      await reloadFromServer(messageOf(err, GENERIC_ERROR));
+    } finally {
+      deckScreen.setBusy(false);
+    }
+  }
+
+  async function wantLink(link: LinkRow): Promise<void> {
+    deckScreen.setBusy(true);
+    try {
+      const priority = nextPriority(links.filter((l) => l.status !== "done"));
+      await repo.updateLink(link.id, { priority });
+      links = sortLinks(
+        links.map((row) => (row.id === link.id ? { ...row, priority } : row))
+      );
+      renderList();
+      deckScreen.refresh(links);
+    } catch (err) {
+      await reloadFromServer(messageOf(err, GENERIC_ERROR));
+    } finally {
+      deckScreen.setBusy(false);
+    }
+  }
+
+  async function wantAgain(link: LinkRow): Promise<void> {
+    deckScreen.setBusy(true);
+    try {
+      await repo.updateLink(link.id, { want_again: true });
+      links = sortLinks(
+        links.map((row) =>
+          row.id === link.id ? { ...row, want_again: true } : row
+        )
+      );
+      renderList();
+      deckScreen.refresh(links);
+    } catch (err) {
+      await reloadFromServer(messageOf(err, GENERIC_ERROR));
+    } finally {
+      deckScreen.setBusy(false);
+    }
   }
 
   function findLink(id: string): LinkRow | undefined {
@@ -382,6 +454,7 @@ function bootDynamic(
           },
           () => filterSheet.open(categoryFilter),
           () => runDraw(),
+          () => deckScreen.open(links, "wishlist"),
           categoryFilter
         )
       );
@@ -392,10 +465,11 @@ function bootDynamic(
 
   function renderList(): void {
     els.list.replaceChildren();
+    const listLinks = visibleListLinks(links);
     if (!authenticated) {
-      renderPublicList(els.list, links);
+      renderPublicList(els.list, listLinks);
     } else {
-      const visible = filterLinksByCategory(links, categoryFilter);
+      const visible = filterLinksByCategory(listLinks, categoryFilter);
       if (visible.length === 0) {
         const empty = document.createElement("p");
         empty.className = "links-status";
