@@ -5,10 +5,12 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "build": "vite build",
+    "serve": "python3 -m http.server 8080 --bind 127.0.0.1",
     "test:unit": "vitest run --coverage",
     "test:e2e": "playwright test",
     "lint": "echo \"use CI stylelint/html-validate\""
   },
+
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1"
   },

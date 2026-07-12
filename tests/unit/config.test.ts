@@ -40,4 +40,40 @@ describe("isSupabaseConfigured", () => {
   it("returns false when both fields are empty", () => {
     expect(isSupabaseConfigured({ url: "", anonKey: "" })).toBe(false);
   });
+
+  it("returns false when fields are only whitespace", () => {
+    expect(
+      isSupabaseConfigured({
+        url: "  https://abc.supabase.co  ",
+        anonKey: "   ",
+      })
+    ).toBe(false);
+  });
+
+  it("trims before checking non-empty", () => {
+    expect(
+      isSupabaseConfigured({
+        url: "  https://abc.supabase.co  ",
+        anonKey: "  anon-key  ",
+      })
+    ).toBe(true);
+  });
+
+  it("rejects service secret keys (sb_secret_)", () => {
+    expect(
+      isSupabaseConfigured({
+        url: "https://abc.supabase.co",
+        anonKey: "sb_secret_not_for_browser",
+      })
+    ).toBe(false);
+  });
+
+  it("accepts publishable keys", () => {
+    expect(
+      isSupabaseConfigured({
+        url: "https://abc.supabase.co",
+        anonKey: "sb_publishable_ok",
+      })
+    ).toBe(true);
+  });
 });

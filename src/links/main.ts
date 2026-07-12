@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { createClient } from "@supabase/supabase-js";
-import { getSupabaseConfig, isSupabaseConfigured } from "./config";
+import { getSupabaseConfig, isSupabaseConfigured, isBrowserSafeAnonKey } from "./config";
 import { createAuth, type Auth } from "./auth";
 import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
 import { applyReorder } from "./reorder";
@@ -84,11 +84,13 @@ function bootDynamic(
   els: Els,
   auth: Auth,
   repo: LinksRepo,
-  initialLinks: LinkRow[]
+  initialLinks: LinkRow[],
+  warning?: string
 ): void {
   let links: LinkRow[] = sortLinks(initialLinks);
   let authenticated = false;
   let dragId: string | null = null;
+  let notice = warning ?? null;
 
   // --- modals (created once, appended to <body>) ---
   const loginModal: LoginModalHandle = createLoginModal(async (email, password) => {
@@ -186,7 +188,11 @@ function bootDynamic(
         createToolbar(
           () => formModal.openCreate(),
           async () => {
-            await auth.signOut();
+            try {
+              await auth.signOut();
+            } catch (err) {
+              renderMessage(els.list, messageOf(err, "Não foi possível sair. Tente novamente."));
+            }
           }
         )
       );
@@ -199,29 +205,32 @@ function bootDynamic(
     els.list.replaceChildren();
     if (!authenticated) {
       renderPublicList(els.list, links);
-      return;
+    } else {
+      links.forEach((link, index) => {
+        els.list.appendChild(
+          renderAdminCard(link, index, links.length, {
+            onEdit: (l) => formModal.openEdit(l),
+            onDelete: (l) => void deleteLink(l),
+            onMoveUp: (l) => void move(l, -1),
+            onMoveDown: (l) => void move(l, 1),
+            onDragStart: (l, ev) => {
+              dragId = l.id;
+              ev.dataTransfer?.setData("text/plain", l.id);
+            },
+            onDrop: (l) => {
+              if (!dragId || dragId === l.id) return;
+              const targetIndex = links.findIndex((x) => x.id === l.id);
+              const moved = dragId;
+              dragId = null;
+              if (targetIndex !== -1) void reorderTo(moved, targetIndex);
+            },
+          })
+        );
+      });
     }
-    links.forEach((link, index) => {
-      els.list.appendChild(
-        renderAdminCard(link, index, links.length, {
-          onEdit: (l) => formModal.openEdit(l),
-          onDelete: (l) => void deleteLink(l),
-          onMoveUp: (l) => void move(l, -1),
-          onMoveDown: (l) => void move(l, 1),
-          onDragStart: (l, ev) => {
-            dragId = l.id;
-            ev.dataTransfer?.setData("text/plain", l.id);
-          },
-          onDrop: (l) => {
-            if (!dragId || dragId === l.id) return;
-            const targetIndex = links.findIndex((x) => x.id === l.id);
-            const moved = dragId;
-            dragId = null;
-            if (targetIndex !== -1) void reorderTo(moved, targetIndex);
-          },
-        })
-      );
-    });
+    if (notice) {
+      renderMessage(els.list, notice);
+    }
   }
 
   function render(): void {
@@ -237,8 +246,12 @@ function bootDynamic(
 
   // Initial paint reflects whatever session may already be restored.
   void (async () => {
-    const session = await auth.getSession();
-    authenticated = session != null;
+    try {
+      const session = await auth.getSession();
+      authenticated = session != null;
+    } catch {
+      authenticated = false;
+    }
     render();
   })();
 
@@ -258,6 +271,18 @@ async function boot(): Promise<void> {
   renderLoading(els.list);
 
   const config = getSupabaseConfig();
+  const hasUrl = config.url.trim().length > 0;
+  const hasKey = config.anonKey.trim().length > 0;
+
+  if (hasUrl && hasKey && !isBrowserSafeAnonKey(config.anonKey)) {
+    bootStatic(els);
+    renderMessage(
+      els.list,
+      "Config inválida: use a chave anon/publishable no .env — não use sb_secret."
+    );
+    return;
+  }
+
   if (!isSupabaseConfigured(config)) {
     bootStatic(els);
     return;
@@ -271,7 +296,13 @@ async function boot(): Promise<void> {
   try {
     initialLinks = await repo.listLinks();
   } catch {
-    bootStatic(els);
+    bootDynamic(
+      els,
+      auth,
+      repo,
+      FALLBACK_LINKS,
+      "Não foi possível carregar links do Supabase. Confira a migration e a chave anon."
+    );
     return;
   }
 
