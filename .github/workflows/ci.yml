@@ -182,64 +182,71 @@ jobs:
   unit:
     name: Unit tests (Vitest)
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('package.json') != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Setup Node
+        if: ${{ hashFiles('package.json') != '' }}
         uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
 
       - name: Install dependencies
+        if: ${{ hashFiles('package.json') != '' }}
         run: npm ci
 
       - name: Run unit tests with coverage
+        if: ${{ hashFiles('package.json') != '' }}
         run: npm run test:unit --if-present
 
   mutation:
     name: Mutation tests (Stryker)
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' && hashFiles('package.json') != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Setup Node
+        if: ${{ github.event_name == 'pull_request' && hashFiles('package.json') != '' }}
         uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
 
       - name: Install dependencies
+        if: ${{ github.event_name == 'pull_request' && hashFiles('package.json') != '' }}
         run: npm ci
 
       - name: Run mutation tests
+        if: ${{ github.event_name == 'pull_request' && hashFiles('package.json') != '' }}
         run: npm run test:mutation --if-present
 
   integration:
     name: Integration tests (Playwright)
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('package.json') != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Setup Node
+        if: ${{ hashFiles('package.json') != '' }}
         uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
 
       - name: Install dependencies
+        if: ${{ hashFiles('package.json') != '' }}
         run: npm ci
 
       - name: Install Playwright browsers
+        if: ${{ hashFiles('package.json') != '' }}
         run: npx playwright install --with-deps chromium
 
       - name: Run e2e tests
+        if: ${{ hashFiles('package.json') != '' }}
         run: npm run test:e2e --if-present
 
   ci-success:
