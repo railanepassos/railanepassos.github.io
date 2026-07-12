@@ -1098,7 +1098,7 @@ export function createDeleteConfirmSheet(): DeleteSheetHandle {
 
 export type LinkFormHandle = {
   element: HTMLElement;
-  openCreate: () => void;
+  openCreate: (prefill?: { url?: string }) => void;
   openEdit: (link: LinkRow) => void;
   close: () => void;
   setError: (message: string) => void;
@@ -1212,10 +1212,13 @@ export function createLinkFormModal(
     // Do not autofocus fields — on mobile that pops the keyboard immediately.
   }
 
-  function openCreate(): void {
+  function openCreate(prefill?: { url?: string }): void {
     editingId = null;
     title.textContent = "Nova experiência";
     form.reset();
+    if (prefill?.url) {
+      urlField.input.value = prefill.url;
+    }
     descField.syncHeight();
     updateLabelCounter();
     updateDescCounter();

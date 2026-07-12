@@ -33,6 +33,7 @@ import { sortLinksForDisplay, visibleListLinks } from "./sort-links";
 import { buildIcs, downloadIcs } from "./ics";
 import { createDeckScreen, type DeckHandle } from "./deck-ui";
 import { nextPriority } from "./deck-queue";
+import { pickSharedUrl } from "./share-target";
 import {
   DEFAULT_END_TIME,
   DEFAULT_START_TIME,
@@ -118,6 +119,9 @@ function bootDynamic(
   let authenticated = false;
   let notice = warning ?? null;
   let categoryFilter: Category[] = [];
+  let pendingSharedUrl: string | null = pickSharedUrl(
+    new URLSearchParams(location.search)
+  );
 
   // --- modals (created once, appended to <body>) ---
   const loginModal: LoginModalHandle = createLoginModal(async (email, password) => {
@@ -501,6 +505,18 @@ function bootDynamic(
     renderList();
   }
 
+  function handlePendingShare(): void {
+    if (!pendingSharedUrl) return;
+    if (authenticated) {
+      const url = pendingSharedUrl;
+      pendingSharedUrl = null;
+      history.replaceState(null, "", location.pathname);
+      formModal.openCreate({ url });
+    } else {
+      loginModal.open();
+    }
+  }
+
   // --- auth wiring: reload private list on every session change ---
   auth.onAuthStateChange((_event, session) => {
     void (async () => {
@@ -518,6 +534,7 @@ function bootDynamic(
         links = [];
       }
       render();
+      handlePendingShare();
     })();
   });
 
@@ -543,6 +560,7 @@ function bootDynamic(
       links = [];
     }
     render();
+    handlePendingShare();
   })();
 
   // Paint immediately with guest gate while the session check resolves.
