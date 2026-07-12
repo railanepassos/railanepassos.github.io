@@ -1,6 +1,7 @@
 import type { LinkRow } from "./links-repo";
 import { resolveIconSrc } from "./icons";
 import { categoryLabel, resolveCategory } from "./category";
+import { formatScheduleChip } from "./schedule";
 
 /**
  * Static fallback shown when Supabase is not configured yet, or when the
@@ -54,6 +55,16 @@ export function renderPublicCard(link: LinkRow): HTMLAnchorElement {
   cat.className = "link-card__category";
   cat.textContent = categoryLabel(resolveCategory(link));
   text.appendChild(cat);
+
+  if (link.scheduled_start && link.scheduled_end) {
+    const schedule = document.createElement("span");
+    schedule.className = "link-card__schedule";
+    schedule.textContent = formatScheduleChip(
+      link.scheduled_start,
+      link.scheduled_end
+    );
+    text.appendChild(schedule);
+  }
 
   if (link.description && link.description.length > 0) {
     const desc = document.createElement("span");
