@@ -41,18 +41,33 @@ describe("createScheduleSheet", () => {
 
     sheet.open({
       initial: { date: "2026-07-12", startTime: "09:00", endTime: "17:00" },
+      hasSchedule: false,
       onSave,
     });
 
-    const date = sheet.element.querySelector("#links-schedule-date") as HTMLInputElement;
-    const start = sheet.element.querySelector("#links-schedule-start") as HTMLInputElement;
-    const end = sheet.element.querySelector("#links-schedule-end") as HTMLInputElement;
+    const date = sheet.element.querySelector(
+      "#links-schedule-date"
+    ) as HTMLInputElement;
+    const start = sheet.element.querySelector(
+      "#links-schedule-start"
+    ) as HTMLInputElement;
+    const end = sheet.element.querySelector(
+      "#links-schedule-end"
+    ) as HTMLInputElement;
 
     expect(sheet.element.hidden).toBe(false);
     expect(document.activeElement).toBe(document.body);
     expect(sheet.element.textContent).toContain(
       "Padrão: deslocamento incluso (9h–17h). No local ~10h–16h."
     );
+    expect(
+      (sheet.element.querySelector('[data-action="download-ics"]') as HTMLElement)
+        .hidden
+    ).toBe(true);
+    expect(
+      (sheet.element.querySelector('[data-action="remove-schedule"]') as HTMLElement)
+        .hidden
+    ).toBe(true);
 
     date.value = "2026-08-03";
     start.value = "10:30";
@@ -68,11 +83,49 @@ describe("createScheduleSheet", () => {
     });
   });
 
+  it("shows ICS and remove when hasSchedule, and success with undo after save feedback", () => {
+    const onDownloadIcs = vi.fn();
+    const onRemove = vi.fn();
+    const onUndo = vi.fn();
+    const sheet = createScheduleSheet();
+    document.body.appendChild(sheet.element);
+
+    sheet.open({
+      initial: { date: "2026-07-12", startTime: "09:00", endTime: "17:00" },
+      hasSchedule: true,
+      onSave: vi.fn(),
+      onDownloadIcs,
+      onRemove,
+    });
+
+    const downloadBtn = sheet.element.querySelector(
+      '[data-action="download-ics"]'
+    ) as HTMLButtonElement;
+    const removeBtn = sheet.element.querySelector(
+      '[data-action="remove-schedule"]'
+    ) as HTMLButtonElement;
+    expect(downloadBtn.hidden).toBe(false);
+    expect(removeBtn.hidden).toBe(false);
+
+    downloadBtn.click();
+    expect(onDownloadIcs).toHaveBeenCalled();
+
+    sheet.showSuccess("Agendamento salvo.", onUndo);
+    expect(sheet.element.textContent).toContain("Agendamento salvo.");
+    const undoBtn = sheet.element.querySelector(
+      '[data-action="undo-schedule"]'
+    ) as HTMLButtonElement;
+    expect(undoBtn.hidden).toBe(false);
+    undoBtn.click();
+    expect(onUndo).toHaveBeenCalled();
+  });
+
   it("shows form errors and toggles screen busy", () => {
     const sheet = createScheduleSheet();
     document.body.appendChild(sheet.element);
     sheet.open({
       initial: { date: "2026-07-12", startTime: "09:00", endTime: "17:00" },
+      hasSchedule: false,
       onSave: vi.fn(),
     });
 
@@ -82,12 +135,16 @@ describe("createScheduleSheet", () => {
     sheet.setBusy(true);
     expect(sheet.element.querySelector(".links-skeleton-screen")).toBeTruthy();
     expect(
-      sheet.element.querySelector(".links-admin-modal__dialog")?.getAttribute("aria-busy")
+      sheet.element
+        .querySelector(".links-admin-modal__dialog")
+        ?.getAttribute("aria-busy")
     ).toBe("true");
 
     sheet.setBusy(false);
     expect(
-      sheet.element.querySelector(".links-admin-modal__dialog")?.hasAttribute("aria-busy")
+      sheet.element
+        .querySelector(".links-admin-modal__dialog")
+        ?.hasAttribute("aria-busy")
     ).toBe(false);
   });
 });
@@ -96,37 +153,31 @@ describe("createViewModal", () => {
   it("shows Agendar above Editar when the link has no schedule", () => {
     const onEdit = vi.fn();
     const onSchedule = vi.fn();
-    const modal = createViewModal({
-      onEdit,
-      onSchedule,
-      onDownloadIcs: vi.fn(),
-      onClearSchedule: vi.fn(),
-    });
+    const modal = createViewModal({ onEdit, onSchedule });
     document.body.appendChild(modal.element);
 
     modal.open(row());
 
-    const buttons = [...modal.element.querySelectorAll("button")].map((btn) =>
-      btn.textContent?.trim()
-    );
-    expect(buttons).toContain("Agendar");
-    expect(buttons.indexOf("Agendar")).toBeLessThan(buttons.indexOf("Editar"));
-    expect(
-      (modal.element.querySelector(".links-admin-view__block") as HTMLElement).hidden
-    ).toBe(true);
+    const actionButtons = [
+      ...modal.element.querySelectorAll(
+        ".links-admin-form__actions button"
+      ),
+    ].map((btn) => btn.textContent?.trim());
+    expect(actionButtons).toEqual(["Agendar", "Editar"]);
 
-    modal.element.querySelectorAll("button")[1]?.click();
-    expect(onSchedule).toHaveBeenCalledWith(expect.objectContaining({ id: "link-1" }));
+    (
+      modal.element.querySelector(
+        ".links-admin-form__actions button"
+      ) as HTMLButtonElement
+    ).click();
+    expect(onSchedule).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "link-1" })
+    );
     expect(onEdit).not.toHaveBeenCalled();
   });
 
-  it("shows schedule actions when the link has a schedule", () => {
-    const callbacks = {
-      onEdit: vi.fn(),
-      onSchedule: vi.fn(),
-      onDownloadIcs: vi.fn(),
-      onClearSchedule: vi.fn(),
-    };
+  it("shows Agenda label and opens schedule sheet callback when scheduled", () => {
+    const callbacks = { onEdit: vi.fn(), onSchedule: vi.fn() };
     const modal = createViewModal(callbacks);
     document.body.appendChild(modal.element);
 
@@ -139,17 +190,21 @@ describe("createViewModal", () => {
 
     expect(modal.element.textContent).toContain("Agendado");
     expect(modal.element.textContent).toContain("3 ago 2026 · 09:00–17:00");
-    expect(modal.element.textContent).toContain("Baixar ICS");
-    expect(modal.element.textContent).toContain("Alterar data");
-    expect(modal.element.textContent).toContain("Remover agendamento");
+    const actionButtons = [
+      ...modal.element.querySelectorAll(
+        ".links-admin-form__actions button"
+      ),
+    ].map((btn) => btn.textContent?.trim());
+    expect(actionButtons).toEqual(["Agenda", "Editar"]);
+    expect(modal.element.textContent).not.toContain("Baixar ICS");
+    expect(modal.element.textContent).not.toContain("Remover agendamento");
 
-    const downloadBtn = [...modal.element.querySelectorAll("button")].find(
-      (btn) => btn.textContent === "Baixar ICS"
-    );
-    downloadBtn?.click();
-    expect(callbacks.onDownloadIcs).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "link-1" })
-    );
+    (
+      modal.element.querySelector(
+        ".links-admin-form__actions button"
+      ) as HTMLButtonElement
+    ).click();
+    expect(callbacks.onSchedule).toHaveBeenCalled();
   });
 });
 

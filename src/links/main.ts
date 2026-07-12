@@ -154,19 +154,6 @@ function bootDynamic(
   const viewModal: ViewModalHandle = createViewModal({
     onEdit: (l) => formModal.openEdit(l),
     onSchedule: (l) => openSchedule(l),
-    onDownloadIcs: (l) => {
-      if (!l.scheduled_start || !l.scheduled_end) return;
-      const ics = buildIcs({
-        uid: `${l.id}@railanepassos.tec.br`,
-        title: l.label,
-        description: l.description,
-        url: l.url,
-        startIso: l.scheduled_start,
-        endIso: l.scheduled_end,
-      });
-      downloadIcs(icsFilename(l), ics);
-    },
-    onClearSchedule: (l) => void clearSchedule(l),
   });
   const filterSheet: CategoryFilterHandle = createCategoryFilterSheet((cats) => {
     categoryFilter = cats;
@@ -237,23 +224,65 @@ function bootDynamic(
     return links.find((l) => l.id === id);
   }
 
+  function downloadScheduleIcs(link: LinkRow): void {
+    if (!link.scheduled_start || !link.scheduled_end) return;
+    const ics = buildIcs({
+      uid: `${link.id}@railanepassos.tec.br`,
+      title: link.label,
+      description: link.description,
+      url: link.url,
+      startIso: link.scheduled_start,
+      endIso: link.scheduled_end,
+    });
+    downloadIcs(icsFilename(link), ics);
+  }
+
   function openSchedule(link: LinkRow): void {
-    const initial =
-      link.scheduled_start && link.scheduled_end
-        ? {
-            date: splitScheduleLocal(link.scheduled_start).date,
-            startTime: splitScheduleLocal(link.scheduled_start).time,
-            endTime: splitScheduleLocal(link.scheduled_end).time,
-          }
-        : {
-            date: "",
-            startTime: DEFAULT_START_TIME,
-            endTime: DEFAULT_END_TIME,
-          };
+    const previousStart = link.scheduled_start;
+    const previousEnd = link.scheduled_end;
+    const hasSchedule = Boolean(previousStart && previousEnd);
+    const initial = hasSchedule
+      ? {
+          date: splitScheduleLocal(previousStart!).date,
+          startTime: splitScheduleLocal(previousStart!).time,
+          endTime: splitScheduleLocal(previousEnd!).time,
+        }
+      : {
+          date: "",
+          startTime: DEFAULT_START_TIME,
+          endTime: DEFAULT_END_TIME,
+        };
 
     scheduleSheet.open({
       title: "Agendar experiência",
       initial,
+      hasSchedule,
+      onDownloadIcs: () => {
+        const current = findLink(link.id) ?? link;
+        downloadScheduleIcs(current);
+      },
+      onRemove: async () => {
+        scheduleSheet.setBusy(true);
+        try {
+          await repo.updateLink(link.id, {
+            scheduled_start: null,
+            scheduled_end: null,
+          });
+          links = links.map((row) =>
+            row.id === link.id
+              ? { ...row, scheduled_start: null, scheduled_end: null }
+              : row
+          );
+          renderList();
+          scheduleSheet.close();
+          const updated = findLink(link.id);
+          if (updated) viewModal.open(updated);
+        } catch (err) {
+          scheduleSheet.setError(messageOf(err, GENERIC_ERROR));
+        } finally {
+          scheduleSheet.setBusy(false);
+        }
+      },
       onSave: async (values) => {
         scheduleSheet.setBusy(true);
         try {
@@ -271,6 +300,9 @@ function bootDynamic(
             scheduleSheet.setError(scheduleError);
             return;
           }
+          const undoStart = findLink(link.id)?.scheduled_start ?? previousStart;
+          const undoEnd = findLink(link.id)?.scheduled_end ?? previousEnd;
+
           await repo.updateLink(link.id, {
             scheduled_start: startIso,
             scheduled_end: endIso,
@@ -281,9 +313,35 @@ function bootDynamic(
               : row
           );
           renderList();
-          scheduleSheet.close();
-          const updated = findLink(link.id);
-          if (updated) viewModal.open(updated);
+          scheduleSheet.setHasSchedule(true);
+          scheduleSheet.showSuccess("Agendamento salvo.", async () => {
+            scheduleSheet.setBusy(true);
+            try {
+              await repo.updateLink(link.id, {
+                scheduled_start: undoStart,
+                scheduled_end: undoEnd,
+              });
+              links = links.map((row) =>
+                row.id === link.id
+                  ? {
+                      ...row,
+                      scheduled_start: undoStart,
+                      scheduled_end: undoEnd,
+                    }
+                  : row
+              );
+              renderList();
+              openSchedule(findLink(link.id) ?? {
+                ...link,
+                scheduled_start: undoStart,
+                scheduled_end: undoEnd,
+              });
+            } catch (err) {
+              scheduleSheet.setError(messageOf(err, GENERIC_ERROR));
+            } finally {
+              scheduleSheet.setBusy(false);
+            }
+          });
         } catch (err) {
           scheduleSheet.setError(messageOf(err, GENERIC_ERROR));
         } finally {
@@ -291,25 +349,6 @@ function bootDynamic(
         }
       },
     });
-  }
-
-  async function clearSchedule(link: LinkRow): Promise<void> {
-    try {
-      await repo.updateLink(link.id, {
-        scheduled_start: null,
-        scheduled_end: null,
-      });
-      links = links.map((row) =>
-        row.id === link.id
-          ? { ...row, scheduled_start: null, scheduled_end: null }
-          : row
-      );
-      renderList();
-      const updated = findLink(link.id);
-      if (updated) viewModal.open(updated);
-    } catch (err) {
-      await reloadFromServer(messageOf(err, GENERIC_ERROR));
-    }
   }
 
   async function move(link: LinkRow, direction: -1 | 1): Promise<void> {

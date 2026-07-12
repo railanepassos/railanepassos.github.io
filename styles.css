@@ -1485,6 +1485,28 @@ body.links-screen-open {
   color: var(--text-muted);
 }
 
+.links-admin-form__success {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--green-light);
+  color: var(--green-dark);
+  font-size: 0.88rem;
+}
+
+.links-admin-form__success[hidden] {
+  display: none;
+}
+
+.links-admin-form__success-text {
+  margin: 0;
+  font-weight: 600;
+}
+
 .links-admin-form__actions {
   display: flex;
   justify-content: flex-end;
