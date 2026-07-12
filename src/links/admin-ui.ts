@@ -1,20 +1,86 @@
 import type { LinkRow, CreateLinkInput, UpdateLinkPatch } from "./links-repo";
-import { resolveIconSrc, ICON_PRESET_OPTIONS } from "./icons";
+import { resolveIconSrc, inferIconPreset } from "./icons";
+import {
+  CATEGORY_OPTIONS,
+  inferCategory,
+  resolveCategory,
+  categoryLabel,
+  type Category,
+} from "./category";
 import { isHttpsUrl } from "./validate";
+import { composeEditorEmail, EDITOR_EMAIL_DOMAIN } from "./editor-email";
+import {
+  ACTIONS_WIDTH_PX,
+  isTapGesture,
+  shouldAbortForScroll,
+  shouldStartSwipe,
+  snapSwipeOffset,
+} from "./swipe";
+import { buildSpinLabels } from "./pick-random";
+import { setScreenBusy } from "./skeleton";
 
 /**
  * DOM building blocks for the authenticated admin experience:
  *   - a discreet "Entrar" button (shown when logged out)
- *   - a login modal (email/senha)
+ *   - full-screen login / form / delete screens (mobile-first)
  *   - a toolbar ("Novo link" / "Sair")
- *   - admin link cards (edit / delete / drag-handle / up / down)
- *   - a create/edit modal form
+ *   - admin link cards (tap to view, swipe edit/delete, ↑↓ reorder)
  *
  * Every element is created via document.createElement + textContent. No
  * innerHTML with user data, no inline style attributes, no injected <style>
  * tags. Visibility is toggled via the `hidden` attribute / CSS classes only,
  * to satisfy the page CSP (style-src 'self', script-src 'self').
  */
+
+function syncBodyScreenLock(): void {
+  const anyOpen =
+    document.querySelector(".links-admin-modal:not([hidden])") != null ||
+    document.querySelector(".links-filter-sheet:not([hidden])") != null;
+  document.body.classList.toggle("links-screen-open", anyOpen);
+}
+
+type ScreenChrome = {
+  overlay: HTMLElement;
+  dialog: HTMLElement;
+  title: HTMLHeadingElement;
+  backBtn: HTMLButtonElement;
+};
+
+/** Full-screen shell with Voltar header (modal on wide desktop via CSS). */
+function createScreenChrome(
+  titleId: string,
+  titleText: string,
+  role: "dialog" | "alertdialog"
+): ScreenChrome {
+  const overlay = document.createElement("div");
+  overlay.className = "links-admin-modal";
+  overlay.hidden = true;
+
+  const dialog = document.createElement("div");
+  dialog.className = "links-admin-modal__dialog";
+  dialog.setAttribute("role", role);
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-labelledby", titleId);
+
+  const header = document.createElement("header");
+  header.className = "links-admin-screen__header";
+
+  const backBtn = document.createElement("button");
+  backBtn.type = "button";
+  backBtn.className = "links-admin-screen__back";
+  backBtn.textContent = "Voltar";
+
+  const title = document.createElement("h2");
+  title.className = "links-admin-modal__title links-admin-screen__title";
+  title.id = titleId;
+  title.textContent = titleText;
+
+  header.append(backBtn, title);
+  dialog.appendChild(header);
+  overlay.appendChild(dialog);
+
+  return { overlay, dialog, title, backBtn };
+}
 
 // ---------------------------------------------------------------------------
 // Values collected from the create/edit form.
@@ -24,8 +90,6 @@ export type LinkFormValues = {
   url: string;
   label: string;
   description: string;
-  icon_preset: string;
-  icon_url: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -58,29 +122,42 @@ export function createLoginModal(
 ): LoginModalHandle {
   let previouslyFocused: HTMLElement | null = null;
 
-  const overlay = document.createElement("div");
-  overlay.className = "links-admin-modal";
-  overlay.hidden = true;
+  const { overlay, dialog, backBtn } = createScreenChrome(
+    "links-login-title",
+    "Entrar na lista",
+    "dialog"
+  );
 
-  const dialog = document.createElement("div");
-  dialog.className = "links-admin-modal__dialog";
-  dialog.setAttribute("role", "dialog");
-  dialog.setAttribute("aria-modal", "true");
-  dialog.setAttribute("aria-labelledby", "links-login-title");
-
-  const title = document.createElement("h2");
-  title.className = "links-admin-modal__title";
-  title.id = "links-login-title";
-  title.textContent = "Entrar";
-  dialog.appendChild(title);
+  const intro = document.createElement("p");
+  intro.className = "links-admin-modal__body";
+  intro.textContent =
+    "Acesso de editor para adicionar, reordenar e revisar experiências da bucket list.";
 
   const form = document.createElement("form");
-  form.className = "links-admin-form";
+  form.className = "links-admin-form links-admin-form--screen";
   form.noValidate = true;
 
-  const emailField = labelledInput("links-login-email", "E-mail", "email");
+  const emailField = labelledInput("links-login-email", "Usuário", "text");
   emailField.input.autocomplete = "username";
   emailField.input.required = true;
+  emailField.input.placeholder = "nome";
+  emailField.input.setAttribute("inputmode", "text");
+  emailField.input.setAttribute("autocapitalize", "off");
+  emailField.input.setAttribute("spellcheck", "false");
+  emailField.input.setAttribute(
+    "aria-describedby",
+    "links-login-email-domain"
+  );
+
+  const emailRow = document.createElement("div");
+  emailRow.className = "links-admin-form__email-row";
+  emailField.input.classList.add("links-admin-form__control--local-part");
+  const domainSuffix = document.createElement("span");
+  domainSuffix.id = "links-login-email-domain";
+  domainSuffix.className = "links-admin-form__email-domain";
+  domainSuffix.textContent = `@${EDITOR_EMAIL_DOMAIN}`;
+  emailField.input.replaceWith(emailRow);
+  emailRow.append(emailField.input, domainSuffix);
 
   const passwordField = labelledInput("links-login-password", "Senha", "password");
   passwordField.input.autocomplete = "current-password";
@@ -92,28 +169,23 @@ export function createLoginModal(
   error.hidden = true;
 
   const actions = document.createElement("div");
-  actions.className = "links-admin-form__actions";
-
-  const cancelBtn = document.createElement("button");
-  cancelBtn.type = "button";
-  cancelBtn.className = "links-admin-button links-admin-button--ghost";
-  cancelBtn.textContent = "Cancelar";
+  actions.className = "links-admin-form__actions links-admin-form__actions--sticky";
 
   const submitBtn = document.createElement("button");
   submitBtn.type = "submit";
-  submitBtn.className = "links-admin-button links-admin-button--primary";
+  submitBtn.className = "links-admin-button links-admin-button--primary links-admin-button--block";
   submitBtn.textContent = "Entrar";
 
-  actions.append(cancelBtn, submitBtn);
+  actions.append(submitBtn);
   form.append(emailField.wrapper, passwordField.wrapper, error, actions);
-  dialog.appendChild(form);
-  overlay.appendChild(dialog);
+  dialog.append(intro, form);
 
   function close(): void {
     overlay.hidden = true;
     error.hidden = true;
     error.textContent = "";
     form.reset();
+    syncBodyScreenLock();
     if (previouslyFocused) {
       previouslyFocused.focus();
       previouslyFocused = null;
@@ -123,6 +195,7 @@ export function createLoginModal(
   function open(): void {
     previouslyFocused = document.activeElement as HTMLElement | null;
     overlay.hidden = false;
+    syncBodyScreenLock();
     error.hidden = true;
     error.textContent = "";
     emailField.input.focus();
@@ -130,13 +203,16 @@ export function createLoginModal(
 
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    onSubmit(emailField.input.value.trim(), passwordField.input.value);
+    const email = composeEditorEmail(emailField.input.value);
+    if (!email) {
+      error.hidden = false;
+      error.textContent = "Informe o usuário do e-mail.";
+      return;
+    }
+    onSubmit(email, passwordField.input.value);
   });
 
-  cancelBtn.addEventListener("click", close);
-  overlay.addEventListener("mousedown", (e) => {
-    if (e.target === overlay) close();
-  });
+  backBtn.addEventListener("click", close);
   overlay.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.stopPropagation();
@@ -154,40 +230,141 @@ export function createLoginModal(
     },
     setBusy(busy: boolean) {
       submitBtn.disabled = busy;
-      cancelBtn.disabled = busy;
+      backBtn.disabled = busy;
+      setScreenBusy(dialog, busy);
     },
   };
 }
 
 // ---------------------------------------------------------------------------
-// Toolbar (authenticated): "Novo link" + "Sair".
+// Toolbar (authenticated): icon actions — add / filter / sign out.
 // ---------------------------------------------------------------------------
 
-export function createToolbar(onNew: () => void, onSignOut: () => void): HTMLElement {
+function strokeIcon(pathD: string | string[]): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", "22");
+  svg.setAttribute("height", "22");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  const parts = Array.isArray(pathD) ? pathD : [pathD];
+  for (const d of parts) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    svg.appendChild(path);
+  }
+  return svg;
+}
+
+/** Plus — “nova experiência” (padrão Instagram / apps de lista). */
+function iconPlus(): SVGSVGElement {
+  return strokeIcon("M12 5v14M5 12h14");
+}
+
+/** Funil — filtrar. */
+function iconFilter(): SVGSVGElement {
+  return strokeIcon("M22 3H2l8 9.46V19l4 2v-8.54L22 3z");
+}
+
+/** Sair / logout. */
+function iconLogout(): SVGSVGElement {
+  return strokeIcon([
+    "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4",
+    "M16 17l5-5-5-5",
+    "M21 12H9",
+  ]);
+}
+
+/** Dados / shuffle — sorteio. */
+function iconShuffle(): SVGSVGElement {
+  return strokeIcon([
+    "M16 3h5v5",
+    "M4 20L21 3",
+    "M21 16v5h-5",
+    "M15 15l6 6",
+    "M4 4l5 5",
+  ]);
+}
+
+export function createToolbar(
+  onNew: () => void,
+  onSignOut: () => void,
+  onFilter: () => void,
+  onDraw: () => void,
+  activeCategories: readonly Category[] = []
+): HTMLElement {
   const toolbar = document.createElement("div");
   toolbar.className = "links-admin-toolbar";
 
+  const row = document.createElement("div");
+  row.className = "links-admin-toolbar__row";
+
   const newBtn = document.createElement("button");
   newBtn.type = "button";
-  newBtn.className = "links-admin-button links-admin-button--primary";
-  newBtn.textContent = "Novo link";
+  newBtn.className =
+    "links-admin-button links-admin-button--primary links-admin-button--icon";
+  newBtn.setAttribute("aria-label", "Nova experiência");
+  newBtn.title = "Nova experiência";
+  newBtn.appendChild(iconPlus());
   newBtn.addEventListener("click", onNew);
+
+  const filterBtn = document.createElement("button");
+  filterBtn.type = "button";
+  filterBtn.className =
+    "links-admin-button links-admin-button--ghost links-admin-button--icon links-admin-button--filter";
+  const filterLabel =
+    activeCategories.length > 0
+      ? `Filtrar por categoria (${activeCategories.length}): ${activeCategories
+          .map((c) => categoryLabel(c))
+          .join(", ")}`
+      : "Filtrar por categoria";
+  filterBtn.setAttribute("aria-label", filterLabel);
+  filterBtn.title = filterLabel;
+  if (activeCategories.length > 0) {
+    filterBtn.classList.add("links-admin-button--filter-active");
+  }
+  filterBtn.appendChild(iconFilter());
+  filterBtn.addEventListener("click", onFilter);
+
+  const drawBtn = document.createElement("button");
+  drawBtn.type = "button";
+  drawBtn.className =
+    "links-admin-button links-admin-button--ghost links-admin-button--icon";
+  drawBtn.setAttribute("aria-label", "Sortear experiência");
+  drawBtn.title = "Sortear experiência";
+  drawBtn.appendChild(iconShuffle());
+  drawBtn.addEventListener("click", onDraw);
 
   const signOutBtn = document.createElement("button");
   signOutBtn.type = "button";
-  signOutBtn.className = "links-admin-button links-admin-button--ghost";
-  signOutBtn.textContent = "Sair";
+  signOutBtn.className =
+    "links-admin-button links-admin-button--ghost links-admin-button--icon";
+  signOutBtn.setAttribute("aria-label", "Sair");
+  signOutBtn.title = "Sair";
+  signOutBtn.appendChild(iconLogout());
   signOutBtn.addEventListener("click", onSignOut);
 
-  toolbar.append(newBtn, signOutBtn);
+  row.append(newBtn, filterBtn, drawBtn, signOutBtn);
+
+  const tip = document.createElement("p");
+  tip.className = "links-admin-tip";
+  tip.textContent =
+    "Toque para ver · Deslize → editar · ← excluir · Filtrar · Sortear · ↑↓ reordenar";
+
+  toolbar.append(row, tip);
   return toolbar;
 }
 
 // ---------------------------------------------------------------------------
-// Admin card: public card structure + admin controls.
+// Admin card: tap to view, swipe → edit / ← delete, ↑↓ (and desktop drag) reorder.
 // ---------------------------------------------------------------------------
 
 export type AdminCardCallbacks = {
+  onView: (link: LinkRow) => void;
   onEdit: (link: LinkRow) => void;
   onDelete: (link: LinkRow) => void;
   onMoveUp: (link: LinkRow) => void;
@@ -196,20 +373,76 @@ export type AdminCardCallbacks = {
   onDrop: (link: LinkRow, ev: DragEvent) => void;
 };
 
+let openSwipeContent: HTMLElement | null = null;
+let openSwipeOffset = 0;
+
+function setSwipeOffset(content: HTMLElement, offset: number): void {
+  content.style.transform = offset === 0 ? "" : `translateX(${offset}px)`;
+  content.classList.toggle("swipe-row__content--open", offset !== 0);
+}
+
+function closeOpenSwipe(): void {
+  if (!openSwipeContent) return;
+  setSwipeOffset(openSwipeContent, 0);
+  openSwipeContent = null;
+  openSwipeOffset = 0;
+}
+
 export function renderAdminCard(
   link: LinkRow,
   index: number,
   total: number,
   cb: AdminCardCallbacks
 ): HTMLElement {
-  const card = document.createElement("div");
-  card.className = "link-card link-card--admin";
-  card.dataset.id = link.id;
-  card.draggable = true;
+  const row = document.createElement("div");
+  row.className = "swipe-row";
+  row.dataset.id = link.id;
+  row.dataset.index = String(index);
 
-  card.addEventListener("dragstart", (ev) => cb.onDragStart(link, ev));
-  card.addEventListener("dragover", (ev) => ev.preventDefault());
-  card.addEventListener("drop", (ev) => {
+  const editActions = document.createElement("div");
+  editActions.className = "swipe-row__actions swipe-row__actions--edit";
+  editActions.setAttribute("aria-hidden", "true");
+
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.className = "swipe-row__action swipe-row__action--edit";
+  editBtn.textContent = "Editar";
+  editBtn.setAttribute("aria-label", "Editar experiência");
+  editBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeOpenSwipe();
+    cb.onEdit(link);
+  });
+  editActions.append(editBtn);
+
+  const deleteActions = document.createElement("div");
+  deleteActions.className = "swipe-row__actions swipe-row__actions--delete";
+  deleteActions.setAttribute("aria-hidden", "true");
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "swipe-row__action swipe-row__action--delete";
+  deleteBtn.textContent = "Excluir";
+  deleteBtn.setAttribute("aria-label", "Excluir experiência");
+  deleteBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeOpenSwipe();
+    cb.onDelete(link);
+  });
+  deleteActions.append(deleteBtn);
+
+  const content = document.createElement("div");
+  content.className = "swipe-row__content link-card link-card--admin";
+  content.draggable = window.matchMedia("(pointer: fine)").matches;
+  content.setAttribute("role", "button");
+  content.tabIndex = 0;
+  content.setAttribute("aria-label", `Ver ${link.label}`);
+
+  content.addEventListener("dragstart", (ev) => {
+    cb.onDragStart(link, ev);
+  });
+  content.addEventListener("dragover", (ev) => ev.preventDefault());
+  content.addEventListener("drop", (ev) => {
     ev.preventDefault();
     cb.onDrop(link, ev);
   });
@@ -218,52 +451,638 @@ export function renderAdminCard(
   handle.className = "link-card__drag-handle";
   handle.setAttribute("aria-hidden", "true");
   handle.textContent = "⠿";
-  card.appendChild(handle);
+  content.appendChild(handle);
 
   const img = document.createElement("img");
   img.src = resolveIconSrc(link);
   img.alt = "";
   img.width = 24;
   img.height = 24;
-  card.appendChild(img);
+  content.appendChild(img);
 
-  const text = document.createElement("span");
-  text.className = "link-card__text";
+  const textEl = document.createElement("span");
+  textEl.className = "link-card__text";
 
   const label = document.createElement("span");
   label.className = "link-card__label";
   label.textContent = link.label;
-  text.appendChild(label);
+  textEl.appendChild(label);
+
+  const cat = document.createElement("span");
+  cat.className = "link-card__category";
+  cat.textContent = categoryLabel(resolveCategory(link));
+  textEl.appendChild(cat);
 
   if (link.description && link.description.length > 0) {
     const desc = document.createElement("span");
     desc.className = "link-card__desc";
     desc.textContent = link.description;
-    text.appendChild(desc);
+    textEl.appendChild(desc);
   }
-  card.appendChild(text);
+  content.appendChild(textEl);
 
-  const actions = document.createElement("div");
-  actions.className = "link-card__actions";
+  const keyActions = document.createElement("div");
+  keyActions.className = "link-card__actions";
 
   const upBtn = iconButton("↑", "Mover para cima");
+  upBtn.classList.add("link-card__action--move");
   upBtn.disabled = index === 0;
-  upBtn.addEventListener("click", () => cb.onMoveUp(link));
+  upBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    cb.onMoveUp(link);
+  });
 
   const downBtn = iconButton("↓", "Mover para baixo");
+  downBtn.classList.add("link-card__action--move");
   downBtn.disabled = index === total - 1;
-  downBtn.addEventListener("click", () => cb.onMoveDown(link));
+  downBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    cb.onMoveDown(link);
+  });
 
-  const editBtn = iconButton("Editar", "Editar link");
-  editBtn.addEventListener("click", () => cb.onEdit(link));
+  const deleteKeyBtn = iconButton("Excluir", "Excluir experiência");
+  deleteKeyBtn.classList.add("link-card__action--delete");
+  deleteKeyBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    cb.onDelete(link);
+  });
 
-  const deleteBtn = iconButton("Excluir", "Excluir link");
-  deleteBtn.addEventListener("click", () => cb.onDelete(link));
+  keyActions.append(upBtn, downBtn, deleteKeyBtn);
+  content.appendChild(keyActions);
 
-  actions.append(upBtn, downBtn, editBtn, deleteBtn);
-  card.appendChild(actions);
+  content.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" || ev.key === " ") {
+      ev.preventDefault();
+      closeOpenSwipe();
+      cb.onView(link);
+    }
+  });
 
-  return card;
+  wireSwipe(content, link, cb);
+
+  row.append(editActions, deleteActions, content);
+  return row;
+}
+
+function wireSwipe(
+  content: HTMLElement,
+  link: LinkRow,
+  cb: AdminCardCallbacks
+): void {
+  let pointerId: number | null = null;
+  let startX = 0;
+  let startY = 0;
+  let baseOffset = 0;
+  let offset = 0;
+  let mode: "undecided" | "swipe" | "dead" = "undecided";
+  let lastX = 0;
+  let lastT = 0;
+  let velocityX = 0;
+  let movedPx = 0;
+  let suppressClick = false;
+
+  function beginSwipe(ev: PointerEvent, dx: number): void {
+    mode = "swipe";
+    suppressClick = true;
+    content.style.touchAction = "none";
+    try {
+      content.setPointerCapture(ev.pointerId);
+    } catch {
+      /* ignore */
+    }
+    if (openSwipeContent && openSwipeContent !== content) {
+      closeOpenSwipe();
+      baseOffset = 0;
+    }
+    offset = Math.min(
+      ACTIONS_WIDTH_PX,
+      Math.max(-ACTIONS_WIDTH_PX, baseOffset + dx)
+    );
+    setSwipeOffset(content, offset);
+  }
+
+  content.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0) return;
+    if ((ev.target as HTMLElement).closest(".link-card__actions")) return;
+
+    pointerId = ev.pointerId;
+    startX = ev.clientX;
+    startY = ev.clientY;
+    lastX = startX;
+    lastT = performance.now();
+    velocityX = 0;
+    movedPx = 0;
+    mode = "undecided";
+    suppressClick = false;
+    baseOffset = openSwipeContent === content ? openSwipeOffset : 0;
+    offset = baseOffset;
+    content.classList.add("swipe-row__content--dragging");
+    window.getSelection()?.removeAllRanges();
+  });
+
+  const onPointerMove = (ev: PointerEvent): void => {
+    if (pointerId !== ev.pointerId) return;
+    const dx = ev.clientX - startX;
+    const dy = ev.clientY - startY;
+    movedPx = Math.hypot(dx, dy);
+    const now = performance.now();
+    const dt = Math.max(1, now - lastT);
+    velocityX = (ev.clientX - lastX) / dt;
+    lastX = ev.clientX;
+    lastT = now;
+
+    if (mode === "undecided") {
+      if (shouldStartSwipe(dx, dy)) {
+        beginSwipe(ev, dx);
+        ev.preventDefault();
+        return;
+      }
+      if (shouldAbortForScroll(dx, dy)) {
+        mode = "dead";
+        suppressClick = true;
+        content.classList.remove("swipe-row__content--dragging");
+        pointerId = null;
+        return;
+      }
+    }
+
+    if (mode === "swipe") {
+      offset = Math.min(
+        ACTIONS_WIDTH_PX,
+        Math.max(-ACTIONS_WIDTH_PX, baseOffset + dx)
+      );
+      setSwipeOffset(content, offset);
+      ev.preventDefault();
+    }
+  };
+
+  content.addEventListener("pointermove", onPointerMove, { passive: false });
+
+  function finish(ev: PointerEvent): void {
+    if (pointerId !== ev.pointerId) return;
+    content.classList.remove("swipe-row__content--dragging");
+    try {
+      content.releasePointerCapture(ev.pointerId);
+    } catch {
+      /* ignore */
+    }
+    pointerId = null;
+
+    if (mode === "swipe") {
+      const snapped = snapSwipeOffset(offset, ACTIONS_WIDTH_PX, velocityX);
+      setSwipeOffset(content, snapped);
+      if (snapped !== 0) {
+        openSwipeContent = content;
+        openSwipeOffset = snapped;
+      } else {
+        openSwipeContent = null;
+        openSwipeOffset = 0;
+      }
+      content.style.touchAction = "";
+    } else if (mode === "undecided" && isTapGesture(movedPx)) {
+      if (openSwipeContent === content) {
+        closeOpenSwipe();
+      } else {
+        closeOpenSwipe();
+        cb.onView(link);
+      }
+    }
+    mode = "undecided";
+    content.style.touchAction = "";
+  }
+
+  content.addEventListener("pointerup", finish);
+  content.addEventListener("pointercancel", (ev) => {
+    suppressClick = true;
+    finish(ev);
+  });
+
+  content.addEventListener("click", (ev) => {
+    if (suppressClick) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      suppressClick = false;
+    }
+  });
+
+  content.addEventListener("contextmenu", (ev) => {
+    if (mode === "swipe") ev.preventDefault();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Category filter sheet (mobile-first)
+// ---------------------------------------------------------------------------
+
+export type CategoryFilterHandle = {
+  element: HTMLElement;
+  open: (current: readonly Category[]) => void;
+  close: () => void;
+};
+
+export function createCategoryFilterSheet(
+  onApply: (categories: Category[]) => void
+): CategoryFilterHandle {
+  const overlay = document.createElement("div");
+  overlay.className = "links-filter-sheet";
+  overlay.hidden = true;
+
+  const backdrop = document.createElement("button");
+  backdrop.type = "button";
+  backdrop.className = "links-filter-sheet__backdrop";
+  backdrop.setAttribute("aria-label", "Fechar filtro");
+
+  const panel = document.createElement("div");
+  panel.className = "links-filter-sheet__panel";
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-modal", "true");
+  panel.setAttribute("aria-labelledby", "links-filter-title");
+
+  const title = document.createElement("h2");
+  title.className = "links-filter-sheet__title";
+  title.id = "links-filter-title";
+  title.textContent = "Filtrar por categoria";
+
+  const hint = document.createElement("p");
+  hint.className = "links-filter-sheet__hint";
+  hint.textContent = "Selecione uma ou mais. Vazio = todas.";
+
+  const list = document.createElement("div");
+  list.className = "links-filter-sheet__list";
+
+  const actions = document.createElement("div");
+  actions.className = "links-filter-sheet__actions";
+
+  const clearBtn = document.createElement("button");
+  clearBtn.type = "button";
+  clearBtn.className = "links-admin-button links-admin-button--ghost";
+  clearBtn.textContent = "Limpar";
+
+  const applyBtn = document.createElement("button");
+  applyBtn.type = "button";
+  applyBtn.className =
+    "links-admin-button links-admin-button--primary links-admin-button--block";
+  applyBtn.textContent = "Aplicar";
+
+  actions.append(clearBtn, applyBtn);
+
+  let draft = new Set<Category>();
+
+  function renderOptions(): void {
+    list.replaceChildren();
+    for (const value of CATEGORY_OPTIONS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "links-filter-sheet__option";
+      btn.setAttribute("aria-pressed", draft.has(value) ? "true" : "false");
+      if (draft.has(value)) {
+        btn.classList.add("links-filter-sheet__option--active");
+      }
+      btn.textContent = categoryLabel(value);
+      btn.addEventListener("click", () => {
+        if (draft.has(value)) draft.delete(value);
+        else draft.add(value);
+        renderOptions();
+      });
+      list.appendChild(btn);
+    }
+  }
+
+  function close(): void {
+    overlay.hidden = true;
+    syncBodyScreenLock();
+  }
+
+  function open(current: readonly Category[]): void {
+    draft = new Set(current);
+    renderOptions();
+    overlay.hidden = false;
+    syncBodyScreenLock();
+  }
+
+  clearBtn.addEventListener("click", () => {
+    draft = new Set();
+    renderOptions();
+  });
+
+  applyBtn.addEventListener("click", () => {
+    const selected = CATEGORY_OPTIONS.filter((c) => draft.has(c));
+    close();
+    onApply(selected);
+  });
+
+  panel.append(title, hint, list, actions);
+  overlay.append(backdrop, panel);
+  backdrop.addEventListener("click", close);
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      close();
+    }
+  });
+
+  return { element: overlay, open, close };
+}
+
+// ---------------------------------------------------------------------------
+// Draw / sorteio result sheet (A + light reel animation)
+// ---------------------------------------------------------------------------
+
+const REEL_ITEM_PX = 52;
+const REEL_SPIN_MS = 1400;
+
+export type DrawSheetHandle = {
+  element: HTMLElement;
+  open: (link: LinkRow, pool?: readonly LinkRow[]) => void;
+  openEmpty: (message: string) => void;
+  close: () => void;
+};
+
+export function createDrawResultSheet(handlers: {
+  onView: (link: LinkRow) => void;
+  onRedraw: () => void;
+}): DrawSheetHandle {
+  let current: LinkRow | null = null;
+  let spinning = false;
+  let spinTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const overlay = document.createElement("div");
+  overlay.className = "links-filter-sheet links-draw-sheet";
+  overlay.hidden = true;
+
+  const backdrop = document.createElement("button");
+  backdrop.type = "button";
+  backdrop.className = "links-filter-sheet__backdrop";
+  backdrop.setAttribute("aria-label", "Fechar sorteio");
+
+  const panel = document.createElement("div");
+  panel.className = "links-filter-sheet__panel";
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-modal", "true");
+  panel.setAttribute("aria-labelledby", "links-draw-title");
+
+  const title = document.createElement("h2");
+  title.className = "links-filter-sheet__title";
+  title.id = "links-draw-title";
+  title.textContent = "Sorteio";
+
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "links-draw-sheet__eyebrow";
+  eyebrow.textContent = "Próximo destino";
+
+  const reelWrap = document.createElement("div");
+  reelWrap.className = "links-draw-sheet__reel-wrap";
+  reelWrap.setAttribute("aria-live", "polite");
+
+  const reel = document.createElement("div");
+  reel.className = "links-draw-sheet__reel";
+  reelWrap.appendChild(reel);
+
+  const categoryEl = document.createElement("p");
+  categoryEl.className = "links-draw-sheet__category";
+
+  const emptyEl = document.createElement("p");
+  emptyEl.className = "links-draw-sheet__empty";
+  emptyEl.hidden = true;
+
+  const resultBlock = document.createElement("div");
+  resultBlock.className = "links-draw-sheet__result";
+  resultBlock.append(eyebrow, reelWrap, categoryEl);
+
+  const actions = document.createElement("div");
+  actions.className = "links-filter-sheet__actions";
+
+  const viewBtn = document.createElement("button");
+  viewBtn.type = "button";
+  viewBtn.className =
+    "links-admin-button links-admin-button--primary links-admin-button--block";
+  viewBtn.textContent = "Ver";
+
+  const redrawBtn = document.createElement("button");
+  redrawBtn.type = "button";
+  redrawBtn.className = "links-admin-button links-admin-button--ghost";
+  redrawBtn.textContent = "Sortear de novo";
+
+  actions.append(viewBtn, redrawBtn);
+  panel.append(title, resultBlock, emptyEl, actions);
+  overlay.append(backdrop, panel);
+
+  function prefersReducedMotion(): boolean {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function clearSpinTimer(): void {
+    if (spinTimer != null) {
+      clearTimeout(spinTimer);
+      spinTimer = null;
+    }
+  }
+
+  function setBusy(busy: boolean): void {
+    spinning = busy;
+    viewBtn.disabled = busy;
+    redrawBtn.disabled = busy;
+    backdrop.disabled = busy;
+  }
+
+  function showWinner(link: LinkRow): void {
+    current = link;
+    categoryEl.classList.remove("links-draw-sheet__category--pending");
+    categoryEl.textContent = categoryLabel(resolveCategory(link));
+    setBusy(false);
+  }
+
+  function renderReelInstant(label: string): void {
+    reel.replaceChildren();
+    reel.style.transition = "none";
+    reel.style.transform = "translateY(0)";
+    const item = document.createElement("div");
+    item.className =
+      "links-draw-sheet__reel-item links-draw-sheet__reel-item--winner";
+    item.textContent = label;
+    reel.appendChild(item);
+  }
+
+  function runReel(link: LinkRow, pool: readonly LinkRow[]): void {
+    clearSpinTimer();
+    const labels = buildSpinLabels(
+      pool.map((l) => l.label),
+      link.label,
+      Math.min(14, Math.max(8, pool.length + 6))
+    );
+
+    reel.replaceChildren();
+    reel.style.transition = "none";
+    reel.style.transform = "translateY(0)";
+    // Keep tag slot size stable while spinning (no layout jump on redraw).
+    categoryEl.classList.add("links-draw-sheet__category--pending");
+    categoryEl.textContent = "Sorteando…";
+
+    for (let i = 0; i < labels.length; i++) {
+      const item = document.createElement("div");
+      item.className = "links-draw-sheet__reel-item";
+      if (i === labels.length - 1) {
+        item.classList.add("links-draw-sheet__reel-item--winner");
+      }
+      item.textContent = labels[i] ?? "";
+      reel.appendChild(item);
+    }
+
+    const targetY = -((labels.length - 1) * REEL_ITEM_PX);
+    setBusy(true);
+
+    void reel.offsetHeight;
+    reel.style.transition = `transform ${REEL_SPIN_MS}ms cubic-bezier(0.12, 0.75, 0.12, 1)`;
+    reel.style.transform = `translateY(${targetY}px)`;
+
+    const finish = (): void => {
+      clearSpinTimer();
+      reel.removeEventListener("transitionend", finish);
+      showWinner(link);
+    };
+    reel.addEventListener("transitionend", finish);
+    spinTimer = setTimeout(finish, REEL_SPIN_MS + 80);
+  }
+
+  function close(): void {
+    if (spinning) return;
+    clearSpinTimer();
+    overlay.hidden = true;
+    current = null;
+    syncBodyScreenLock();
+  }
+
+  function open(link: LinkRow, pool: readonly LinkRow[] = [link]): void {
+    current = link;
+    emptyEl.hidden = true;
+    resultBlock.hidden = false;
+    viewBtn.hidden = false;
+    redrawBtn.hidden = false;
+    overlay.hidden = false;
+    syncBodyScreenLock();
+
+    if (prefersReducedMotion() || pool.length <= 1) {
+      renderReelInstant(link.label);
+      showWinner(link);
+      return;
+    }
+    runReel(link, pool);
+  }
+
+  function openEmpty(message: string): void {
+    clearSpinTimer();
+    current = null;
+    setBusy(false);
+    resultBlock.hidden = true;
+    viewBtn.hidden = true;
+    emptyEl.hidden = false;
+    emptyEl.textContent = message;
+    redrawBtn.hidden = false;
+    overlay.hidden = false;
+    syncBodyScreenLock();
+  }
+
+  viewBtn.addEventListener("click", () => {
+    if (!current || spinning) return;
+    const link = current;
+    close();
+    handlers.onView(link);
+  });
+  redrawBtn.addEventListener("click", () => {
+    if (spinning) return;
+    handlers.onRedraw();
+  });
+  backdrop.addEventListener("click", close);
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      close();
+    }
+  });
+
+  return { element: overlay, open, openEmpty, close };
+}
+
+// ---------------------------------------------------------------------------
+// Delete confirmation bottom sheet
+// ---------------------------------------------------------------------------
+
+export type DeleteSheetHandle = {
+  element: HTMLElement;
+  open: (label: string, onConfirm: () => void | Promise<void>) => void;
+  close: () => void;
+};
+
+export function createDeleteConfirmSheet(): DeleteSheetHandle {
+  let onConfirmCb: (() => void | Promise<void>) | null = null;
+  let busy = false;
+
+  const { overlay, dialog, backBtn } = createScreenChrome(
+    "links-delete-title",
+    "Excluir experiência?",
+    "alertdialog"
+  );
+
+  const body = document.createElement("p");
+  body.className = "links-admin-modal__body";
+  body.id = "links-delete-body";
+
+  const actions = document.createElement("div");
+  actions.className = "links-admin-form__actions links-admin-form__actions--sticky";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "links-admin-button links-admin-button--ghost";
+  cancelBtn.textContent = "Cancelar";
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.type = "button";
+  confirmBtn.className = "links-admin-button links-admin-button--danger links-admin-button--block";
+  confirmBtn.textContent = "Excluir";
+
+  actions.append(cancelBtn, confirmBtn);
+  dialog.append(body, actions);
+
+  function close(): void {
+    overlay.hidden = true;
+    onConfirmCb = null;
+    busy = false;
+    confirmBtn.disabled = false;
+    cancelBtn.disabled = false;
+    backBtn.disabled = false;
+    setScreenBusy(dialog, false);
+    syncBodyScreenLock();
+  }
+
+  function open(label: string, onConfirm: () => void | Promise<void>): void {
+    body.textContent = `Excluir "${label}"? Esta ação não pode ser desfeita.`;
+    onConfirmCb = onConfirm;
+    overlay.hidden = false;
+    syncBodyScreenLock();
+    confirmBtn.focus();
+  }
+
+  cancelBtn.addEventListener("click", close);
+  backBtn.addEventListener("click", close);
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      close();
+    }
+  });
+  confirmBtn.addEventListener("click", () => {
+    if (!onConfirmCb || busy) return;
+    busy = true;
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    backBtn.disabled = true;
+    setScreenBusy(dialog, true);
+    void Promise.resolve(onConfirmCb()).finally(() => {
+      close();
+    });
+  });
+
+  return { element: overlay, open, close };
 }
 
 // ---------------------------------------------------------------------------
@@ -285,61 +1104,31 @@ export function createLinkFormModal(
   let previouslyFocused: HTMLElement | null = null;
   let editingId: string | null = null;
 
-  const overlay = document.createElement("div");
-  overlay.className = "links-admin-modal";
-  overlay.hidden = true;
-
-  const dialog = document.createElement("div");
-  dialog.className = "links-admin-modal__dialog";
-  dialog.setAttribute("role", "dialog");
-  dialog.setAttribute("aria-modal", "true");
-  dialog.setAttribute("aria-labelledby", "links-form-title");
-
-  const title = document.createElement("h2");
-  title.className = "links-admin-modal__title";
-  title.id = "links-form-title";
-  title.textContent = "Novo link";
-  dialog.appendChild(title);
+  const { overlay, dialog, title, backBtn } = createScreenChrome(
+    "links-form-title",
+    "Nova experiência",
+    "dialog"
+  );
 
   const form = document.createElement("form");
-  form.className = "links-admin-form";
+  form.className = "links-admin-form links-admin-form--screen";
   form.noValidate = true;
 
-  const urlField = labelledInput("links-form-url", "URL", "url");
+  const urlField = labelledInput("links-form-url", "Link do post ou lugar", "url");
   urlField.input.required = true;
   urlField.input.placeholder = "https://...";
+  urlField.input.setAttribute("inputmode", "url");
 
-  const labelField = labelledInput("links-form-label", "Título", "text");
+  const labelField = labelledInput("links-form-label", "Nome do lugar ou experiência", "text");
   labelField.input.required = true;
   labelField.input.maxLength = 200;
 
-  const descField = labelledInput("links-form-desc", "Descrição (opcional)", "text");
-  descField.input.maxLength = 500;
-
-  // Icon preset select.
-  const iconWrapper = document.createElement("div");
-  iconWrapper.className = "links-admin-form__field";
-  const iconLabel = document.createElement("label");
-  iconLabel.className = "links-admin-form__label";
-  iconLabel.htmlFor = "links-form-icon";
-  iconLabel.textContent = "Ícone";
-  const iconSelect = document.createElement("select");
-  iconSelect.className = "links-admin-form__control";
-  iconSelect.id = "links-form-icon";
-  for (const preset of ICON_PRESET_OPTIONS) {
-    const opt = document.createElement("option");
-    opt.value = preset;
-    opt.textContent = preset;
-    iconSelect.appendChild(opt);
-  }
-  iconWrapper.append(iconLabel, iconSelect);
-
-  const iconUrlField = labelledInput(
-    "links-form-icon-url",
-    "Ícone personalizado (URL https, opcional)",
-    "url"
+  const descField = labelledInput(
+    "links-form-desc",
+    "Nota (opcional) — por que salvar, região, época…",
+    "text"
   );
-  iconUrlField.input.placeholder = "https://...";
+  descField.input.maxLength = 500;
 
   const error = document.createElement("p");
   error.className = "links-admin-form__error";
@@ -347,30 +1136,22 @@ export function createLinkFormModal(
   error.hidden = true;
 
   const actions = document.createElement("div");
-  actions.className = "links-admin-form__actions";
-
-  const cancelBtn = document.createElement("button");
-  cancelBtn.type = "button";
-  cancelBtn.className = "links-admin-button links-admin-button--ghost";
-  cancelBtn.textContent = "Cancelar";
+  actions.className = "links-admin-form__actions links-admin-form__actions--sticky";
 
   const submitBtn = document.createElement("button");
   submitBtn.type = "submit";
-  submitBtn.className = "links-admin-button links-admin-button--primary";
+  submitBtn.className = "links-admin-button links-admin-button--primary links-admin-button--block";
   submitBtn.textContent = "Salvar";
 
-  actions.append(cancelBtn, submitBtn);
+  actions.append(submitBtn);
   form.append(
     urlField.wrapper,
     labelField.wrapper,
     descField.wrapper,
-    iconWrapper,
-    iconUrlField.wrapper,
     error,
     actions
   );
   dialog.appendChild(form);
-  overlay.appendChild(dialog);
 
   function clearError(): void {
     error.hidden = true;
@@ -382,6 +1163,7 @@ export function createLinkFormModal(
     clearError();
     form.reset();
     editingId = null;
+    syncBodyScreenLock();
     if (previouslyFocused) {
       previouslyFocused.focus();
       previouslyFocused = null;
@@ -391,25 +1173,24 @@ export function createLinkFormModal(
   function afterOpen(): void {
     previouslyFocused = document.activeElement as HTMLElement | null;
     overlay.hidden = false;
+    syncBodyScreenLock();
     clearError();
-    urlField.input.focus();
+    // Do not autofocus fields — on mobile that pops the keyboard immediately.
   }
 
   function openCreate(): void {
     editingId = null;
-    title.textContent = "Novo link";
+    title.textContent = "Nova experiência";
     form.reset();
     afterOpen();
   }
 
   function openEdit(link: LinkRow): void {
     editingId = link.id;
-    title.textContent = "Editar link";
+    title.textContent = "Editar experiência";
     urlField.input.value = link.url;
     labelField.input.value = link.label;
     descField.input.value = link.description ?? "";
-    iconSelect.value = link.icon_preset ?? ICON_PRESET_OPTIONS[0];
-    iconUrlField.input.value = link.icon_url ?? "";
     afterOpen();
   }
 
@@ -420,17 +1201,12 @@ export function createLinkFormModal(
         url: urlField.input.value.trim(),
         label: labelField.input.value.trim(),
         description: descField.input.value.trim(),
-        icon_preset: iconSelect.value,
-        icon_url: iconUrlField.input.value.trim(),
       },
       editingId
     );
   });
 
-  cancelBtn.addEventListener("click", close);
-  overlay.addEventListener("mousedown", (e) => {
-    if (e.target === overlay) close();
-  });
+  backBtn.addEventListener("click", close);
   overlay.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.stopPropagation();
@@ -449,39 +1225,159 @@ export function createLinkFormModal(
     },
     setBusy(busy: boolean) {
       submitBtn.disabled = busy;
-      cancelBtn.disabled = busy;
+      backBtn.disabled = busy;
+      setScreenBusy(dialog, busy);
     },
   };
 }
 
 // ---------------------------------------------------------------------------
-// Form -> repo payload helpers. Custom https icon_url takes precedence over
-// the preset. Returns validation errors as thrown Error (client-side guard;
-// the repo re-validates on its side too).
+// View experience (read-only) → Editar opens the form.
+// ---------------------------------------------------------------------------
+
+export type ViewModalHandle = {
+  element: HTMLElement;
+  open: (link: LinkRow) => void;
+  close: () => void;
+};
+
+export function createViewModal(
+  onEdit: (link: LinkRow) => void
+): ViewModalHandle {
+  let current: LinkRow | null = null;
+
+  const { overlay, dialog, title, backBtn } = createScreenChrome(
+    "links-view-title",
+    "Experiência",
+    "dialog"
+  );
+
+  const body = document.createElement("div");
+  body.className = "links-admin-view links-admin-modal__body";
+
+  const nameLabel = document.createElement("p");
+  nameLabel.className = "links-admin-view__label";
+  nameLabel.textContent = "Nome";
+
+  const nameValue = document.createElement("p");
+  nameValue.className = "links-admin-view__value";
+
+  const categoryLabelEl = document.createElement("p");
+  categoryLabelEl.className = "links-admin-view__label";
+  categoryLabelEl.textContent = "Categoria";
+
+  const categoryValue = document.createElement("p");
+  categoryValue.className = "links-admin-view__value";
+
+  const noteBlock = document.createElement("div");
+  noteBlock.className = "links-admin-view__block";
+
+  const noteLabel = document.createElement("p");
+  noteLabel.className = "links-admin-view__label";
+  noteLabel.textContent = "Nota";
+
+  const noteValue = document.createElement("p");
+  noteValue.className = "links-admin-view__value";
+
+  noteBlock.append(noteLabel, noteValue);
+
+  const linkLabel = document.createElement("p");
+  linkLabel.className = "links-admin-view__label";
+  linkLabel.textContent = "Link";
+
+  const linkAnchor = document.createElement("a");
+  linkAnchor.className = "links-admin-view__link";
+  linkAnchor.rel = "noopener noreferrer";
+  linkAnchor.target = "_blank";
+
+  body.append(
+    nameLabel,
+    nameValue,
+    categoryLabelEl,
+    categoryValue,
+    noteBlock,
+    linkLabel,
+    linkAnchor
+  );
+
+  const actions = document.createElement("div");
+  actions.className = "links-admin-form__actions links-admin-form__actions--sticky";
+
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.className = "links-admin-button links-admin-button--primary links-admin-button--block";
+  editBtn.textContent = "Editar";
+
+  actions.append(editBtn);
+  dialog.append(body, actions);
+
+  function close(): void {
+    overlay.hidden = true;
+    current = null;
+    syncBodyScreenLock();
+  }
+
+  function open(link: LinkRow): void {
+    current = link;
+    title.textContent = link.label || "Experiência";
+    nameValue.textContent = link.label;
+    categoryValue.textContent = categoryLabel(resolveCategory(link));
+    if (link.description && link.description.length > 0) {
+      noteBlock.hidden = false;
+      noteValue.textContent = link.description;
+    } else {
+      noteBlock.hidden = true;
+      noteValue.textContent = "";
+    }
+    linkAnchor.href = link.url;
+    linkAnchor.textContent = link.url;
+    overlay.hidden = false;
+    syncBodyScreenLock();
+  }
+
+  editBtn.addEventListener("click", () => {
+    if (!current) return;
+    const link = current;
+    close();
+    onEdit(link);
+  });
+  backBtn.addEventListener("click", close);
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      close();
+    }
+  });
+
+  return { element: overlay, open, close };
+}
+
+// ---------------------------------------------------------------------------
+// Form -> repo payload helpers. Icon preset is inferred from the URL.
 // ---------------------------------------------------------------------------
 
 export function toCreateInput(values: LinkFormValues, sortOrder: number): CreateLinkInput {
   assertFormValues(values);
-  const iconUrl = values.icon_url.length > 0 ? values.icon_url : null;
   return {
     url: values.url,
     label: values.label,
     description: values.description.length > 0 ? values.description : null,
-    icon_preset: iconUrl ? null : values.icon_preset,
-    icon_url: iconUrl,
+    icon_preset: inferIconPreset(values.url),
+    icon_url: null,
+    category: inferCategory(values),
     sort_order: sortOrder,
   };
 }
 
 export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
   assertFormValues(values);
-  const iconUrl = values.icon_url.length > 0 ? values.icon_url : null;
   return {
     url: values.url,
     label: values.label,
     description: values.description.length > 0 ? values.description : null,
-    icon_preset: iconUrl ? null : values.icon_preset,
-    icon_url: iconUrl,
+    icon_preset: inferIconPreset(values.url),
+    icon_url: null,
+    category: inferCategory(values),
   };
 }
 
@@ -491,9 +1387,6 @@ function assertFormValues(values: LinkFormValues): void {
   }
   if (values.label.length < 1) {
     throw new Error("O título é obrigatório.");
-  }
-  if (values.icon_url.length > 0 && !isHttpsUrl(values.icon_url)) {
-    throw new Error("O ícone personalizado deve ser uma URL https válida.");
   }
 }
 

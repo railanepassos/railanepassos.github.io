@@ -2,12 +2,19 @@ import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig(({ mode }) => {
-  // Load `.env`, `.env.local`, `.env.[mode]`, etc. Process env wins (CI secrets).
+  // If the var is set in the process environment (even to ""), use it — so CI
+  // secrets and intentional empty builds win. Otherwise load from `.env`.
   const fileEnv = loadEnv(mode, process.cwd(), "");
-  const supabaseUrl =
-    process.env.VITE_SUPABASE_URL ?? fileEnv.VITE_SUPABASE_URL ?? "";
-  const supabaseAnonKey =
-    process.env.VITE_SUPABASE_ANON_KEY ?? fileEnv.VITE_SUPABASE_ANON_KEY ?? "";
+  const supabaseUrl = (
+    "VITE_SUPABASE_URL" in process.env
+      ? process.env.VITE_SUPABASE_URL
+      : fileEnv.VITE_SUPABASE_URL
+  )?.trim() ?? "";
+  const supabaseAnonKey = (
+    "VITE_SUPABASE_ANON_KEY" in process.env
+      ? process.env.VITE_SUPABASE_ANON_KEY
+      : fileEnv.VITE_SUPABASE_ANON_KEY
+  )?.trim() ?? "";
 
   return {
     root: ".",

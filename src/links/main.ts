@@ -5,24 +5,35 @@ import { createAuth, type Auth } from "./auth";
 import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
 import { applyReorder } from "./reorder";
 import { FALLBACK_LINKS, renderPublicList } from "./render";
+import { renderLinksSkeleton, renderToolbarSkeleton } from "./skeleton";
 import {
   createLoginButton,
   createLoginModal,
   createToolbar,
   createLinkFormModal,
+  createDeleteConfirmSheet,
+  createViewModal,
+  createCategoryFilterSheet,
+  createDrawResultSheet,
   renderAdminCard,
   toCreateInput,
   toUpdatePatch,
   type LoginModalHandle,
   type LinkFormHandle,
   type LinkFormValues,
+  type DeleteSheetHandle,
+  type ViewModalHandle,
+  type CategoryFilterHandle,
+  type DrawSheetHandle,
 } from "./admin-ui";
+import { filterLinksByCategory, type Category } from "./category";
+import { pickRandomItem } from "./pick-random";
 
 /**
  * Bootstrap for the dynamic links page.
  *
  * States:
- *   Carregando  -> #links-list shows a neutral loading message.
+ *   Carregando  -> skeleton na toolbar + lista (#links-admin-root / #links-list).
  *   Público     -> #links-list shows public cards; "Entrar" button in
  *                  #links-admin-root (only when Supabase is configured).
  *   Autenticado -> toolbar in #links-admin-root + admin cards in #links-list.
@@ -33,7 +44,6 @@ import {
  * project exists.
  */
 
-const LOADING_MESSAGE = "Carregando...";
 const GENERIC_ERROR = "Algo deu errado. Tente novamente.";
 
 type Els = {
@@ -48,12 +58,9 @@ function getEls(): Els | null {
   return { adminRoot, list };
 }
 
-function renderLoading(list: HTMLElement): void {
-  list.replaceChildren();
-  const msg = document.createElement("p");
-  msg.className = "links-status";
-  msg.textContent = LOADING_MESSAGE;
-  list.appendChild(msg);
+function renderLoading(els: Els): void {
+  renderToolbarSkeleton(els.adminRoot);
+  renderLinksSkeleton(els.list);
 }
 
 function renderMessage(container: HTMLElement, text: string): void {
@@ -91,6 +98,7 @@ function bootDynamic(
   let authenticated = false;
   let dragId: string | null = null;
   let notice = warning ?? null;
+  let categoryFilter: Category[] = [];
 
   // --- modals (created once, appended to <body>) ---
   const loginModal: LoginModalHandle = createLoginModal(async (email, password) => {
@@ -121,7 +129,44 @@ function bootDynamic(
     }
   });
 
-  document.body.append(loginModal.element, formModal.element);
+  const deleteSheet: DeleteSheetHandle = createDeleteConfirmSheet();
+  const viewModal: ViewModalHandle = createViewModal((l) => formModal.openEdit(l));
+  const filterSheet: CategoryFilterHandle = createCategoryFilterSheet((cats) => {
+    categoryFilter = cats;
+    render();
+  });
+
+  const drawSheet: DrawSheetHandle = createDrawResultSheet({
+    onView: (l) => viewModal.open(l),
+    onRedraw: () => runDraw(),
+  });
+
+  document.body.append(
+    loginModal.element,
+    formModal.element,
+    deleteSheet.element,
+    viewModal.element,
+    filterSheet.element,
+    drawSheet.element
+  );
+
+  function runDraw(): void {
+    const pool = filterLinksByCategory(links, categoryFilter);
+    if (pool.length === 0) {
+      drawSheet.openEmpty(
+        categoryFilter.length > 0
+          ? "Nenhuma experiência nas categorias filtradas para sortear."
+          : "Cadastre ao menos uma experiência para sortear."
+      );
+      return;
+    }
+    const picked = pickRandomItem(pool);
+    if (!picked) {
+      drawSheet.openEmpty("Não foi possível sortear. Tente de novo.");
+      return;
+    }
+    drawSheet.open(picked, pool);
+  }
 
   // --- persistence helpers ---
   async function submitCreate(values: LinkFormValues): Promise<void> {
@@ -139,14 +184,15 @@ function bootDynamic(
   }
 
   async function deleteLink(link: LinkRow): Promise<void> {
-    if (!window.confirm(`Excluir "${link.label}"?`)) return;
-    try {
-      await repo.deleteLink(link.id);
-      links = sortLinks(links.filter((l) => l.id !== link.id));
-      renderList();
-    } catch (err) {
-      await reloadFromServer(messageOf(err, GENERIC_ERROR));
-    }
+    deleteSheet.open(link.label, async () => {
+      try {
+        await repo.deleteLink(link.id);
+        links = sortLinks(links.filter((l) => l.id !== link.id));
+        renderList();
+      } catch (err) {
+        await reloadFromServer(messageOf(err, GENERIC_ERROR));
+      }
+    });
   }
 
   async function move(link: LinkRow, direction: -1 | 1): Promise<void> {
@@ -193,7 +239,10 @@ function bootDynamic(
             } catch (err) {
               renderMessage(els.list, messageOf(err, "Não foi possível sair. Tente novamente."));
             }
-          }
+          },
+          () => filterSheet.open(categoryFilter),
+          () => runDraw(),
+          categoryFilter
         )
       );
     } else {
@@ -206,27 +255,40 @@ function bootDynamic(
     if (!authenticated) {
       renderPublicList(els.list, links);
     } else {
-      links.forEach((link, index) => {
-        els.list.appendChild(
-          renderAdminCard(link, index, links.length, {
-            onEdit: (l) => formModal.openEdit(l),
-            onDelete: (l) => void deleteLink(l),
-            onMoveUp: (l) => void move(l, -1),
-            onMoveDown: (l) => void move(l, 1),
-            onDragStart: (l, ev) => {
-              dragId = l.id;
-              ev.dataTransfer?.setData("text/plain", l.id);
-            },
-            onDrop: (l) => {
-              if (!dragId || dragId === l.id) return;
-              const targetIndex = links.findIndex((x) => x.id === l.id);
-              const moved = dragId;
-              dragId = null;
-              if (targetIndex !== -1) void reorderTo(moved, targetIndex);
-            },
-          })
-        );
-      });
+      const visible = filterLinksByCategory(links, categoryFilter);
+      if (visible.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "links-status";
+        empty.textContent =
+          categoryFilter.length > 0
+            ? "Nenhuma experiência nas categorias selecionadas."
+            : "Nenhuma experiência ainda.";
+        els.list.appendChild(empty);
+      } else {
+        visible.forEach((link) => {
+          const fullIndex = links.findIndex((l) => l.id === link.id);
+          els.list.appendChild(
+            renderAdminCard(link, fullIndex, links.length, {
+              onView: (l) => viewModal.open(l),
+              onEdit: (l) => formModal.openEdit(l),
+              onDelete: (l) => void deleteLink(l),
+              onMoveUp: (l) => void move(l, -1),
+              onMoveDown: (l) => void move(l, 1),
+              onDragStart: (l, ev) => {
+                dragId = l.id;
+                ev.dataTransfer?.setData("text/plain", l.id);
+              },
+              onDrop: (l) => {
+                if (!dragId || dragId === l.id) return;
+                const targetIndex = links.findIndex((x) => x.id === l.id);
+                const moved = dragId;
+                dragId = null;
+                if (targetIndex !== -1) void reorderTo(moved, targetIndex);
+              },
+            })
+          );
+        });
+      }
     }
     if (notice) {
       renderMessage(els.list, notice);
@@ -268,7 +330,7 @@ async function boot(): Promise<void> {
   const els = getEls();
   if (!els) return;
 
-  renderLoading(els.list);
+  renderLoading(els);
 
   const config = getSupabaseConfig();
   const hasUrl = config.url.trim().length > 0;
