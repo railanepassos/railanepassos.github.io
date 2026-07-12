@@ -1268,6 +1268,23 @@ body.links-screen-open {
   gap: 18px;
 }
 
+/* Schedule sheet: tighter stack; sticky footer owns the bottom inset. */
+.links-admin-form--schedule {
+  padding: 16px 16px 0;
+  gap: 12px;
+}
+
+.links-admin-form--schedule .links-admin-form__hint {
+  margin-bottom: 4px;
+}
+
+.links-admin-form--schedule .links-admin-form__actions--sticky {
+  margin-top: 8px;
+  padding: 12px 0 max(10px, env(safe-area-inset-bottom, 0px));
+  gap: 8px;
+  background: var(--surface);
+}
+
 .links-admin-form__actions--sticky {
   position: sticky;
   bottom: 0;
@@ -1359,6 +1376,10 @@ body.links-screen-open {
     padding: 16px 24px 24px;
   }
 
+  .links-admin-form--schedule {
+    padding: 16px 24px 8px;
+  }
+
   .links-admin-form__actions--sticky {
     position: static;
     background: none;
@@ -1366,6 +1387,13 @@ body.links-screen-open {
     flex-direction: row;
     justify-content: flex-end;
     padding: 16px 24px 24px;
+  }
+
+  .links-admin-form--schedule .links-admin-form__actions--sticky {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 8px 0 16px;
+    gap: 8px;
   }
 
   .links-admin-button--block {
