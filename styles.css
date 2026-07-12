@@ -434,6 +434,218 @@ body.page-sub {
   opacity: 0.85;
 }
 
+/* Links admin (dynamic subpage) */
+.links-status {
+  margin: 0;
+  padding: 12px 4px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.links-status--error {
+  color: var(--green-dark);
+}
+
+.links-login-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.links-login-button:hover {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.links-admin-toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.links-admin-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.links-admin-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.links-admin-button--primary {
+  background: var(--green);
+  color: #fff;
+}
+
+.links-admin-button--primary:hover {
+  background: var(--green-dark);
+}
+
+.links-admin-button--ghost {
+  background: var(--surface);
+  color: var(--navy);
+  border-color: var(--navy);
+}
+
+.links-admin-button--ghost:hover {
+  background: var(--bg);
+}
+
+/* Admin card controls */
+.link-card--admin {
+  cursor: default;
+}
+
+.link-card--admin:hover {
+  transform: none;
+}
+
+.link-card__drag-handle {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+}
+
+.link-card__actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.link-card__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--navy-mid);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.link-card__action:hover:not(:disabled) {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.link-card__action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Modal (login + link form) */
+.links-admin-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 39, 68, 0.55);
+}
+
+.links-admin-modal[hidden] {
+  display: none;
+}
+
+.links-admin-modal__dialog {
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 28px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.links-admin-modal__title {
+  margin: 0 0 20px;
+  color: var(--navy);
+  font-size: 1.25rem;
+}
+
+.links-admin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.links-admin-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.links-admin-form__label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.links-admin-form__control {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.links-admin-form__control:focus {
+  outline: 2px solid var(--green);
+  outline-offset: 1px;
+}
+
+.links-admin-form__error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--green-light);
+  color: var(--green-dark);
+  font-size: 0.85rem;
+}
+
+.links-admin-form__error[hidden] {
+  display: none;
+}
+
+.links-admin-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 4px;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   .links-hub {
