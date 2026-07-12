@@ -17,11 +17,13 @@ export function createAuth(client: SupabaseClient): Auth {
     },
 
     async signOut(): Promise<void> {
-      await client.auth.signOut();
+      const { error } = await client.auth.signOut();
+      if (error) throw new Error(error.message);
     },
 
     async getSession(): Promise<Session | null> {
-      const { data } = await client.auth.getSession();
+      const { data, error } = await client.auth.getSession();
+      if (error) throw new Error(error.message);
       return data.session;
     },
 

@@ -58,6 +58,14 @@ describe("createAuth", () => {
       await auth.signOut();
       expect(client.auth.signOut).toHaveBeenCalledOnce();
     });
+
+    it("throws when supabase returns an error", async () => {
+      const client = makeFakeClient({
+        signOut: vi.fn().mockResolvedValue({ error: { message: "Sign out failed" } }),
+      });
+      const auth = createAuth(client);
+      await expect(auth.signOut()).rejects.toThrow("Sign out failed");
+    });
   });
 
   describe("getSession", () => {
@@ -79,6 +87,17 @@ describe("createAuth", () => {
       const auth = createAuth(client);
       const session = await auth.getSession();
       expect(session).toBe(fakeSession);
+    });
+
+    it("throws when supabase returns an error", async () => {
+      const client = makeFakeClient({
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: null },
+          error: { message: "Session fetch failed" },
+        }),
+      });
+      const auth = createAuth(client);
+      await expect(auth.getSession()).rejects.toThrow("Session fetch failed");
     });
   });
 

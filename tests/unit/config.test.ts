@@ -1,14 +1,7 @@
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import { getSupabaseConfig, isSupabaseConfigured } from "../../src/links/config";
 
 describe("getSupabaseConfig", () => {
-  const originalEnv = { ...import.meta.env };
-
-  afterEach(() => {
-    // Restore env after each test (vitest uses import.meta.env via vite define)
-    // Since we can't directly mutate import.meta.env in tests, we test defaults here
-  });
-
   it("returns object with url and anonKey keys", () => {
     const config = getSupabaseConfig();
     expect(config).toHaveProperty("url");

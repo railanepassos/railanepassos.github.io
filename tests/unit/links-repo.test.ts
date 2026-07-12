@@ -307,6 +307,35 @@ describe("saveOrder", () => {
     await expect(repo.saveOrder(items)).rejects.toThrow("Phase 1 error");
   });
 
+  it("throws on first error in phase 2", async () => {
+    const items = [
+      { id: "a", sort_order: 0 },
+      { id: "b", sort_order: 1 },
+    ];
+    // Total calls: 2 phase-1 (negative) + 2 phase-2 (final) = 4
+    // Make the 3rd call (first phase-2 update) fail
+    let callIndex = 0;
+    const fromMock = vi.fn(() => {
+      callIndex++;
+      const idx = callIndex;
+      return {
+        update: vi.fn(() => ({
+          eq: vi.fn(() =>
+            Promise.resolve({
+              data: null,
+              error: idx === 3 ? { message: "Phase 2 error" } : null,
+            })
+          ),
+        })),
+      };
+    });
+
+    const client = { from: fromMock } as unknown as SupabaseClient;
+    const repo = createLinksRepo(client);
+
+    await expect(repo.saveOrder(items)).rejects.toThrow("Phase 2 error");
+  });
+
   it("resolves immediately with empty items array", async () => {
     const client = makeFakeClient();
     const repo = createLinksRepo(client);
