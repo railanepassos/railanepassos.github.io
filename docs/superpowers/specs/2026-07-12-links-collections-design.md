@@ -94,9 +94,10 @@ create policy "link_collections_all_auth" on public.link_collections
   editar/agendar/concluir/swipe-delete da experiência sem trabalho extra.
 - **ViewModal**: novo botão "Collections" (block, ghost) ao lado de
   Agendar/Concluir/Editar. Abre o picker sheet.
-- **Picker sheet**: lista todas as collections com toggle (+/✓); tocar liga/desliga
-  a experiência atual naquela pasta na hora (otimista). "Nova collection" no topo
-  do picker cria e já marca a experiência atual nela.
+- **Picker sheet**: lista todas as collections com toggle (+/✓); tocar desabilita
+  a linha, chama o repo e só então liga/desliga (evita flicker e mantém o estado
+  sempre consistente com o servidor, sem lógica de rollback). "Nova collection"
+  no topo do picker cria e já marca a experiência atual nela.
 - **Remover de uma collection** só acontece pelo picker (desmarcar o ✓) — não há
   swipe/remover duplicado dentro da tela de detalhe.
 - Estados vazios: lista de collections vazia → "Nenhuma collection ainda. Crie a
@@ -105,9 +106,10 @@ create policy "link_collections_all_auth" on public.link_collections
 ## Tratamento de erro
 
 Mesmo padrão do resto do app: falha na chamada → mensagem genérica inline
-(`GENERIC_ERROR`), sem crash. No picker, toggle é otimista — se a chamada falhar,
-desmarca de volta e mostra erro no sheet. Criar/renomear/excluir collection segue o
-padrão de `setBusy`/`setError` já usado em `formModal`.
+(`GENERIC_ERROR`), sem crash. No picker, o toggle só muda de estado depois que a
+chamada resolve — se falhar, mostra erro no sheet e a linha simplesmente volta a
+ficar habilitada, sem precisar desfazer nada. Criar/renomear/excluir collection
+segue o padrão de `setBusy`/`setError` já usado em `formModal`.
 
 ## Testes
 
