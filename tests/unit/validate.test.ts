@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { isHttpsUrl, deriveLabelFromUrl } from "../../src/links/validate";
+import { isHttpsUrl, isOptionalHttpsUrl, deriveLabelFromUrl } from "../../src/links/validate";
+
+describe("isOptionalHttpsUrl", () => {
+  it("accepts empty values and https URLs", () => {
+    expect(isOptionalHttpsUrl(null)).toBe(true);
+    expect(isOptionalHttpsUrl(undefined)).toBe(true);
+    expect(isOptionalHttpsUrl("")).toBe(true);
+    expect(isOptionalHttpsUrl("https://example.com/p")).toBe(true);
+  });
+
+  it("rejects non-https values", () => {
+    expect(isOptionalHttpsUrl("http://example.com")).toBe(false);
+    expect(isOptionalHttpsUrl("javascript:alert(1)")).toBe(false);
+    expect(isOptionalHttpsUrl("not a url")).toBe(false);
+  });
+});
 
 describe("isHttpsUrl", () => {
   it("accepts https URLs", () => {

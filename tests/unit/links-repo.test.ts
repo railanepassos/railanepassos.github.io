@@ -243,3 +243,57 @@ describe("deleteLink", () => {
     expect(builder.eq).toHaveBeenCalledWith("id", "del-id");
   });
 });
+
+// ─── Phase 2 optional fields ─────────────────────────────────────────────────
+
+describe("Phase 2 fields", () => {
+  const base = { url: "https://example.com", label: "Example", sort_order: 0 };
+
+  it("normalizes missing new columns to null on read", async () => {
+    const client = makeFakeClient({
+      links: { data: [{ id: "1", url: "https://example.com", label: "A" }], error: null },
+    });
+    const [item] = await createLinksRepo(client).listLinks();
+    expect(item.cost_text).toBeNull();
+    expect(item.city).toBeNull();
+    expect(item.address).toBeNull();
+    expect(item.source_url).toBeNull();
+    expect(item.tags).toBeNull();
+    expect(item.people).toBeNull();
+  });
+
+  it("keeps new columns that the API returns", async () => {
+    const client = makeFakeClient({
+      links: {
+        data: [{ id: "1", url: "https://example.com", label: "A", cost_text: "R$ 20", city: "Cidade", address: "Rua X, 1" }],
+        error: null,
+      },
+    });
+    const [item] = await createLinksRepo(client).listLinks();
+    expect(item.cost_text).toBe("R$ 20");
+    expect(item.city).toBe("Cidade");
+    expect(item.address).toBe("Rua X, 1");
+  });
+
+  it("sends the new fields on create", async () => {
+    const client = makeFakeClient({ links: { data: { id: "n", ...base }, error: null } });
+    await createLinksRepo(client).createLink({ ...base, cost_text: "grátis", city: "Cidade" });
+    const builder = (client.from as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(builder.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ cost_text: "grátis", city: "Cidade" })
+    );
+  });
+
+  it("rejects over-long cost, city and address", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(repo.createLink({ ...base, cost_text: "x".repeat(201) })).rejects.toThrow(/cost_text/);
+    await expect(repo.createLink({ ...base, city: "x".repeat(121) })).rejects.toThrow(/city/);
+    await expect(repo.updateLink("1", { address: "x".repeat(301) })).rejects.toThrow(/address/);
+  });
+
+  it("rejects a non-https source_url", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(repo.createLink({ ...base, source_url: "http://example.com" })).rejects.toThrow(/source_url/);
+    await expect(repo.updateLink("1", { source_url: "javascript:alert(1)" })).rejects.toThrow(/source_url/);
+  });
+});

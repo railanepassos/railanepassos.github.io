@@ -17,6 +17,8 @@ import { isPanelMode, syncBodyScreenLock } from "./screen-lock";
 import { categoryBackdropSrc } from "./card-theme";
 import { displayTitle, linkDomain } from "./feed";
 import { uiIcon, type IconName } from "./ui-icons";
+import { buildMapUrl } from "./map-url";
+import { MORE_TEXT_FIELDS, emptyMoreTextValues, type MoreTextValues } from "./more-fields";
 
 /**
  * DOM building blocks for the authenticated admin experience:
@@ -207,7 +209,7 @@ function canShare(): boolean {
 // Values collected from the create/edit form.
 // ---------------------------------------------------------------------------
 
-export type LinkFormValues = {
+export type LinkFormValues = MoreTextValues & {
   url: string;
   label: string;
   description: string;
@@ -410,6 +412,9 @@ function cardActionButton(
   return btn;
 }
 
+/** Registry fields surfaced as meta items on the feed card (cost · city). */
+const CARD_META_KEYS: readonly string[] = ["cost_text", "city"];
+
 export function renderAdminCard(
   link: LinkRow,
   cb: AdminCardCallbacks,
@@ -473,6 +478,17 @@ export function renderAdminCard(
     text.textContent = formatScheduleChip(link.scheduled_start, link.scheduled_end);
     when.append(uiIcon("calendar", 15), text);
     meta.appendChild(when);
+  }
+  for (const field of MORE_TEXT_FIELDS) {
+    if (!CARD_META_KEYS.includes(field.key)) continue;
+    const value = link[field.key];
+    if (!value) continue;
+    const item = document.createElement("span");
+    item.className = `feed-card__meta-item feed-card__meta-item--${field.key === "cost_text" ? "cost" : field.key}`;
+    const text = document.createElement("span");
+    text.textContent = value;
+    item.append(uiIcon(field.icon, 15), text);
+    meta.appendChild(item);
   }
   body.append(heading, meta);
 
@@ -939,6 +955,44 @@ export function createLinkFormModal(
   memoryField.input.maxLength = 500;
   const updateMemoryCounter = attachCharCounter(memoryField.wrapper, memoryField.input, 500);
 
+  // "Mais detalhes": collapsed by default; new optional fields are appended
+  // here (driven by MORE_TEXT_FIELDS) so later tickets only add registry entries.
+  const more = document.createElement("details");
+  more.className = "links-admin-form__more";
+  const moreSummary = document.createElement("summary");
+  moreSummary.className = "links-admin-form__more-summary";
+  moreSummary.textContent = "Mais detalhes";
+  const moreBody = document.createElement("div");
+  moreBody.className = "links-admin-form__more-body";
+  more.append(moreSummary, moreBody);
+
+  const moreText = MORE_TEXT_FIELDS.map((field) => {
+    const f = labelledInput(`links-form-${field.key}`, field.formLabel, "text");
+    f.input.maxLength = field.max;
+    if (field.placeholder) f.input.placeholder = field.placeholder;
+    attachCharCounter(f.wrapper, f.input, field.max);
+    moreBody.appendChild(f.wrapper);
+    return { key: field.key, input: f.input };
+  });
+
+  function readMoreText(): MoreTextValues {
+    const out = emptyMoreTextValues();
+    for (const f of moreText) out[f.key] = f.input.value.trim();
+    return out;
+  }
+
+  /** Fill the "Mais detalhes" fields; opens the section when any has content. */
+  function writeMoreText(link: LinkRow | null): void {
+    let any = false;
+    for (const f of moreText) {
+      const value = link?.[f.key] ?? "";
+      f.input.value = value;
+      f.input.dispatchEvent(new Event("input"));
+      if (value) any = true;
+    }
+    more.open = any;
+  }
+
   function syncPreview(): void {
     const category = isCategory(pickedCategory)
       ? pickedCategory
@@ -988,6 +1042,7 @@ export function createLinkFormModal(
     descField.wrapper,
     imageField.wrapper,
     memoryField.wrapper,
+    more,
     error,
     actions
   );
@@ -1002,6 +1057,7 @@ export function createLinkFormModal(
     overlay.hidden = true;
     clearError();
     form.reset();
+    more.open = false;
     editingId = null;
     syncBodyScreenLock();
     if (previouslyFocused) {
@@ -1026,6 +1082,7 @@ export function createLinkFormModal(
       urlField.input.value = prefill.url;
     }
     pickedCategory = "";
+    writeMoreText(null);
     syncCategoryChips();
     syncPreview();
     descField.syncHeight();
@@ -1043,6 +1100,7 @@ export function createLinkFormModal(
     descField.input.value = link.description ?? "";
     imageField.input.value = link.image_url ?? "";
     memoryField.input.value = link.note ?? "";
+    writeMoreText(link);
     pickedCategory = link.category && isCategory(link.category) ? link.category : "";
     syncCategoryChips();
     syncPreview();
@@ -1063,6 +1121,7 @@ export function createLinkFormModal(
         image_url: imageField.input.value.trim(),
         note: memoryField.input.value.trim(),
         category: pickedCategory,
+        ...readMoreText(),
       },
       editingId
     );
@@ -1503,7 +1562,30 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   const scheduleRow = infoRow("calendar", "Agendado");
   const noteRow = infoRow("note", "Nota");
   const memoryRow = infoRow("memory", "Memória");
-  info.append(scheduleRow.row, noteRow.row, memoryRow.row, linkRow.row);
+  info.append(scheduleRow.row, noteRow.row, memoryRow.row);
+
+  // Registry-driven rows (cost, city, address, ...), each hidden when empty.
+  // The map button sits right under them and is only shown when there is
+  // something to search for.
+  const moreRows = MORE_TEXT_FIELDS.map((field) => {
+    const r = infoRow(field.icon, field.term);
+    r.row.dataset.field = field.key;
+    info.appendChild(r.row);
+    return { field, ...r };
+  });
+  const mapLink = document.createElement("a");
+  mapLink.className = "links-detail__map";
+  mapLink.dataset.action = "open-map";
+  mapLink.rel = "noopener noreferrer";
+  mapLink.target = "_blank";
+  const mapText = document.createElement("span");
+  mapText.textContent = "Abrir no mapa";
+  mapLink.append(uiIcon("pin", 16), mapText);
+  const mapWrap = document.createElement("div");
+  mapWrap.className = "links-detail__row links-detail__row--action";
+  mapWrap.dataset.field = "map";
+  mapWrap.appendChild(mapLink);
+  info.append(mapWrap, linkRow.row);
 
   body.append(chips, title, info);
 
@@ -1582,6 +1664,16 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     noteRow.value.textContent = link.description ?? "";
     memoryRow.row.hidden = !link.note;
     memoryRow.value.textContent = link.note ?? "";
+    for (const r of moreRows) {
+      const value = link[r.field.key] ?? "";
+      r.row.hidden = !value;
+      r.value.textContent = value;
+    }
+    const mapUrl = buildMapUrl(link.address, link.city);
+    mapWrap.hidden = mapUrl === null;
+    mapLink.hidden = mapUrl === null;
+    if (mapUrl) mapLink.href = mapUrl;
+    else mapLink.removeAttribute("href");
 
     domainText.textContent = linkDomain(link.url);
     original.href = link.url;
@@ -1639,6 +1731,7 @@ export function toCreateInput(values: LinkFormValues, sortOrder: number): Create
     sort_order: sortOrder,
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
+    ...moreTextPayload(resolved),
   };
 }
 
@@ -1654,7 +1747,18 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
     category: pickCategory(resolved),
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
+    ...moreTextPayload(resolved),
   };
+}
+
+/** Registry text fields -> payload keys (blank -> null). */
+function moreTextPayload(values: LinkFormValues): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  for (const field of MORE_TEXT_FIELDS) {
+    const value = (values[field.key] ?? "").trim();
+    out[field.key] = value.length > 0 ? value : null;
+  }
+  return out;
 }
 
 /** Explicit chip choice wins; otherwise infer from the text fields. */
@@ -1680,6 +1784,11 @@ function assertFormValues(values: LinkFormValues): void {
   }
   if (values.image_url.length > 0 && !isHttpsUrl(values.image_url)) {
     throw new Error("A foto precisa ser uma URL https válida.");
+  }
+  for (const field of MORE_TEXT_FIELDS) {
+    if ((values[field.key] ?? "").length > field.max) {
+      throw new Error(`${field.term} deve ter no máximo ${field.max} caracteres.`);
+    }
   }
 }
 

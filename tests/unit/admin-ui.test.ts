@@ -21,6 +21,9 @@ function formValues(partial: Partial<LinkFormValues> = {}): LinkFormValues {
     image_url: "",
     note: "",
     category: "",
+    cost_text: "",
+    city: "",
+    address: "",
     ...partial,
   };
 }
@@ -512,5 +515,101 @@ describe("createLinkFormModal paste button", () => {
     expect(
       modal.element.querySelector('[data-action="paste-url"]')
     ).toBeNull();
+  });
+});
+
+describe("Phase 2: cost, city and address", () => {
+  it("maps the new form values to create input and patch (blank -> null)", () => {
+    const full = formValues({
+      cost_text: "R$ 20 inteira",
+      city: "Cidade Modelo",
+      address: "Rua Exemplo, 100",
+    });
+    expect(toCreateInput(full, 0)).toMatchObject({
+      cost_text: "R$ 20 inteira",
+      city: "Cidade Modelo",
+      address: "Rua Exemplo, 100",
+    });
+    expect(toUpdatePatch(formValues({ cost_text: "", city: "", address: "" }))).toMatchObject({
+      cost_text: null,
+      city: null,
+      address: null,
+    });
+  });
+
+  it("rejects over-long values in the form with a PT-BR message", () => {
+    expect(() => toCreateInput(formValues({ cost_text: "x".repeat(201) }), 0)).toThrow(/Custo/);
+  });
+
+  function cb() {
+    return { onView: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(), onMarkDone: vi.fn(), onSchedule: vi.fn() };
+  }
+
+  it("shows cost and city on the card when present", () => {
+    const card = renderAdminCard(row({ cost_text: "grátis", city: "Cidade Modelo" }), cb());
+    const meta = card.querySelector(".feed-card__meta")?.textContent ?? "";
+    expect(meta).toContain("grátis");
+    expect(meta).toContain("Cidade Modelo");
+  });
+
+  it("renders a legacy card without cost/city items", () => {
+    const card = renderAdminCard(row(), cb());
+    expect(card.querySelector(".feed-card__meta-item--cost")).toBeNull();
+    expect(card.querySelector(".feed-card__meta-item--city")).toBeNull();
+  });
+
+  function viewCb() {
+    return { onEdit: vi.fn(), onSchedule: vi.fn(), onMarkDone: vi.fn(), onDelete: vi.fn() };
+  }
+
+  it("detail shows the fields and a safe map link", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ cost_text: "R$ 20", city: "Cidade Modelo", address: "Rua Exemplo, 100" }));
+    const text = modal.element.textContent ?? "";
+    expect(text).toContain("R$ 20");
+    expect(text).toContain("Cidade Modelo");
+    expect(text).toContain("Rua Exemplo, 100");
+    const map = modal.element.querySelector<HTMLAnchorElement>("a[data-action='open-map']");
+    expect(map?.hidden).toBe(false);
+    expect(map?.href).toBe(
+      "https://www.google.com/maps/search/?api=1&query=Rua%20Exemplo%2C%20100%2C%20Cidade%20Modelo"
+    );
+    expect(map?.target).toBe("_blank");
+    expect(map?.rel).toContain("noopener");
+  });
+
+  it("detail hides empty sections and the map link for legacy items", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    modal.open(row());
+    for (const key of ["cost_text", "city", "address"]) {
+      const r = modal.element.querySelector<HTMLElement>(`[data-field='${key}']`);
+      expect(r?.hidden).toBe(true);
+    }
+    const map = modal.element.querySelector<HTMLElement>("a[data-action='open-map']");
+    expect(map?.hidden).toBe(true);
+  });
+
+  it("form keeps the new fields inside a collapsed Mais detalhes section and round-trips them", () => {
+    const onSubmit = vi.fn();
+    const modal = createLinkFormModal(onSubmit);
+    document.body.appendChild(modal.element);
+    const more = modal.element.querySelector("details.links-admin-form__more") as HTMLDetailsElement;
+    expect(more.querySelector("summary")?.textContent).toBe("Mais detalhes");
+    modal.openCreate();
+    expect(more.open).toBe(false);
+
+    modal.openEdit(row({ cost_text: "R$ 20", city: "Cidade Modelo", address: "Rua Exemplo, 100" }));
+    expect(more.open).toBe(true);
+    expect((modal.element.querySelector("#links-form-cost_text") as HTMLInputElement).value).toBe("R$ 20");
+    modal.element.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ cost_text: "R$ 20", city: "Cidade Modelo", address: "Rua Exemplo, 100" }),
+      "link-1"
+    );
+
+    modal.openEdit(row());
+    expect(more.open).toBe(false);
   });
 });

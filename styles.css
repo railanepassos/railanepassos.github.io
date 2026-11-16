@@ -1610,6 +1610,44 @@ body.links-screen-open {
   overflow-y: auto;
 }
 
+.links-admin-form__more {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 12px;
+}
+
+.links-admin-form__more-summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--navy);
+  cursor: pointer;
+}
+
+.links-admin-form__more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.links-detail__row--action {
+  padding-left: 32px;
+}
+
+.links-detail__map {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--app-accent);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
 .links-admin-form__counter {
   align-self: flex-end;
   font-size: 0.72rem;

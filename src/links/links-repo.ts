@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isHttpsUrl } from "./validate";
+import { isHttpsUrl, isOptionalHttpsUrl } from "./validate";
+import { MORE_TEXT_FIELDS } from "./more-fields";
 
 export type LinkStatus = "wishlist" | "done";
 
@@ -20,6 +21,15 @@ export type LinkRow = {
   image_url: string | null;
   note: string | null;
   completed_at: string | null;
+  cost_text?: string | null;
+  city?: string | null;
+  address?: string | null;
+  dossier?: string | null;
+  itinerary?: string | null;
+  source_url?: string | null;
+  pose_refs?: unknown[] | null;
+  tags?: string[] | null;
+  people?: string[] | null;
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -41,6 +51,15 @@ export type CreateLinkInput = {
   image_url?: string | null;
   note?: string | null;
   completed_at?: string | null;
+  cost_text?: string | null;
+  city?: string | null;
+  address?: string | null;
+  dossier?: string | null;
+  itinerary?: string | null;
+  source_url?: string | null;
+  pose_refs?: unknown[] | null;
+  tags?: string[] | null;
+  people?: string[] | null;
 };
 
 export type UpdateLinkPatch = {
@@ -59,6 +78,15 @@ export type UpdateLinkPatch = {
   image_url?: string | null;
   note?: string | null;
   completed_at?: string | null;
+  cost_text?: string | null;
+  city?: string | null;
+  address?: string | null;
+  dossier?: string | null;
+  itinerary?: string | null;
+  source_url?: string | null;
+  pose_refs?: unknown[] | null;
+  tags?: string[] | null;
+  people?: string[] | null;
 };
 
 export function normalizeLinkRow(
@@ -81,6 +109,15 @@ export function normalizeLinkRow(
     image_url: row.image_url ?? null,
     note: row.note ?? null,
     completed_at: row.completed_at ?? null,
+    cost_text: row.cost_text ?? null,
+    city: row.city ?? null,
+    address: row.address ?? null,
+    dossier: row.dossier ?? null,
+    itinerary: row.itinerary ?? null,
+    source_url: row.source_url ?? null,
+    pose_refs: row.pose_refs ?? null,
+    tags: row.tags ?? null,
+    people: row.people ?? null,
     created_by: row.created_by,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -94,6 +131,10 @@ function validateLinkFields(fields: {
   icon_url?: string | null;
   image_url?: string | null;
   note?: string | null;
+  cost_text?: string | null;
+  city?: string | null;
+  address?: string | null;
+  source_url?: string | null;
 }): void {
   if (fields.url !== undefined) {
     if (!isHttpsUrl(fields.url)) {
@@ -134,6 +175,17 @@ function validateLinkFields(fields: {
       throw new Error("note must not exceed 500 characters");
     }
   }
+
+  for (const field of MORE_TEXT_FIELDS) {
+    const value = fields[field.key];
+    if (value != null && value.length > field.max) {
+      throw new Error(`${field.key} must not exceed ${field.max} characters`);
+    }
+  }
+
+  if (!isOptionalHttpsUrl(fields.source_url)) {
+    throw new Error("source_url must be a valid https URL");
+  }
 }
 
 export interface LinksRepo {
@@ -166,6 +218,10 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         icon_url: input.icon_url,
         image_url: input.image_url,
         note: input.note,
+        cost_text: input.cost_text,
+        city: input.city,
+        address: input.address,
+        source_url: input.source_url,
       });
 
       const trimmedLabel = input.label.trim();
@@ -191,6 +247,10 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         icon_url: patch.icon_url,
         image_url: patch.image_url,
         note: patch.note,
+        cost_text: patch.cost_text,
+        city: patch.city,
+        address: patch.address,
+        source_url: patch.source_url,
       });
 
       const sanitized =
