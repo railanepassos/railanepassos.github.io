@@ -3711,6 +3711,32 @@ body.links-authed .links-app__layout {
   margin: 0 6px 6px 0;
 }
 
+.links-donebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.links-donebar__select {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--app-line-strong);
+  border-radius: 18px;
+  background: var(--app-surface);
+  color: var(--app-ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+@media (pointer: coarse) {
+  .links-donebar__select {
+    height: 44px;
+    border-radius: 22px;
+  }
+}
+
 .links-tagfilter {
   display: flex;
   flex-wrap: wrap;
