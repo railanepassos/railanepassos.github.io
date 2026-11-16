@@ -25,6 +25,7 @@ function formValues(partial: Partial<LinkFormValues> = {}): LinkFormValues {
     address: "",
     dossier: "",
     itinerary: "",
+    source_url: "",
     ...partial,
   };
 }

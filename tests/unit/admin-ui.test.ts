@@ -26,6 +26,7 @@ function formValues(partial: Partial<LinkFormValues> = {}): LinkFormValues {
     address: "",
     dossier: "",
     itinerary: "",
+    source_url: "",
     ...partial,
   };
 }
@@ -665,5 +666,93 @@ describe("Phase 2: dossier and itinerary", () => {
     modal.open(row());
     expect(d.hidden).toBe(true);
     expect(i.hidden).toBe(true);
+  });
+});
+
+describe("Phase 2: source post link", () => {
+  function viewCb() {
+    return { onEdit: vi.fn(), onSchedule: vi.fn(), onMarkDone: vi.fn(), onDelete: vi.fn() };
+  }
+
+  it("maps source_url to payload keys (blank -> null)", () => {
+    expect(
+      toCreateInput(formValues({ source_url: "https://example.com/p/abc" }), 1)
+    ).toMatchObject({ source_url: "https://example.com/p/abc" });
+    expect(toCreateInput(formValues(), 1)).toMatchObject({ source_url: null });
+    expect(toUpdatePatch(formValues({ source_url: "" }))).toMatchObject({ source_url: null });
+  });
+
+  it("rejects a non-https source link with a PT-BR message", () => {
+    expect(() => toCreateInput(formValues({ source_url: "http://example.com/p" }), 1)).toThrow(
+      /Link do post original/
+    );
+    expect(() => toUpdatePatch(formValues({ source_url: "javascript:alert(1)" }))).toThrow(
+      /https/
+    );
+  });
+
+  it("form shows an inline error for a non-https link, clears it when fixed, and blocks submit", () => {
+    const onSubmit = vi.fn();
+    const modal = createLinkFormModal(onSubmit);
+    document.body.appendChild(modal.element);
+    modal.openCreate({ url: "https://example.com/lugar" });
+    const input = modal.element.querySelector<HTMLInputElement>("#links-form-source_url")!;
+    const err = modal.element.querySelector<HTMLElement>("#links-form-source_url-error")!;
+    expect(err.hidden).toBe(true);
+    input.value = "http://example.com/p";
+    input.dispatchEvent(new Event("input"));
+    expect(err.hidden).toBe(false);
+    expect(err.textContent).toMatch(/https/);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    modal.element.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    input.value = "https://example.com/p";
+    input.dispatchEvent(new Event("input"));
+    expect(err.hidden).toBe(true);
+    expect(input.getAttribute("aria-invalid")).toBeNull();
+    modal.element.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ source_url: "https://example.com/p" }),
+      null
+    );
+  });
+
+  it("form round-trips an existing source link and opens Mais detalhes", () => {
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    const more = modal.element.querySelector("details.links-admin-form__more") as HTMLDetailsElement;
+    modal.openEdit(row({ source_url: "https://example.com/p/1" }));
+    expect(more.open).toBe(true);
+    expect(modal.element.querySelector<HTMLInputElement>("#links-form-source_url")!.value).toBe(
+      "https://example.com/p/1"
+    );
+    modal.openEdit(row());
+    expect(modal.element.querySelector<HTMLInputElement>("#links-form-source_url")!.value).toBe("");
+    expect(modal.element.querySelector<HTMLElement>("#links-form-source_url-error")!.hidden).toBe(true);
+  });
+
+  it("detail shows Ver post original with a safe new-tab link, hidden when empty", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ source_url: "https://example.com/p/1" }));
+    const wrap = modal.element.querySelector<HTMLElement>("[data-field='source_url']")!;
+    const a = wrap.querySelector<HTMLAnchorElement>("a")!;
+    expect(wrap.hidden).toBe(false);
+    expect(a.textContent).toContain("Ver post original");
+    expect(a.getAttribute("href")).toBe("https://example.com/p/1");
+    expect(a.target).toBe("_blank");
+    expect(a.rel).toContain("noopener");
+    modal.open(row());
+    expect(wrap.hidden).toBe(true);
+    expect(a.hasAttribute("href")).toBe(false);
+  });
+
+  it("detail never links a non-https stored value", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ source_url: "javascript:alert(1)" }));
+    const wrap = modal.element.querySelector<HTMLElement>("[data-field='source_url']")!;
+    expect(wrap.hidden).toBe(true);
+    expect(wrap.querySelector("a")!.hasAttribute("href")).toBe(false);
   });
 });

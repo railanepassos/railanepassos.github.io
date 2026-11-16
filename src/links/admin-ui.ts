@@ -8,7 +8,7 @@ import {
   categoryLabel,
   type Category,
 } from "./category";
-import { deriveLabelFromUrl, isHttpsUrl } from "./validate";
+import { deriveLabelFromUrl, httpsUrlError, isHttpsUrl } from "./validate";
 import { composeEditorEmail, EDITOR_EMAIL_DOMAIN } from "./editor-email";
 import { buildSpinLabels } from "./pick-random";
 import { setScreenBusy } from "./skeleton";
@@ -211,12 +211,17 @@ function canShare(): boolean {
 // Values collected from the create/edit form.
 // ---------------------------------------------------------------------------
 
+/** Label of the source-post field (form, errors). */
+const SOURCE_TERM = "Link do post original";
+
 export type LinkFormValues = MoreTextValues & {
   url: string;
   label: string;
   description: string;
   image_url: string;
   note: string;
+  /** Link of the post the idea came from (https only, optional). */
+  source_url: string;
   /** Picked category; "" = infer from text (Automática). */
   category: string;
   /** Free tags (display form, no `#`). Optional so older callers keep compiling. */
@@ -1022,6 +1027,28 @@ export function createLinkFormModal(
     getSuggestions: () => formOptions.getTagSuggestions?.() ?? [],
   });
   moreBody.appendChild(tagsInput.element);
+  // Source post link: https only, validated inline as the user types.
+  const sourceField = labelledInput("links-form-source_url", SOURCE_TERM, "url");
+  sourceField.input.placeholder = "https://";
+  sourceField.input.autocomplete = "off";
+  const sourceError = document.createElement("p");
+  sourceError.id = "links-form-source_url-error";
+  sourceError.className = "links-admin-form__field-error";
+  sourceError.hidden = true;
+  sourceField.input.setAttribute("aria-describedby", sourceError.id);
+  sourceField.wrapper.appendChild(sourceError);
+  moreBody.appendChild(sourceField.wrapper);
+
+  /** Shows/clears the inline error; returns true when the value is acceptable. */
+  function validateSource(): boolean {
+    const message = httpsUrlError(sourceField.input.value, SOURCE_TERM);
+    sourceError.hidden = message === null;
+    sourceError.textContent = message ?? "";
+    if (message) sourceField.input.setAttribute("aria-invalid", "true");
+    else sourceField.input.removeAttribute("aria-invalid");
+    return message === null;
+  }
+  sourceField.input.addEventListener("input", validateSource);
 
   function readMoreText(): MoreTextValues {
     const out = emptyMoreTextValues();
@@ -1041,7 +1068,9 @@ export function createLinkFormModal(
     const tags = link?.tags ?? [];
     tagsInput.setValues(tags);
     if (tags.length > 0) any = true;
-    more.open = any;
+    sourceField.input.value = link?.source_url ?? "";
+    validateSource();
+    more.open = any || sourceField.input.value !== "";
     syncMoreHeights();
   }
 
@@ -1174,6 +1203,11 @@ export function createLinkFormModal(
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     tagsInput.commit();
+    if (!validateSource()) {
+      more.open = true;
+      sourceField.input.focus();
+      return;
+    }
     onSubmit(
       {
         tags: tagsInput.getValues(),
@@ -1182,6 +1216,7 @@ export function createLinkFormModal(
         description: descField.input.value.trim(),
         image_url: imageField.input.value.trim(),
         note: memoryField.input.value.trim(),
+        source_url: sourceField.input.value.trim(),
         category: pickedCategory,
         ...readMoreText(),
       },
@@ -1656,7 +1691,18 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   mapWrap.className = "links-detail__row links-detail__row--action";
   mapWrap.dataset.field = "map";
   mapWrap.appendChild(mapLink);
-  info.append(mapWrap, linkRow.row);
+  const sourceLink = document.createElement("a");
+  sourceLink.className = "links-detail__map links-detail__source";
+  sourceLink.rel = "noopener noreferrer";
+  sourceLink.target = "_blank";
+  const sourceText = document.createElement("span");
+  sourceText.textContent = "Ver post original";
+  sourceLink.append(uiIcon("external", 16), sourceText);
+  const sourceWrap = document.createElement("div");
+  sourceWrap.className = "links-detail__row links-detail__row--action";
+  sourceWrap.dataset.field = "source_url";
+  sourceWrap.appendChild(sourceLink);
+  info.append(mapWrap, sourceWrap, linkRow.row);
 
   body.append(chips, title, info);
 
@@ -1761,6 +1807,12 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     mapLink.hidden = mapUrl === null;
     if (mapUrl) mapLink.href = mapUrl;
     else mapLink.removeAttribute("href");
+    // Defense in depth: only ever link an https value, even if the row was
+    // written by something else.
+    const source = link.source_url && isHttpsUrl(link.source_url) ? link.source_url : null;
+    sourceWrap.hidden = source === null;
+    if (source) sourceLink.href = source;
+    else sourceLink.removeAttribute("href");
 
     domainText.textContent = linkDomain(link.url);
     original.href = link.url;
@@ -1818,6 +1870,7 @@ export function toCreateInput(values: LinkFormValues, sortOrder: number): Create
     sort_order: sortOrder,
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
+    source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
     ...moreTextPayload(resolved),
     tags: tagsPayload(resolved),
   };
@@ -1835,6 +1888,7 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
     category: pickCategory(resolved),
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
+    source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
     ...moreTextPayload(resolved),
     tags: tagsPayload(resolved),
   };
@@ -1883,6 +1937,8 @@ function assertFormValues(values: LinkFormValues): void {
   if (dedupeTags(values.tags ?? []).length > MAX_TAGS) {
     throw new Error(`Use no máximo ${MAX_TAGS} tags.`);
   }
+  const sourceError = httpsUrlError(values.source_url ?? "", SOURCE_TERM);
+  if (sourceError) throw new Error(sourceError);
   for (const field of MORE_TEXT_FIELDS) {
     if ((values[field.key] ?? "").length > field.max) {
       throw new Error(`${field.term} deve ter no máximo ${field.max} caracteres.`);

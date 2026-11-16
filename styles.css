@@ -3682,3 +3682,13 @@ body.links-authed .links-app__layout {
   height: 32px;
   font-size: 13px;
 }
+
+.links-admin-form__field-error {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--app-danger, #b42318);
+}
+
+.links-admin-form__field-error[hidden] {
+  display: none;
+}
