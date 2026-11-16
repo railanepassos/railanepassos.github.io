@@ -3586,3 +3586,99 @@ body.links-authed .links-app__layout {
     --app-vh: 1dvh;
   }
 }
+
+/* --- Tags (chips on card/detail, chip input, active filter) --------------- */
+.feed-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.feed-card__tag,
+.links-detail__tag {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--app-line-strong);
+  border-radius: 14px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-dark);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.links-detail__tag {
+  margin: 0 6px 6px 0;
+}
+
+.links-tagfilter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.chip-input__box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--app-line-strong);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.chip-input__chips {
+  display: contents;
+}
+
+.chip-input__chip {
+  height: 30px;
+  padding: 0 4px 0 12px;
+  font-size: 13px;
+}
+
+.chip-input__remove {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chip-input__input {
+  flex: 1 1 120px;
+  min-width: 0;
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--app-ink);
+  font: inherit;
+  font-size: 16px;
+}
+
+.chip-input__input:focus {
+  outline: none;
+}
+
+.chip-input__box:focus-within {
+  border-color: var(--app-ink);
+}
+
+.chip-input__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chip-input__suggestion {
+  height: 32px;
+  font-size: 13px;
+}

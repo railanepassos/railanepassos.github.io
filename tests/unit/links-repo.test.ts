@@ -303,4 +303,12 @@ describe("Phase 2 fields", () => {
     await expect(repo.createLink({ ...base, source_url: "http://example.com" })).rejects.toThrow(/source_url/);
     await expect(repo.updateLink("1", { source_url: "javascript:alert(1)" })).rejects.toThrow(/source_url/);
   });
+
+  it("rejects too many or over-long tags", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    const many = Array.from({ length: 31 }, (_, i) => `t${i}`);
+    await expect(repo.createLink({ ...base, tags: many })).rejects.toThrow(/tags/);
+    await expect(repo.updateLink("1", { tags: ["x".repeat(41)] })).rejects.toThrow(/tags/);
+    await expect(repo.updateLink("1", { tags: ["praia"] })).resolves.toBeUndefined();
+  });
 });

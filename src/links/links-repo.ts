@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isHttpsUrl, isOptionalHttpsUrl } from "./validate";
 import { MORE_TEXT_FIELDS } from "./more-fields";
+import { MAX_TAGS, MAX_TAG_LENGTH } from "./tags";
 
 export type LinkStatus = "wishlist" | "done";
 
@@ -137,6 +138,7 @@ function validateLinkFields(fields: {
   dossier?: string | null;
   itinerary?: string | null;
   source_url?: string | null;
+  tags?: string[] | null;
 }): void {
   if (fields.url !== undefined) {
     if (!isHttpsUrl(fields.url)) {
@@ -185,6 +187,15 @@ function validateLinkFields(fields: {
     }
   }
 
+  if (fields.tags != null) {
+    if (fields.tags.length > MAX_TAGS) {
+      throw new Error(`tags must not exceed ${MAX_TAGS} items`);
+    }
+    if (fields.tags.some((t) => t.length > MAX_TAG_LENGTH)) {
+      throw new Error(`tags must not exceed ${MAX_TAG_LENGTH} characters each`);
+    }
+  }
+
   if (!isOptionalHttpsUrl(fields.source_url)) {
     throw new Error("source_url must be a valid https URL");
   }
@@ -226,6 +237,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         dossier: input.dossier,
         itinerary: input.itinerary,
         source_url: input.source_url,
+        tags: input.tags,
       });
 
       const trimmedLabel = input.label.trim();
@@ -257,6 +269,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         dossier: patch.dossier,
         itinerary: patch.itinerary,
         source_url: patch.source_url,
+        tags: patch.tags,
       });
 
       const sanitized =
