@@ -978,6 +978,49 @@ describe("Phase 3: Como foi on card and detail", () => {
     }
   });
 
+  it("detail shows the memory link: YouTube thumbnail + Assistir, or Ver álbum, only for done places", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    const field = () => modal.element.querySelector<HTMLElement>("[data-field='memory_url']")!;
+    const thumb = () => field().querySelector<HTMLImageElement>("img")!;
+    const action = () => field().querySelector<HTMLAnchorElement>("a[data-action='open-memory']")!;
+
+    modal.open(row({ ...DONE, memory_url: "https://youtu.be/dQw4w9WgXcQ" }));
+    expect(field().hidden).toBe(false);
+    expect(thumb().src).toBe("https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg");
+    expect(thumb().hidden).toBe(false);
+    expect(thumb().getAttribute("alt")).toBe("");
+    expect(action().textContent).toContain("Assistir");
+    expect(action().href).toBe("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    expect(action().target).toBe("_blank");
+    expect(action().rel).toBe("noopener noreferrer");
+    expect(field().querySelector("iframe")).toBeNull();
+
+    // A thumbnail that fails to load is hidden; the button stays.
+    thumb().dispatchEvent(new Event("error"));
+    expect(thumb().hidden).toBe(true);
+    expect(action().textContent).toContain("Assistir");
+
+    // Reopening resets the hidden thumbnail.
+    modal.open(row({ ...DONE, memory_url: "https://youtu.be/aaaaaaaaaaa" }));
+    expect(thumb().hidden).toBe(false);
+    expect(thumb().src).toContain("/aaaaaaaaaaa/");
+
+    modal.open(row({ ...DONE, memory_url: "https://photos.app.goo.gl/AbCd" }));
+    expect(field().hidden).toBe(false);
+    expect(thumb().hidden).toBe(true);
+    expect(action().textContent).toContain("Ver álbum");
+    expect(action().href).toBe("https://photos.app.goo.gl/AbCd");
+    expect(action().rel).toBe("noopener noreferrer");
+
+    modal.open(row({ ...DONE, memory_url: null }));
+    expect(field().hidden).toBe(true);
+    modal.open(row({ ...DONE, memory_url: "http://insecure.example/x" }));
+    expect(field().hidden).toBe(true);
+    modal.open(row({ memory_url: "https://photos.app.goo.gl/AbCd" }));
+    expect(field().hidden).toBe(true);
+  });
+
   it("detail edit-Como-foi action calls back with the link; unmark swaps with mark done", () => {
     const cb = viewCb();
     const modal = createViewModal(cb);

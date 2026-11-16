@@ -1,4 +1,5 @@
 import type { LinkRow } from "./links-repo";
+import { httpsUrlError } from "./validate";
 
 /**
  * "Como foi" (Phase 3): what the visit was like. Pure helpers shared by the
@@ -8,6 +9,8 @@ import type { LinkRow } from "./links-repo";
  * `ReviewValues`, `reviewFromLink`, `reviewToPatch` and `reviewError` here, and
  * add one control in review-sheet.ts.
  */
+
+export const MEMORY_URL_TERM = "Link da memória";
 
 export const RATING_MIN = 1;
 export const RATING_MAX = 5;
@@ -38,29 +41,51 @@ export function normalizeRating(value: unknown): number | null {
 export type ReviewValues = {
   rating: number | null;
   want_again: boolean;
+  /** Raw text of the memory link field ("" when empty). */
+  memory_url: string;
 };
 
 /** The columns of `LinkRow` the review reads. */
-export type ReviewSource = Partial<Pick<LinkRow, "rating" | "want_again">>;
+export type ReviewSource = Partial<Pick<LinkRow, "rating" | "want_again" | "memory_url">>;
 
 export function reviewFromLink(link: ReviewSource): ReviewValues {
   return {
     rating: normalizeRating(link.rating),
     want_again: Boolean(link.want_again),
+    memory_url: link.memory_url ?? "",
   };
 }
 
 /** Columns written by the sheet (a cleared rating is an explicit null). */
-export type ReviewPatch = { rating: number | null; want_again: boolean };
+export type ReviewPatch = {
+  rating: number | null;
+  want_again: boolean;
+  memory_url: string | null;
+};
 
 export function reviewToPatch(values: ReviewValues): ReviewPatch {
-  return { rating: values.rating, want_again: values.want_again };
+  const memoryUrl = values.memory_url.trim();
+  return {
+    rating: values.rating,
+    want_again: values.want_again,
+    memory_url: memoryUrl === "" ? null : memoryUrl,
+  };
 }
 
 /** First problem found (PT-BR), or null. */
 export function reviewError(values: ReviewValues): string | null {
   if (values.rating !== null && !isValidRating(values.rating)) {
     return `A nota deve ser de ${RATING_MIN} a ${RATING_MAX}.`;
+  }
+  return memoryUrlError(values.memory_url);
+}
+
+/** Inline-friendly check of the memory link field alone (PT-BR), or null. */
+export function memoryUrlError(value: string): string | null {
+  const problem = httpsUrlError(value, MEMORY_URL_TERM);
+  if (problem) return problem;
+  if (value.trim().length > REVIEW_LIMITS.memoryUrlMax) {
+    return `${MEMORY_URL_TERM} deve ter no máximo ${REVIEW_LIMITS.memoryUrlMax} caracteres.`;
   }
   return null;
 }

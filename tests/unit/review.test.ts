@@ -33,10 +33,24 @@ describe("rating validation", () => {
   });
 
   it("reviewError: null rating is fine (optional), out-of-range is a PT-BR message", () => {
-    expect(reviewError({ rating: null, want_again: false })).toBeNull();
-    expect(reviewError({ rating: 3, want_again: true })).toBeNull();
-    expect(reviewError({ rating: 6, want_again: false })).toMatch(/nota/i);
-    expect(reviewError({ rating: 0, want_again: false })).toMatch(/1 a 5/);
+    expect(reviewError({ rating: null, want_again: false, memory_url: "" })).toBeNull();
+    expect(reviewError({ rating: 3, want_again: true, memory_url: "" })).toBeNull();
+    expect(reviewError({ rating: 6, want_again: false, memory_url: "" })).toMatch(/nota/i);
+    expect(reviewError({ rating: 0, want_again: false, memory_url: "" })).toMatch(/1 a 5/);
+  });
+});
+
+describe("memory link validation", () => {
+  const base = { rating: null, want_again: false } as const;
+
+  it("empty is fine; https is fine; anything else is a PT-BR message", () => {
+    expect(reviewError({ ...base, memory_url: "" })).toBeNull();
+    expect(reviewError({ ...base, memory_url: "https://youtu.be/dQw4w9WgXcQ" })).toBeNull();
+    expect(reviewError({ ...base, memory_url: "http://youtu.be/dQw4w9WgXcQ" })).toMatch(/https/);
+    expect(reviewError({ ...base, memory_url: "foto" })).toMatch(/Link da memória/);
+    expect(reviewError({ ...base, memory_url: `https://x.com/${"a".repeat(2000)}` })).toMatch(
+      /2000/
+    );
   });
 });
 
@@ -49,20 +63,31 @@ describe("rating formatting", () => {
 
 describe("review <-> link row", () => {
   it("reads current values from a row, with defaults for legacy rows", () => {
-    expect(reviewFromLink({ rating: 4, want_again: true })).toEqual({ rating: 4, want_again: true });
+    expect(reviewFromLink({ rating: 4, want_again: true })).toEqual({
+      rating: 4,
+      want_again: true,
+      memory_url: "",
+    });
     expect(reviewFromLink({ rating: undefined, want_again: false })).toEqual({
       rating: null,
       want_again: false,
+      memory_url: "",
     });
+    expect(reviewFromLink({ memory_url: "https://youtu.be/dQw4w9WgXcQ" }).memory_url).toBe(
+      "https://youtu.be/dQw4w9WgXcQ"
+    );
     expect(reviewFromLink({ rating: 99, want_again: false }).rating).toBeNull();
   });
 
   it("builds the PATCH payload; clearing the rating sends null", () => {
-    expect(reviewToPatch({ rating: 5, want_again: true })).toEqual({ rating: 5, want_again: true });
-    expect(reviewToPatch({ rating: null, want_again: false })).toEqual({
-      rating: null,
-      want_again: false,
+    expect(reviewToPatch({ rating: 5, want_again: true, memory_url: "" })).toEqual({
+      rating: 5,
+      want_again: true,
+      memory_url: null,
     });
+    expect(
+      reviewToPatch({ rating: null, want_again: false, memory_url: "  https://photos.app.goo.gl/x  " })
+    ).toEqual({ rating: null, want_again: false, memory_url: "https://photos.app.goo.gl/x" });
   });
 
   it("hasRating only for done places with a valid rating", () => {

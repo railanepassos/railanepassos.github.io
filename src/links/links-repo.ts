@@ -3,7 +3,7 @@ import { isHttpsUrl, isOptionalHttpsUrl } from "./validate";
 import { MORE_TEXT_FIELDS } from "./more-fields";
 import { poseDraftsFromRefs, poseRefsError, readPoseRefs, type PoseRef } from "./poses";
 import { MAX_TAGS, MAX_TAG_LENGTH } from "./tags";
-import { isValidRating, normalizeRating } from "./review";
+import { REVIEW_LIMITS, isValidRating, normalizeRating } from "./review";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH } from "./people";
 
 export type LinkStatus = "wishlist" | "done";
@@ -161,6 +161,7 @@ function validateLinkFields(fields: {
   tags?: string[] | null;
   people?: string[] | null;
   rating?: number | null;
+  memory_url?: string | null;
 }): void {
   if (fields.url !== undefined) {
     if (!isHttpsUrl(fields.url)) {
@@ -231,6 +232,13 @@ function validateLinkFields(fields: {
     throw new Error("rating must be an integer from 1 to 5");
   }
 
+  if (!isOptionalHttpsUrl(fields.memory_url)) {
+    throw new Error("memory_url must be a valid https URL");
+  }
+  if (fields.memory_url != null && fields.memory_url.length > REVIEW_LIMITS.memoryUrlMax) {
+    throw new Error(`memory_url must not exceed ${REVIEW_LIMITS.memoryUrlMax} characters`);
+  }
+
   if (!isOptionalHttpsUrl(fields.source_url)) {
     throw new Error("source_url must be a valid https URL");
   }
@@ -281,6 +289,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         tags: input.tags,
         people: input.people,
         rating: input.rating,
+        memory_url: input.memory_url,
       });
 
       const trimmedLabel = input.label.trim();
@@ -316,6 +325,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         tags: patch.tags,
         people: patch.people,
         rating: patch.rating,
+        memory_url: patch.memory_url,
       });
 
       const sanitized =
