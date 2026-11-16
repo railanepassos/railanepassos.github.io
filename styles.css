@@ -1591,7 +1591,7 @@ body.links-screen-open {
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-size: 0.9rem;
+  font-size: max(16px, 1rem);
   font-family: inherit;
   color: var(--text);
   background: var(--surface);
@@ -1690,6 +1690,14 @@ body.links-screen-open {
 .links-poses__add:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* A move button that cannot move reads as inert, not as a faded button. */
+.links-poses__tool:disabled {
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-muted, #6b7280);
+  opacity: 0.35;
 }
 
 .links-detail__poses {
@@ -3749,7 +3757,7 @@ body.links-authed .links-app__layout {
   border-radius: 18px;
   background: var(--app-surface);
   color: var(--app-ink);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 500;
 }
 
@@ -3968,4 +3976,15 @@ body.links-authed .links-app__layout {
   border-color: var(--app-accent);
   background: var(--app-accent-soft);
   color: var(--app-accent-dark);
+}
+
+/*
+ * iOS Safari zooms the page on focus into any input, textarea or select under
+ * 16px and does not zoom back. Backstop for controls without their own size
+ * (class rules above set it explicitly); user zoom stays enabled.
+ */
+input,
+textarea,
+select {
+  font-size: max(16px, 1em);
 }
