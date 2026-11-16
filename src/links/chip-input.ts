@@ -21,6 +21,8 @@ export type ChipInputOptions = {
   key: (value: string) => string;
   max: number;
   maxLength: number;
+  /** Whitespace also commits a chip (tags). Off for names with spaces. Default true. */
+  splitOnSpace?: boolean;
   /** Candidates for autocomplete (read on every keystroke). */
   getSuggestions: () => readonly string[];
   onChange?: (values: string[]) => void;
@@ -163,8 +165,9 @@ export function createChipInput(opts: ChipInputOptions): ChipInputHandle {
 
   input.addEventListener("input", () => {
     // Pasting or typing "a, b" commits every complete piece.
-    if (/[,\s]/.test(input.value)) {
-      const parts = input.value.split(/[,\s]+/);
+    const splitter = opts.splitOnSpace === false ? /\s*,\s*/ : /[,\s]+/;
+    if (opts.splitOnSpace === false ? input.value.includes(",") : /[,\s]/.test(input.value)) {
+      const parts = input.value.split(splitter);
       const rest = parts.pop() ?? "";
       for (const part of parts) add(part);
       input.value = rest;

@@ -104,8 +104,12 @@ export function hasAllTags(
 }
 
 /** Toggle a tag in a list of filter keys (returns a new list of keys). */
-export function toggleKey(keys: readonly string[], raw: string): string[] {
-  const key = tagKey(raw);
+export function toggleKey(
+  keys: readonly string[],
+  raw: string,
+  keyOf: (raw: string) => string = tagKey
+): string[] {
+  const key = keyOf(raw);
   if (key === "") return [...keys];
   return keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key];
 }

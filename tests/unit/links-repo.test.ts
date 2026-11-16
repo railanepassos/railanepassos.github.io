@@ -324,4 +324,12 @@ describe("Phase 2 fields", () => {
     await expect(repo.updateLink("1", { tags: ["x".repeat(41)] })).rejects.toThrow(/tags/);
     await expect(repo.updateLink("1", { tags: ["praia"] })).resolves.toBeUndefined();
   });
+
+  it("rejects too many or over-long people names", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    const many = Array.from({ length: 31 }, (_, i) => `Pessoa ${i}`);
+    await expect(repo.createLink({ ...base, people: many })).rejects.toThrow(/people/);
+    await expect(repo.updateLink("1", { people: ["x".repeat(81)] })).rejects.toThrow(/people/);
+    await expect(repo.updateLink("1", { people: ["Maria Clara"] })).resolves.toBeUndefined();
+  });
 });

@@ -3667,7 +3667,8 @@ body.links-authed .links-app__layout {
 }
 
 /* --- Tags (chips on card/detail, chip input, active filter) --------------- */
-.feed-card__tags {
+.feed-card__tags,
+.feed-card__people {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -3675,7 +3676,9 @@ body.links-authed .links-app__layout {
 }
 
 .feed-card__tag,
-.links-detail__tag {
+.feed-card__person,
+.links-detail__tag,
+.links-detail__person {
   min-height: 28px;
   padding: 0 10px;
   border: 1px solid var(--app-line-strong);
@@ -3688,7 +3691,8 @@ body.links-authed .links-app__layout {
   cursor: pointer;
 }
 
-.links-detail__tag {
+.links-detail__tag,
+.links-detail__person {
   margin: 0 6px 6px 0;
 }
 

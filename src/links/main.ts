@@ -6,6 +6,7 @@ import { createAuthStorage, setRememberMe } from "./session-storage";
 import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
 import { renderGuestGate } from "./render";
 import { collectTags, hasAllTags, tagKey, toggleKey } from "./tags";
+import { collectPeople, hasAllPeople, personKey, togglePersonKey } from "./people";
 import { renderLinksSkeleton, renderToolbarSkeleton } from "./skeleton";
 import {
   createLoginButton,
@@ -152,6 +153,8 @@ function bootDynamic(
   let query = "";
   /** Active tag filter (accent-insensitive keys, AND). Tap a tag chip toggles it. */
   let tagFilter: string[] = [];
+  /** Active people filter (accent-insensitive keys, AND with tags). Tap a person chip toggles it. */
+  let peopleFilter: string[] = [];
   let pendingSharedUrl: string | null = pickSharedUrl(
     new URLSearchParams(location.search)
   );
@@ -186,7 +189,10 @@ function bootDynamic(
         formModal.setBusy(false);
       }
     },
-    { getTagSuggestions: () => collectTags(links) }
+    {
+      getTagSuggestions: () => collectTags(links),
+      getPeopleSuggestions: () => collectPeople(links),
+    }
   );
 
   const deleteSheet: DeleteSheetHandle = createDeleteConfirmSheet();
@@ -197,6 +203,7 @@ function bootDynamic(
     onMarkDone: (l) => void markDone(l),
     onDelete: (l) => void deleteLink(l),
     onTag: (tag) => toggleTagFilter(tag),
+    onPerson: (person) => togglePeopleFilter(person),
     onOpenChange: () => syncSelectedCard(),
   });
 
@@ -522,6 +529,7 @@ function bootDynamic(
     } else {
       query = "";
       tagFilter = [];
+      peopleFilter = [];
       els.appBar?.classList.remove("links-appbar--searching");
       els.adminRoot.appendChild(createLoginButton(() => loginModal.open()));
     }
@@ -562,29 +570,39 @@ function bootDynamic(
     window.scrollTo({ top: 0 });
   }
 
-  /** Active tag filters as removable chips above the feed (null when none). */
-  function renderTagFilterBar(): HTMLElement | null {
-    if (tagFilter.length === 0) return null;
-    const display = new Map(collectTags(links).map((t) => [tagKey(t), t]));
+  function togglePeopleFilter(person: string): void {
+    peopleFilter = togglePersonKey(peopleFilter, person);
+    renderList();
+    window.scrollTo({ top: 0 });
+  }
+
+  /** Active tag and people filters as removable chips above the feed (null when none). */
+  function renderFilterBar(): HTMLElement | null {
+    if (tagFilter.length === 0 && peopleFilter.length === 0) return null;
+    const tagNames = new Map(collectTags(links).map((t) => [tagKey(t), t]));
+    const personNames = new Map(collectPeople(links).map((p) => [personKey(p), p]));
     const bar = document.createElement("div");
     bar.className = "links-tagfilter";
     bar.setAttribute("role", "group");
-    bar.setAttribute("aria-label", "Filtros de tag ativos");
-    for (const key of tagFilter) {
-      const label = `#${display.get(key) ?? key}`;
+    bar.setAttribute("aria-label", "Filtros ativos");
+    const addChip = (label: string, remove: () => void): void => {
       const chip = document.createElement("button");
       chip.type = "button";
       chip.className = "links-chip links-chip--active links-tagfilter__chip";
       chip.setAttribute("aria-label", `Remover filtro ${label}`);
       chip.textContent = `${label} ×`;
-      chip.addEventListener("click", () => toggleTagFilter(key));
+      chip.addEventListener("click", remove);
       bar.appendChild(chip);
+    };
+    for (const key of tagFilter) addChip(`#${tagNames.get(key) ?? key}`, () => toggleTagFilter(key));
+    for (const key of peopleFilter) {
+      addChip(`@${personNames.get(key) ?? key}`, () => togglePeopleFilter(key));
     }
     return bar;
   }
 
   function emptyText(): string {
-    if (query.trim().length > 0 || tagFilter.length > 0) return "Nada encontrado para essa busca.";
+    if (query.trim().length > 0 || tagFilter.length > 0 || peopleFilter.length > 0) return "Nada encontrado para essa busca.";
     if (categoryFilter.length > 0) return "Nenhuma experiência nas categorias selecionadas.";
     if (section === "agenda") return "Nada agendado ainda. Use Agendar em um card.";
     if (section === "done") return "Nenhuma experiência marcada como feita ainda.";
@@ -603,12 +621,12 @@ function bootDynamic(
     }
     setShellVisible(true);
     const sectionLinks = searchLinks(linksForSection(links, section), query).filter((l) =>
-      hasAllTags(l, tagFilter)
+      hasAllTags(l, tagFilter) && hasAllPeople(l, peopleFilter)
     );
     const visible = filterLinksByCategory(sectionLinks, categoryFilter);
     renderChrome(sectionLinks, visible.length);
     const selected = viewModal.currentId();
-    const filterBar = renderTagFilterBar();
+    const filterBar = renderFilterBar();
     if (filterBar) els.list.appendChild(filterBar);
     if (visible.length === 0) {
       const empty = document.createElement("p");
@@ -627,6 +645,7 @@ function bootDynamic(
               onMarkDone: (l) => void markDone(l),
               onSchedule: (l) => openSchedule(l),
               onTag: (tag) => toggleTagFilter(tag),
+              onPerson: (person) => togglePeopleFilter(person),
             },
             { selected: link.id === selected }
           )

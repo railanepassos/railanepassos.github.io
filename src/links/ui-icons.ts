@@ -32,6 +32,7 @@ const ICONS = {
   edit: [["path", "M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"], ["path", "m13.5 6.5 4 4"]],
   trash: [["path", "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"]],
   tag: [["path", "M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"], ["circle", 7.5, 7.5, 1.5]],
+  user: [["circle", 12, 8, 4], ["path", "M4 21a8 8 0 0 1 16 0"]],
   clock: [["circle", 12, 12, 9], ["path", "M12 7v5l3 2"]],
   sparkle: [["path", "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"]],
   memory: [["path", "M4 5h16v11H8l-4 4z"]],

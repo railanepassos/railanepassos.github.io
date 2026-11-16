@@ -32,6 +32,7 @@ import {
 import { MORE_TEXT_FIELDS, emptyMoreTextValues, type MoreTextValues } from "./more-fields";
 import { createChipInput } from "./chip-input";
 import { MAX_TAGS, MAX_TAG_LENGTH, dedupeTags, normalizeTag, tagKey } from "./tags";
+import { MAX_PEOPLE, MAX_PERSON_LENGTH, dedupePeople, normalizePerson, personKey } from "./people";
 
 /**
  * DOM building blocks for the authenticated admin experience:
@@ -239,6 +240,8 @@ export type LinkFormValues = MoreTextValues & {
   category: string;
   /** Free tags (display form, no `#`). Optional so older callers keep compiling. */
   tags?: string[];
+  /** People (display form, no `@`). Optional so older callers keep compiling. */
+  people?: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -414,6 +417,8 @@ export type AdminCardCallbacks = {
   onSchedule: (link: LinkRow) => void;
   /** Tap on a tag chip: filter the feed by that tag. */
   onTag?: (tag: string) => void;
+  /** Tap on a person chip: filter the feed by that person. */
+  onPerson?: (person: string) => void;
 };
 
 export type AdminCardOptions = {
@@ -532,6 +537,24 @@ export function renderAdminCard(
       tagRow.appendChild(btn);
     }
     body.appendChild(tagRow);
+  }
+  const cardPeople = dedupePeople(link.people ?? []);
+  if (cardPeople.length > 0) {
+    const peopleRow = document.createElement("div");
+    peopleRow.className = "feed-card__people";
+    for (const person of cardPeople) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "feed-card__person";
+      btn.textContent = `@${person}`;
+      btn.setAttribute("aria-label", `Filtrar por @${person}`);
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        cb.onPerson?.(person);
+      });
+      peopleRow.appendChild(btn);
+    }
+    body.appendChild(peopleRow);
   }
 
   const actions = document.createElement("div");
@@ -906,6 +929,8 @@ export type LinkFormHandle = {
 export type LinkFormOptions = {
   /** Tags already used across items (autocomplete source). */
   getTagSuggestions?: () => readonly string[];
+  /** Names already used across items (autocomplete source). */
+  getPeopleSuggestions?: () => readonly string[];
 };
 
 export function createLinkFormModal(
@@ -1040,6 +1065,19 @@ export function createLinkFormModal(
     getSuggestions: () => formOptions.getTagSuggestions?.() ?? [],
   });
   moreBody.appendChild(tagsInput.element);
+  const peopleInput = createChipInput({
+    id: "links-form-people",
+    label: "Pessoas (opcional)",
+    prefix: "@",
+    placeholder: "quem indicou ou quer ir…",
+    normalize: normalizePerson,
+    key: personKey,
+    max: MAX_PEOPLE,
+    maxLength: MAX_PERSON_LENGTH,
+    splitOnSpace: false,
+    getSuggestions: () => formOptions.getPeopleSuggestions?.() ?? [],
+  });
+  moreBody.appendChild(peopleInput.element);
   // Source post link: https only, validated inline as the user types.
   const sourceField = labelledInput("links-form-source_url", SOURCE_TERM, "url");
   sourceField.input.placeholder = "https://";
@@ -1183,6 +1221,9 @@ export function createLinkFormModal(
     const tags = link?.tags ?? [];
     tagsInput.setValues(tags);
     if (tags.length > 0) any = true;
+    const people = link?.people ?? [];
+    peopleInput.setValues(people);
+    if (people.length > 0) any = true;
     sourceField.input.value = link?.source_url ?? "";
     validateSource();
     poses = poseDraftsFromRefs(readPoseRefs(link?.pose_refs));
@@ -1320,6 +1361,7 @@ export function createLinkFormModal(
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     tagsInput.commit();
+    peopleInput.commit();
     if (!validateSource()) {
       more.open = true;
       sourceField.input.focus();
@@ -1334,6 +1376,7 @@ export function createLinkFormModal(
     onSubmit(
       {
         tags: tagsInput.getValues(),
+        people: peopleInput.getValues(),
         url: urlField.input.value.trim(),
         label: labelField.input.value.trim(),
         description: descField.input.value.trim(),
@@ -1669,6 +1712,8 @@ export type ViewModalCallbacks = {
   onDelete: (link: LinkRow) => void;
   /** Tap on a tag chip: close the detail and filter the feed by that tag. */
   onTag?: (tag: string) => void;
+  /** Tap on a person chip: close the detail and filter the feed by that person. */
+  onPerson?: (person: string) => void;
   /** Fired with the open link id, or null when the detail closes. */
   onOpenChange?: (id: string | null) => void;
 };
@@ -1837,6 +1882,10 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   tagsRow.row.dataset.field = "tags";
   tagsRow.row.hidden = true;
   info.appendChild(tagsRow.row);
+  const peopleRow = infoRow("user", "Pessoas");
+  peopleRow.row.dataset.field = "people";
+  peopleRow.row.hidden = true;
+  info.appendChild(peopleRow.row);
   const mapLink = document.createElement("a");
   mapLink.className = "links-detail__map";
   mapLink.dataset.action = "open-map";
@@ -1969,6 +2018,22 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
         return btn;
       })
     );
+    const detailPeople = dedupePeople(link.people ?? []);
+    peopleRow.row.hidden = detailPeople.length === 0;
+    peopleRow.value.replaceChildren(
+      ...detailPeople.map((person) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "links-detail__person";
+        btn.textContent = `@${person}`;
+        btn.setAttribute("aria-label", `Filtrar por @${person}`);
+        btn.addEventListener("click", () => {
+          close();
+          cb.onPerson?.(person);
+        });
+        return btn;
+      })
+    );
     const mapUrl = buildMapUrl(link.address, link.city);
     mapWrap.hidden = mapUrl === null;
     mapLink.hidden = mapUrl === null;
@@ -2045,6 +2110,7 @@ export function toCreateInput(values: LinkFormValues, sortOrder: number): Create
     pose_refs: draftsToPoseRefs(resolved.pose_refs ?? []),
     ...moreTextPayload(resolved),
     tags: tagsPayload(resolved),
+    people: peoplePayload(resolved),
   };
 }
 
@@ -2064,6 +2130,7 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
     pose_refs: draftsToPoseRefs(resolved.pose_refs ?? []),
     ...moreTextPayload(resolved),
     tags: tagsPayload(resolved),
+    people: peoplePayload(resolved),
   };
 }
 
@@ -2081,6 +2148,12 @@ function moreTextPayload(values: LinkFormValues): Record<string, string | null> 
 function tagsPayload(values: LinkFormValues): string[] | null {
   const tags = dedupeTags(values.tags ?? []);
   return tags.length > 0 ? tags : null;
+}
+
+/** Normalized, deduped people; empty -> null. */
+function peoplePayload(values: LinkFormValues): string[] | null {
+  const people = dedupePeople(values.people ?? []);
+  return people.length > 0 ? people : null;
 }
 
 /** Explicit chip choice wins; otherwise infer from the text fields. */
@@ -2109,6 +2182,9 @@ function assertFormValues(values: LinkFormValues): void {
   }
   if (dedupeTags(values.tags ?? []).length > MAX_TAGS) {
     throw new Error(`Use no máximo ${MAX_TAGS} tags.`);
+  }
+  if (dedupePeople(values.people ?? []).length > MAX_PEOPLE) {
+    throw new Error(`Use no máximo ${MAX_PEOPLE} pessoas.`);
   }
   const sourceError = httpsUrlError(values.source_url ?? "", SOURCE_TERM);
   if (sourceError) throw new Error(sourceError);

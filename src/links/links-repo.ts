@@ -3,6 +3,7 @@ import { isHttpsUrl, isOptionalHttpsUrl } from "./validate";
 import { MORE_TEXT_FIELDS } from "./more-fields";
 import { poseDraftsFromRefs, poseRefsError, readPoseRefs, type PoseRef } from "./poses";
 import { MAX_TAGS, MAX_TAG_LENGTH } from "./tags";
+import { MAX_PEOPLE, MAX_PERSON_LENGTH } from "./people";
 
 export type LinkStatus = "wishlist" | "done";
 
@@ -141,6 +142,7 @@ function validateLinkFields(fields: {
   source_url?: string | null;
   pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
+  people?: string[] | null;
 }): void {
   if (fields.url !== undefined) {
     if (!isHttpsUrl(fields.url)) {
@@ -198,6 +200,15 @@ function validateLinkFields(fields: {
     }
   }
 
+  if (fields.people != null) {
+    if (fields.people.length > MAX_PEOPLE) {
+      throw new Error(`people must not exceed ${MAX_PEOPLE} items`);
+    }
+    if (fields.people.some((p) => p.length > MAX_PERSON_LENGTH)) {
+      throw new Error(`people must not exceed ${MAX_PERSON_LENGTH} characters each`);
+    }
+  }
+
   if (!isOptionalHttpsUrl(fields.source_url)) {
     throw new Error("source_url must be a valid https URL");
   }
@@ -246,6 +257,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         source_url: input.source_url,
         pose_refs: input.pose_refs,
         tags: input.tags,
+        people: input.people,
       });
 
       const trimmedLabel = input.label.trim();
@@ -279,6 +291,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         source_url: patch.source_url,
         pose_refs: patch.pose_refs,
         tags: patch.tags,
+        people: patch.people,
       });
 
       const sanitized =
