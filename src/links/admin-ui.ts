@@ -116,7 +116,7 @@ export type LoginModalHandle = {
 };
 
 export function createLoginModal(
-  onSubmit: (email: string, password: string) => void
+  onSubmit: (email: string, password: string, remember: boolean) => void
 ): LoginModalHandle {
   let previouslyFocused: HTMLElement | null = null;
 
@@ -161,6 +161,21 @@ export function createLoginModal(
   passwordField.input.autocomplete = "current-password";
   passwordField.input.required = true;
 
+  const rememberRow = document.createElement("label");
+  rememberRow.className = "links-admin-form__checkbox-field";
+  rememberRow.htmlFor = "links-login-remember";
+
+  const rememberInput = document.createElement("input");
+  rememberInput.type = "checkbox";
+  rememberInput.id = "links-login-remember";
+  rememberInput.className = "links-admin-form__checkbox";
+  rememberInput.defaultChecked = true;
+
+  const rememberText = document.createElement("span");
+  rememberText.textContent = "Manter conectado";
+
+  rememberRow.append(rememberInput, rememberText);
+
   const error = document.createElement("p");
   error.className = "links-admin-form__error";
   error.setAttribute("role", "alert");
@@ -175,7 +190,7 @@ export function createLoginModal(
   submitBtn.textContent = "Entrar";
 
   actions.append(submitBtn);
-  form.append(emailField.wrapper, passwordField.wrapper, error, actions);
+  form.append(emailField.wrapper, passwordField.wrapper, rememberRow, error, actions);
   dialog.append(intro, form);
 
   function close(): void {
@@ -207,7 +222,7 @@ export function createLoginModal(
       error.textContent = "Informe o usuário do e-mail.";
       return;
     }
-    onSubmit(email, passwordField.input.value);
+    onSubmit(email, passwordField.input.value, rememberInput.checked);
   });
 
   backBtn.addEventListener("click", close);

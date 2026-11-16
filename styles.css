@@ -2033,6 +2033,20 @@ body.links-screen-open {
   outline-offset: 1px;
 }
 
+.links-admin-form__checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.links-admin-form__checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--green);
+}
+
 .links-admin-form__control--local-part {
   flex: 1 1 auto;
   min-width: 0;

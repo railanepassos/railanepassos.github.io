@@ -2,6 +2,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseConfig, isSupabaseConfigured, isBrowserSafeAnonKey } from "./config";
 import { createAuth, type Auth } from "./auth";
+import { createAuthStorage, setRememberMe } from "./session-storage";
 import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
 import { renderGuestGate } from "./render";
 import { renderLinksSkeleton, renderToolbarSkeleton } from "./skeleton";
@@ -124,9 +125,10 @@ function bootDynamic(
   );
 
   // --- modals (created once, appended to <body>) ---
-  const loginModal: LoginModalHandle = createLoginModal(async (email, password) => {
+  const loginModal: LoginModalHandle = createLoginModal(async (email, password, remember) => {
     loginModal.setBusy(true);
     try {
+      setRememberMe(remember);
       await auth.signIn(email, password);
       loginModal.close();
     } catch (err) {
@@ -596,7 +598,9 @@ async function boot(): Promise<void> {
     return;
   }
 
-  const client = createClient(config.url, config.anonKey);
+  const client = createClient(config.url, config.anonKey, {
+    auth: { storage: createAuthStorage() },
+  });
   const auth = createAuth(client);
   const repo = createLinksRepo(client);
 
