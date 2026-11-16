@@ -25,6 +25,7 @@ create or replace function public.links_text_array_valid(
 ) returns boolean
 language sql
 immutable
+set search_path = ''
 as $$
   select items is null
     or (
@@ -37,11 +38,14 @@ as $$
     );
 $$;
 
--- pose_refs: array of {url?: https string, note?: string <= 500}, max 30 items.
+-- pose_refs: array of {url?: https string, note?: string <= 500}, max 30 items;
+-- every pose needs a non-empty url or a non-empty note ({} and {"note": ""} are
+-- rejected).
 create or replace function public.links_pose_refs_valid(refs jsonb)
 returns boolean
 language sql
 immutable
+set search_path = ''
 as $$
   select refs is null
     or (
@@ -51,11 +55,22 @@ as $$
         select 1
         from jsonb_array_elements(refs) as pose
         where jsonb_typeof(pose) <> 'object'
+          or (coalesce(pose ->> 'url', '') = '' and coalesce(pose ->> 'note', '') = '')
           or (pose ? 'url' and (jsonb_typeof(pose -> 'url') <> 'string' or (pose ->> 'url') !~ '^https://'))
           or (pose ? 'note' and (jsonb_typeof(pose -> 'note') <> 'string' or char_length(pose ->> 'note') > 500))
       )
     );
 $$;
+
+-- The helpers are only meant for the CHECK constraints below: not callable by
+-- anon (they would otherwise be exposed as RPC); the roles that write rows keep
+-- execute so the constraints can be evaluated for them.
+revoke execute on function public.links_text_array_valid(text[], integer, integer)
+  from public, anon;
+revoke execute on function public.links_pose_refs_valid(jsonb) from public, anon;
+grant execute on function public.links_text_array_valid(text[], integer, integer)
+  to authenticated, service_role;
+grant execute on function public.links_pose_refs_valid(jsonb) to authenticated, service_role;
 
 alter table public.links drop constraint if exists links_cost_text_len;
 alter table public.links
