@@ -8,7 +8,6 @@
  *
  * Names are personal data (LGPD): they live only in the authenticated surface.
  */
-import { toggleKey } from "./tags";
 
 export const MAX_PEOPLE = 30;
 export const MAX_PERSON_LENGTH = 80;
@@ -57,19 +56,4 @@ export function collectPeople(links: ReadonlyArray<{ people?: readonly string[] 
   return [...counts.values()]
     .sort((a, b) => b.count - a.count)
     .map((e) => e.display);
-}
-
-/** True when the link carries every one of the filter people (compared by key). */
-export function hasAllPeople(
-  link: { people?: readonly string[] | null },
-  filterKeys: readonly string[]
-): boolean {
-  if (filterKeys.length === 0) return true;
-  const own = new Set((link.people ?? []).map(personKey));
-  return filterKeys.every((k) => own.has(personKey(k)));
-}
-
-/** Toggle a person in a list of filter keys (returns a new list of keys). */
-export function togglePersonKey(keys: readonly string[], raw: string): string[] {
-  return toggleKey(keys, raw, personKey);
 }

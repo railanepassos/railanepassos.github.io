@@ -5,8 +5,9 @@ import { createAuth, type Auth } from "./auth";
 import { createAuthStorage, setRememberMe } from "./session-storage";
 import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
 import { renderGuestGate } from "./render";
-import { collectTags, hasAllTags, tagKey, toggleKey } from "./tags";
-import { collectPeople, hasAllPeople, personKey, togglePersonKey } from "./people";
+import { collectTags } from "./tags";
+import { collectPeople } from "./people";
+import { matches, parseQuery, removeChip, toggleFilter } from "./query";
 import { renderLinksSkeleton, renderToolbarSkeleton } from "./skeleton";
 import {
   createLoginButton,
@@ -33,7 +34,6 @@ import { sortLinksForDisplay, visibleListLinks } from "./sort-links";
 import {
   categoryCounts,
   linksForSection,
-  searchLinks,
   sectionCounts,
   toggleCategory,
   type Section,
@@ -150,11 +150,12 @@ function bootDynamic(
   let notice = warning ?? null;
   let categoryFilter: Category[] = [];
   let section: Section = "feed";
+  /**
+   * Text of the search box, the single source of truth for every search filter
+   * (`#tag`, `@pessoa`, `cidade:`, `custo<`, free text; see query.ts). Chip taps
+   * and chip removal edit this text and the input, so typing == tapping.
+   */
   let query = "";
-  /** Active tag filter (accent-insensitive keys, AND). Tap a tag chip toggles it. */
-  let tagFilter: string[] = [];
-  /** Active people filter (accent-insensitive keys, AND with tags). Tap a person chip toggles it. */
-  let peopleFilter: string[] = [];
   let pendingSharedUrl: string | null = pickSharedUrl(
     new URLSearchParams(location.search)
   );
@@ -221,10 +222,7 @@ function bootDynamic(
       categoryFilter = [];
       renderList();
     },
-    onQuery: (q) => {
-      query = q;
-      renderList();
-    },
+    onQuery: (q) => setQuery(q),
     onAdd: () => formModal.openCreate(),
     onDeck: () => deckScreen.open(links, "wishlist"),
     onDraw: () => runDraw(),
@@ -528,8 +526,6 @@ function bootDynamic(
       els.adminRoot.appendChild(createAppBarActions(shellHandlers, els.appBar));
     } else {
       query = "";
-      tagFilter = [];
-      peopleFilter = [];
       els.appBar?.classList.remove("links-appbar--searching");
       els.adminRoot.appendChild(createLoginButton(() => loginModal.open()));
     }
@@ -564,45 +560,45 @@ function bootDynamic(
     }
   }
 
-  function toggleTagFilter(tag: string): void {
-    tagFilter = toggleKey(tagFilter, tag);
+  /** Sets the search text, mirrors it into the search input and re-renders. */
+  function setQuery(next: string, scrollTop = false): void {
+    query = next;
+    const input = document.getElementById("links-search-input");
+    if (input instanceof HTMLInputElement && input.value !== next) input.value = next;
     renderList();
-    window.scrollTo({ top: 0 });
+    if (scrollTop) window.scrollTo({ top: 0 });
+  }
+
+  function toggleTagFilter(tag: string): void {
+    setQuery(toggleFilter(query, "tag", tag), true);
   }
 
   function togglePeopleFilter(person: string): void {
-    peopleFilter = togglePersonKey(peopleFilter, person);
-    renderList();
-    window.scrollTo({ top: 0 });
+    setQuery(toggleFilter(query, "person", person), true);
   }
 
-  /** Active tag and people filters as removable chips above the feed (null when none). */
+  /** Active structured filters (#tag, @pessoa, cidade:, custo<) as removable chips (null when none). */
   function renderFilterBar(): HTMLElement | null {
-    if (tagFilter.length === 0 && peopleFilter.length === 0) return null;
-    const tagNames = new Map(collectTags(links).map((t) => [tagKey(t), t]));
-    const personNames = new Map(collectPeople(links).map((p) => [personKey(p), p]));
+    const chips = parseQuery(query).chips;
+    if (chips.length === 0) return null;
     const bar = document.createElement("div");
     bar.className = "links-tagfilter";
     bar.setAttribute("role", "group");
     bar.setAttribute("aria-label", "Filtros ativos");
-    const addChip = (label: string, remove: () => void): void => {
+    for (const filter of chips) {
       const chip = document.createElement("button");
       chip.type = "button";
       chip.className = "links-chip links-chip--active links-tagfilter__chip";
-      chip.setAttribute("aria-label", `Remover filtro ${label}`);
-      chip.textContent = `${label} ×`;
-      chip.addEventListener("click", remove);
+      chip.setAttribute("aria-label", `Remover filtro ${filter.label}`);
+      chip.textContent = `${filter.label} ×`;
+      chip.addEventListener("click", () => setQuery(removeChip(query, filter)));
       bar.appendChild(chip);
-    };
-    for (const key of tagFilter) addChip(`#${tagNames.get(key) ?? key}`, () => toggleTagFilter(key));
-    for (const key of peopleFilter) {
-      addChip(`@${personNames.get(key) ?? key}`, () => togglePeopleFilter(key));
     }
     return bar;
   }
 
   function emptyText(): string {
-    if (query.trim().length > 0 || tagFilter.length > 0 || peopleFilter.length > 0) return "Nada encontrado para essa busca.";
+    if (query.trim().length > 0) return "Nada encontrado para essa busca.";
     if (categoryFilter.length > 0) return "Nenhuma experiência nas categorias selecionadas.";
     if (section === "agenda") return "Nada agendado ainda. Use Agendar em um card.";
     if (section === "done") return "Nenhuma experiência marcada como feita ainda.";
@@ -620,9 +616,8 @@ function bootDynamic(
       return;
     }
     setShellVisible(true);
-    const sectionLinks = searchLinks(linksForSection(links, section), query).filter((l) =>
-      hasAllTags(l, tagFilter) && hasAllPeople(l, peopleFilter)
-    );
+    const parsed = parseQuery(query);
+    const sectionLinks = linksForSection(links, section).filter((l) => matches(l, parsed));
     const visible = filterLinksByCategory(sectionLinks, categoryFilter);
     renderChrome(sectionLinks, visible.length);
     const selected = viewModal.currentId();

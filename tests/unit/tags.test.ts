@@ -7,7 +7,6 @@ import {
   normalizeTag,
   suggestTags,
   tagKey,
-  toggleKey,
   MAX_TAGS,
   MAX_TAG_LENGTH,
 } from "../../src/links/tags";
@@ -81,9 +80,5 @@ describe("filtering by tag", () => {
     expect(hasAllTags({ tags: ["grátis"] }, ["gratis", "praia"])).toBe(false);
     expect(hasAllTags({ tags: null }, ["praia"])).toBe(false);
     expect(hasAllTags({ tags: null }, [])).toBe(true);
-  });
-  it("toggleKey adds and removes a tag key", () => {
-    expect(toggleKey([], "#Grátis")).toEqual(["gratis"]);
-    expect(toggleKey(["gratis"], "grátis")).toEqual([]);
   });
 });

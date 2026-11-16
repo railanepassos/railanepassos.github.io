@@ -8,7 +8,7 @@
  *    `#Grátis`, `gratis` and `GRÁTIS` are the same tag.
  *
  * Reused by the people input (`@`) and the search syntax: both rely on these
- * shapes (`normalizeTag`/`tagKey`) and on `toggleKey`/`hasAllTags` for filters.
+ * shapes (`normalizeTag`/`tagKey`) and on `hasAllTags` for filters.
  */
 
 export const MAX_TAGS = 30;
@@ -101,15 +101,4 @@ export function hasAllTags(
   if (filterKeys.length === 0) return true;
   const own = new Set((link.tags ?? []).map(tagKey));
   return filterKeys.every((k) => own.has(tagKey(k)));
-}
-
-/** Toggle a tag in a list of filter keys (returns a new list of keys). */
-export function toggleKey(
-  keys: readonly string[],
-  raw: string,
-  keyOf: (raw: string) => string = tagKey
-): string[] {
-  const key = keyOf(raw);
-  if (key === "") return [...keys];
-  return keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key];
 }

@@ -4,8 +4,6 @@ import {
   displayTitle,
   linkDomain,
   linksForSection,
-  matchesSearch,
-  searchLinks,
   sectionCounts,
   toggleCategory,
 } from "../../src/links/feed";
@@ -160,42 +158,5 @@ describe("toggleCategory", () => {
 
   it("removes a selected category", () => {
     expect(toggleCategory(["museu", "praia"], "museu")).toEqual(["praia"]);
-  });
-});
-
-describe("matchesSearch / searchLinks", () => {
-  const link = row({
-    label: "Museu de Arte Contemporânea",
-    description: "Ir na quarta",
-    note: "Café no jardim",
-    category: "museu",
-  });
-
-  it("matches everything for a blank query", () => {
-    expect(matchesSearch(link, "   ")).toBe(true);
-  });
-
-  it("is case- and accent-insensitive on the label", () => {
-    expect(matchesSearch(link, "CONTEMPORANEA")).toBe(true);
-  });
-
-  it("matches description and note", () => {
-    expect(matchesSearch(link, "quarta")).toBe(true);
-    expect(matchesSearch(link, "cafe")).toBe(true);
-  });
-
-  it("matches the category label", () => {
-    const beach = row({ label: "Lugar", category: "ponto-turistico" });
-    expect(matchesSearch(beach, "turístico")).toBe(true);
-  });
-
-  it("requires every term to match", () => {
-    expect(matchesSearch(link, "museu quarta")).toBe(true);
-    expect(matchesSearch(link, "museu praia")).toBe(false);
-  });
-
-  it("searchLinks filters a list", () => {
-    const other = row({ id: "x", label: "Praia do Forte", category: "praia" });
-    expect(searchLinks([link, other], "forte").map((l) => l.id)).toEqual(["x"]);
   });
 });
