@@ -342,7 +342,7 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
     const byId = new Map(allLinks.map((l) => [l.id, l]));
     queue = queue
       .map((q) => byId.get(q.id))
-      .filter((l): l is LinkRow => Boolean(l) && (l.status ?? "wishlist") === tab);
+      .filter((l): l is LinkRow => l !== undefined && (l.status ?? "wishlist") === tab);
     syncTabs();
     paintCard();
   }
