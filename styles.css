@@ -1747,6 +1747,8 @@ body.links-screen-open {
   max-width: 440px;
   width: 100%;
   margin: 0 auto;
+  max-height: calc(100 * var(--app-vh, 1vh) - 32px);
+  overflow: hidden;
 }
 
 .links-deck-screen__tabs {
@@ -1811,7 +1813,8 @@ body.links-screen-open {
 
 .links-deck-screen__stage {
   position: relative;
-  min-height: min(calc(58 * var(--app-vh, 1vh)), 460px);
+  min-height: 0;
+  max-height: 460px;
   display: flex;
   align-items: stretch;
   justify-content: center;
@@ -1848,7 +1851,8 @@ body.links-screen-open {
   z-index: 1;
   width: 100%;
   max-width: 380px;
-  min-height: min(calc(52 * var(--app-vh, 1vh)), 420px);
+  min-height: 0;
+  max-height: 420px;
   border-radius: 24px;
   overflow: hidden;
   background: var(--navy-dark);
@@ -2176,13 +2180,20 @@ body.links-screen-open {
   }
 }
 
+@media (min-width: 720px) {
+  .links-deck-screen__stage {
+    flex: none;
+    height: clamp(220px, calc(100 * var(--app-vh, 1vh) - 340px), 460px);
+  }
+}
+
 @media (max-width: 480px) {
   .links-deck-screen__stage {
-    min-height: min(calc(56 * var(--app-vh, 1vh)), 420px);
+    max-height: 420px;
   }
 
   .links-deck-screen__card {
-    min-height: min(calc(50 * var(--app-vh, 1vh)), 390px);
+    max-height: 390px;
   }
 
   .links-deck-screen__controls {
@@ -3463,9 +3474,16 @@ body.links-authed .links-app__layout {
   }
 
   .links-detail__hero {
+    flex: none;
     height: auto;
-    max-height: none;
+    max-height: 240px;
     aspect-ratio: 16 / 10;
+    overflow: hidden;
+  }
+
+  .links-detail__hero img {
+    position: absolute;
+    inset: 0;
   }
 
   .links-detail__hero-bar {

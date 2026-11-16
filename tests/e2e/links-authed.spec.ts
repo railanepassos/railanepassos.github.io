@@ -132,7 +132,7 @@ test.describe("Links app — authenticated (mocked session)", () => {
     await expect(detail).toBeVisible();
     await expect(detail.locator("#links-view-title")).toHaveText("Museu de Arte Moderna");
     await expect(detail.getByRole("link", { name: /Ver link original/ })).toBeVisible();
-    await expect(detail.locator(".links-detail__primary")).toHaveText("Agenda");
+    await expect(detail.locator(".links-detail__primary")).toHaveText("Reagendar");
 
     const box = await detail.locator(".links-detail__dialog").boundingBox();
     const viewport = page.viewportSize()!;
@@ -145,6 +145,20 @@ test.describe("Links app — authenticated (mocked session)", () => {
       // Grid stays visible and interactive beside the panel.
       await expect(page.locator(".feed-card").first()).toBeVisible();
       await expect(page.locator(".feed-card--selected")).toHaveCount(1);
+    }
+
+    // Title and action bar stay visible inside the panel without scrolling.
+    const title = detail.locator("#links-view-title");
+    const dialogBox = (await detail.locator(".links-detail__dialog").boundingBox())!;
+    const titleBox = (await title.boundingBox())!;
+    expect(titleBox.y).toBeGreaterThanOrEqual(dialogBox.y);
+    expect(titleBox.y + titleBox.height).toBeLessThanOrEqual(dialogBox.y + dialogBox.height);
+    if (!isMobile(page)) {
+      const hero = (await detail.locator(".links-detail__hero").boundingBox())!;
+      expect(hero.height).toBeLessThanOrEqual(241);
+      const barBox = (await detail.locator(".links-detail__bar").boundingBox())!;
+      expect(barBox.y + barBox.height).toBeLessThanOrEqual(viewport.height);
+      expect(barBox.y).toBeGreaterThan(titleBox.y);
     }
 
     await detail.getByRole("button", { name: "Voltar" }).click();
@@ -190,6 +204,21 @@ test.describe("Links app — authenticated (mocked session)", () => {
     }
     await expect(page.locator(".links-deck-screen")).toBeVisible();
     await expect(page.locator(".links-deck-screen__card")).toBeVisible();
+
+    // Every action label fits inside the viewport (no clipping).
+    const viewport = page.viewportSize()!;
+    const captions = page.locator(".links-deck-screen__btn-caption");
+    const n = await captions.count();
+    expect(n).toBeGreaterThan(0);
+    for (let i = 0; i < n; i++) {
+      const b = (await captions.nth(i).boundingBox())!;
+      expect(b.y).toBeGreaterThanOrEqual(0);
+      expect(b.y + b.height).toBeLessThanOrEqual(viewport.height);
+    }
+    const overflow = await page.locator(".links-deck-screen__dialog").evaluate(
+      (el) => el.scrollHeight - el.clientHeight
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
   });
 
   test("add sheet offers one-tap category chips", async ({ page }) => {

@@ -1572,7 +1572,7 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
         link.scheduled_start,
         link.scheduled_end
       );
-      primaryText.textContent = "Agenda";
+      primaryText.textContent = "Reagendar";
     } else {
       scheduleRow.row.hidden = true;
       scheduleRow.value.textContent = "";

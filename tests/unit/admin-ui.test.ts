@@ -262,7 +262,7 @@ describe("createViewModal", () => {
     expect(cb.onDelete).toHaveBeenCalled();
   });
 
-  it("shows the schedule row and Agenda label when scheduled", () => {
+  it("shows the schedule row and Reagendar label when scheduled", () => {
     const modal = createViewModal(callbacks());
     document.body.appendChild(modal.element);
 
@@ -277,7 +277,7 @@ describe("createViewModal", () => {
     expect(modal.element.textContent).toContain("3 ago 2026 · 09:00–17:00");
     expect(
       modal.element.querySelector(".links-detail__primary")?.textContent?.trim()
-    ).toBe("Agenda");
+    ).toBe("Reagendar");
     expect(modal.element.textContent).not.toContain("Baixar ICS");
   });
 });
