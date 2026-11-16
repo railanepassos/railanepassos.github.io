@@ -7,7 +7,9 @@ import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
 import { renderGuestGate } from "./render";
 import { collectTags } from "./tags";
 import { collectPeople } from "./people";
-import { matches, parseQuery, removeChip, toggleFilter } from "./query";
+import { matches, parseQuery, removeChip, setMinRating, toggleFilter } from "./query";
+import { renderDoneToolbar } from "./done-toolbar";
+import { rankDone, filterDone } from "./ranking";
 import { renderLinksSkeleton, renderToolbarSkeleton } from "./skeleton";
 import {
   createLoginButton,
@@ -159,6 +161,9 @@ function bootDynamic(
    * and chip removal edit this text and the input, so typing == tapping.
    */
   let query = "";
+  /** Feitos: ranking order and "Voltaria" filter (min rating lives in `query`). */
+  let doneRanking = false;
+  let doneWantAgain = false;
   let pendingSharedUrl: string | null = pickSharedUrl(
     new URLSearchParams(location.search)
   );
@@ -682,10 +687,32 @@ function bootDynamic(
     }
     setShellVisible(true);
     const parsed = parseQuery(query);
-    const sectionLinks = linksForSection(links, section).filter((l) => matches(l, parsed));
+    let sectionLinks = linksForSection(links, section).filter((l) => matches(l, parsed));
+    if (section === "done") {
+      sectionLinks = filterDone(sectionLinks, { wantAgain: doneWantAgain });
+      if (doneRanking) sectionLinks = rankDone(sectionLinks);
+    }
     const visible = filterLinksByCategory(sectionLinks, categoryFilter);
     renderChrome(sectionLinks, visible.length);
     const selected = viewModal.currentId();
+    if (section === "done") {
+      els.list.appendChild(
+        renderDoneToolbar(
+          { ranking: doneRanking, wantAgain: doneWantAgain, minRating: parsed.minRating },
+          {
+            onRanking: (on) => {
+              doneRanking = on;
+              renderList();
+            },
+            onWantAgain: (on) => {
+              doneWantAgain = on;
+              renderList();
+            },
+            onMinRating: (min) => setQuery(setMinRating(query, min)),
+          }
+        )
+      );
+    }
     const filterBar = renderFilterBar();
     if (filterBar) els.list.appendChild(filterBar);
     if (visible.length === 0) {
