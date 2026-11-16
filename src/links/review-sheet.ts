@@ -12,6 +12,7 @@ import {
 } from "./review";
 import { LESSON_MAX, MAX_LESSONS } from "./lessons";
 import { moveItem } from "./poses";
+import { resetPageZoom } from "./viewport-zoom";
 
 /**
  * "Como foi" bottom sheet: opened after marking a place as done (skippable) and
@@ -463,6 +464,7 @@ export function createReviewSheet(): ReviewSheetHandle {
     setBusy(false);
     setError("");
     syncBodyScreenLock();
+    resetPageZoom();
     if (previouslyFocused && previouslyFocused.isConnected) previouslyFocused.focus();
     previouslyFocused = null;
   }
@@ -490,6 +492,7 @@ export function createReviewSheet(): ReviewSheetHandle {
     for (const control of controls) control.set(opts.initial);
     overlay.hidden = false;
     syncBodyScreenLock();
+    resetPageZoom();
     resetScroll();
     // Focus the dialog (not a field): no keyboard pops up and nothing scrolls into view.
     dialog.focus({ preventScroll: true });
