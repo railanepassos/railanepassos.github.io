@@ -41,7 +41,7 @@ Agenda / sorteio        História à mão             Vídeo/álbum (link)
 | 1 | Redesign visual (feed, grade desktop, detalhe, sheet de adicionar), busca simples, deck restilizado | Em implementação (`feat/links-social-redesign`) |
 | 2 | Campos novos: custo, cidade/endereço, dossiê (história/o que ver), roteiro, link do post de origem, poses de referência (links + texto), **tags `#` e menções `@`**, busca com sintaxe | Spec: `2026-11-16-links-phase2-fields-design.md` |
 | 3 | Depois da visita: nota (1–5), "voltaria?", impressões, lições aprendidas, ranking, link de vídeo/álbum de memória | A especificar |
-| 4 | Plano do passeio: checklist marcável + lista de lanches/compras; lições da Fase 3 sugeridas como itens | A especificar |
+| 4 | Plano do passeio: **participantes** (por nome, sem precisar de conta, ex. Railane, Alana, Lúcia), **responsabilidades** (quem leva o quê, quem compra os ingressos), checklist marcável + lista de lanches/compras, lições da Fase 3 sugeridas como itens; **exportar mensagem para o WhatsApp** com data, local, roteiro e a lista de quem faz o quê | A especificar |
 | 5 | Skills do Claude local: importar do Instagram (DMs e posts compartilhados via Claude in Chrome), gerar dossiê, roteiro e lista de lanches, sempre com aprovação antes de inserir | A especificar |
 | 6 | Aba Memórias (linha do tempo dos feitos, "há 1 ano…"), sorteio com filtros (custo, cidade, tag, tempo) | A especificar |
 
@@ -49,6 +49,11 @@ Agenda / sorteio        História à mão             Vídeo/álbum (link)
 
 - **Vídeos de memória:** a Railane sobe manualmente no YouTube como **não listado** e cola o link no item. Não automatizar upload nem edição. A edição fica no celular (montagem automática do Google Fotos ou modelo do CapCut), com música da Biblioteca de Áudio do YouTube, para evitar bloqueio por direitos autorais. O app mostra a miniatura e o botão "Assistir".
 - **IA:** primeiro via skill do Claude local (zero custo, revisão humana). Botão de IA dentro do app fica fora até haver necessidade.
+
+- **Participantes e WhatsApp (Fase 4):**
+  - Participantes são nomes, não contas. Só Railane e Alana fazem login. Não guardar telefone de terceiros (LGPD: mínimo necessário).
+  - A mensagem é montada no app e aberta com `https://wa.me/?text=<mensagem>` (ou `navigator.share` no celular). Você escolhe o grupo ou contato no próprio WhatsApp.
+  - Sem API do WhatsApp (paga e burocrática). O grupo temporário é criado manualmente no WhatsApp.
 
 ## Perguntas em aberto
 
