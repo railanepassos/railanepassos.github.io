@@ -1,5 +1,6 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { LINK_ROWS } from "../fixtures/links-rows";
+import { isMobile, openAuthedWith } from "./helpers/authed";
 
 /**
  * Authenticated UI with a mocked Supabase session. No real credentials or
@@ -7,72 +8,13 @@ import { LINK_ROWS } from "../fixtures/links-rows";
  * tests/fixtures/links-rows.ts. Every Supabase call is intercepted.
  */
 
-const PROJECT_REF = "fashrynmqkucrlxoglsp";
-const SUPABASE = `https://${PROJECT_REF}.supabase.co`;
 const rows = LINK_ROWS;
 
 const WISHLIST = rows.filter((r) => r.status !== "done").length;
 
-function base64Url(value: object): string {
-  const bytes = new TextEncoder().encode(JSON.stringify(value));
-  const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join("");
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function fakeSession(): string {
-  const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365;
-  const user = {
-    id: "11111111-1111-4111-8111-111111111111",
-    email: "tester@example.test",
-    aud: "authenticated",
-    role: "authenticated",
-  };
-  const token = [
-    base64Url({ alg: "HS256", typ: "JWT" }),
-    base64Url({ sub: user.id, exp, aud: "authenticated", role: "authenticated" }),
-    "signature",
-  ].join(".");
-  return JSON.stringify({
-    access_token: token,
-    token_type: "bearer",
-    expires_in: 60 * 60 * 24 * 365,
-    expires_at: exp,
-    refresh_token: "fake-refresh-token",
-    user,
-  });
-}
-
-async function openAuthed(page: Page): Promise<void> {
-  const session = fakeSession();
-  await page.addInitScript(
-    ([key, value]) => {
-      localStorage.setItem(key, value);
-      localStorage.setItem("links-remember-me", "1");
-    },
-    [`sb-${PROJECT_REF}-auth-token`, session] as const
-  );
-  await page.route(`${SUPABASE}/rest/v1/links**`, async (route) => {
-    const method = route.request().method();
-    if (method === "GET") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rows) });
-      return;
-    }
-    await route.fulfill({ status: 204, body: "" });
-  });
-  await page.route(`${SUPABASE}/auth/v1/**`, (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: "{}" })
-  );
-  await page.goto("/p/a8f3k2/");
-  await expect(page.locator(".feed-card").first()).toBeVisible();
-}
-
-function isMobile(page: Page): boolean {
-  return (page.viewportSize()?.width ?? 1280) < 720;
-}
-
 test.describe("Links app — authenticated (mocked session)", () => {
   test.beforeEach(async ({ page }) => {
-    await openAuthed(page);
+    await openAuthedWith(page, rows);
   });
 
   test("feed cards render with images", async ({ page }) => {

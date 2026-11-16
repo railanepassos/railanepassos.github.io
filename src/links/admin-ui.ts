@@ -29,7 +29,12 @@ import {
   readPoseRefs,
   type PoseDraft,
 } from "./poses";
-import { MORE_TEXT_FIELDS, emptyMoreTextValues, type MoreTextValues } from "./more-fields";
+import {
+  MORE_TEXT_FIELDS,
+  emptyMoreTextValues,
+  type MoreTextKey,
+  type MoreTextValues,
+} from "./more-fields";
 import { createChipInput } from "./chip-input";
 import { MAX_TAGS, MAX_TAG_LENGTH, dedupeTags, normalizeTag, tagKey } from "./tags";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH, dedupePeople, normalizePerson, personKey } from "./people";
@@ -238,10 +243,10 @@ export type LinkFormValues = MoreTextValues & {
   pose_refs: PoseDraft[];
   /** Picked category; "" = infer from text (Automática). */
   category: string;
-  /** Free tags (display form, no `#`). Optional so older callers keep compiling. */
-  tags?: string[];
-  /** People (display form, no `@`). Optional so older callers keep compiling. */
-  people?: string[];
+  /** Free tags (display form, no `#`). */
+  tags: string[];
+  /** People (display form, no `@`). */
+  people: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -441,8 +446,47 @@ function cardActionButton(
   return btn;
 }
 
+const FILTER_CHIP_KINDS = {
+  tag: {
+    prefix: "#",
+    values: dedupeTags,
+    cardRow: "feed-card__tags",
+    cardChip: "feed-card__tag",
+    detailChip: "links-detail__tag",
+  },
+  person: {
+    prefix: "@",
+    values: dedupePeople,
+    cardRow: "feed-card__people",
+    cardChip: "feed-card__person",
+    detailChip: "links-detail__person",
+  },
+} as const;
+
+/**
+ * Tap-to-filter chips for a tag/person list, shared by the feed card and the
+ * detail view (only the CSS classes and the click handler differ).
+ */
+function filterChips(
+  kind: keyof typeof FILTER_CHIP_KINDS,
+  where: "card" | "detail",
+  raw: readonly string[] | null | undefined,
+  onPick: (value: string, e: MouseEvent) => void
+): HTMLButtonElement[] {
+  const spec = FILTER_CHIP_KINDS[kind];
+  return spec.values(raw ?? []).map((value) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = where === "card" ? spec.cardChip : spec.detailChip;
+    btn.textContent = `${spec.prefix}${value}`;
+    btn.setAttribute("aria-label", `Filtrar por ${spec.prefix}${value}`);
+    btn.addEventListener("click", (e) => onPick(value, e));
+    return btn;
+  });
+}
+
 /** Registry fields surfaced as meta items on the feed card (cost · city). */
-const CARD_META_KEYS: readonly string[] = ["cost_text", "city"];
+const CARD_META_KEYS: readonly MoreTextKey[] = ["cost_text", "city"];
 
 export function renderAdminCard(
   link: LinkRow,
@@ -513,48 +557,26 @@ export function renderAdminCard(
     const value = link[field.key];
     if (!value) continue;
     const item = document.createElement("span");
-    item.className = `feed-card__meta-item feed-card__meta-item--${field.key === "cost_text" ? "cost" : field.key}`;
+    item.className = `feed-card__meta-item feed-card__meta-item--${field.slug}`;
     const text = document.createElement("span");
     text.textContent = value;
     item.append(uiIcon(field.icon, 15), text);
     meta.appendChild(item);
   }
   body.append(heading, meta);
-  const cardTags = dedupeTags(link.tags ?? []);
-  if (cardTags.length > 0) {
-    const tagRow = document.createElement("div");
-    tagRow.className = "feed-card__tags";
-    for (const tag of cardTags) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "feed-card__tag";
-      btn.textContent = `#${tag}`;
-      btn.setAttribute("aria-label", `Filtrar por #${tag}`);
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        cb.onTag?.(tag);
-      });
-      tagRow.appendChild(btn);
-    }
-    body.appendChild(tagRow);
-  }
-  const cardPeople = dedupePeople(link.people ?? []);
-  if (cardPeople.length > 0) {
-    const peopleRow = document.createElement("div");
-    peopleRow.className = "feed-card__people";
-    for (const person of cardPeople) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "feed-card__person";
-      btn.textContent = `@${person}`;
-      btn.setAttribute("aria-label", `Filtrar por @${person}`);
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        cb.onPerson?.(person);
-      });
-      peopleRow.appendChild(btn);
-    }
-    body.appendChild(peopleRow);
+  for (const [kind, values, pick] of [
+    ["tag", link.tags, cb.onTag],
+    ["person", link.people, cb.onPerson],
+  ] as const) {
+    const chips = filterChips(kind, "card", values, (value, e) => {
+      e.stopPropagation();
+      pick?.(value);
+    });
+    if (chips.length === 0) continue;
+    const row = document.createElement("div");
+    row.className = FILTER_CHIP_KINDS[kind].cardRow;
+    row.append(...chips);
+    body.appendChild(row);
   }
 
   const actions = document.createElement("div");
@@ -2002,38 +2024,17 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
       r.row.hidden = !value;
       r.value.textContent = value;
     }
-    const detailTags = dedupeTags(link.tags ?? []);
-    tagsRow.row.hidden = detailTags.length === 0;
-    tagsRow.value.replaceChildren(
-      ...detailTags.map((tag) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "links-detail__tag";
-        btn.textContent = `#${tag}`;
-        btn.setAttribute("aria-label", `Filtrar por #${tag}`);
-        btn.addEventListener("click", () => {
-          close();
-          cb.onTag?.(tag);
-        });
-        return btn;
-      })
-    );
-    const detailPeople = dedupePeople(link.people ?? []);
-    peopleRow.row.hidden = detailPeople.length === 0;
-    peopleRow.value.replaceChildren(
-      ...detailPeople.map((person) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "links-detail__person";
-        btn.textContent = `@${person}`;
-        btn.setAttribute("aria-label", `Filtrar por @${person}`);
-        btn.addEventListener("click", () => {
-          close();
-          cb.onPerson?.(person);
-        });
-        return btn;
-      })
-    );
+    for (const [kind, row, values, pick] of [
+      ["tag", tagsRow, link.tags, cb.onTag],
+      ["person", peopleRow, link.people, cb.onPerson],
+    ] as const) {
+      const chips = filterChips(kind, "detail", values, (value) => {
+        close();
+        pick?.(value);
+      });
+      row.row.hidden = chips.length === 0;
+      row.value.replaceChildren(...chips);
+    }
     const mapUrl = buildMapUrl(link.address, link.city);
     mapWrap.hidden = mapUrl === null;
     mapLink.hidden = mapUrl === null;
@@ -2107,7 +2108,7 @@ export function toCreateInput(values: LinkFormValues, sortOrder: number): Create
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
     source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
-    pose_refs: draftsToPoseRefs(resolved.pose_refs ?? []),
+    pose_refs: draftsToPoseRefs(resolved.pose_refs),
     ...moreTextPayload(resolved),
     tags: tagsPayload(resolved),
     people: peoplePayload(resolved),
@@ -2127,7 +2128,7 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
     source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
-    pose_refs: draftsToPoseRefs(resolved.pose_refs ?? []),
+    pose_refs: draftsToPoseRefs(resolved.pose_refs),
     ...moreTextPayload(resolved),
     tags: tagsPayload(resolved),
     people: peoplePayload(resolved),
@@ -2135,10 +2136,10 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
 }
 
 /** Registry text fields -> payload keys (blank -> null). */
-function moreTextPayload(values: LinkFormValues): Record<string, string | null> {
-  const out: Record<string, string | null> = {};
+function moreTextPayload(values: LinkFormValues): Record<MoreTextKey, string | null> {
+  const out = {} as Record<MoreTextKey, string | null>;
   for (const field of MORE_TEXT_FIELDS) {
-    const value = (values[field.key] ?? "").trim();
+    const value = values[field.key].trim();
     out[field.key] = value.length > 0 ? value : null;
   }
   return out;
@@ -2146,13 +2147,13 @@ function moreTextPayload(values: LinkFormValues): Record<string, string | null> 
 
 /** Normalized, deduped tags; empty -> null. */
 function tagsPayload(values: LinkFormValues): string[] | null {
-  const tags = dedupeTags(values.tags ?? []);
+  const tags = dedupeTags(values.tags);
   return tags.length > 0 ? tags : null;
 }
 
 /** Normalized, deduped people; empty -> null. */
 function peoplePayload(values: LinkFormValues): string[] | null {
-  const people = dedupePeople(values.people ?? []);
+  const people = dedupePeople(values.people);
   return people.length > 0 ? people : null;
 }
 
@@ -2180,18 +2181,18 @@ function assertFormValues(values: LinkFormValues): void {
   if (values.image_url.length > 0 && !isHttpsUrl(values.image_url)) {
     throw new Error("A foto precisa ser uma URL https válida.");
   }
-  if (dedupeTags(values.tags ?? []).length > MAX_TAGS) {
+  if (dedupeTags(values.tags).length > MAX_TAGS) {
     throw new Error(`Use no máximo ${MAX_TAGS} tags.`);
   }
-  if (dedupePeople(values.people ?? []).length > MAX_PEOPLE) {
+  if (dedupePeople(values.people).length > MAX_PEOPLE) {
     throw new Error(`Use no máximo ${MAX_PEOPLE} pessoas.`);
   }
-  const sourceError = httpsUrlError(values.source_url ?? "", SOURCE_TERM);
+  const sourceError = httpsUrlError(values.source_url, SOURCE_TERM);
   if (sourceError) throw new Error(sourceError);
-  const poseError = poseRefsError(values.pose_refs ?? []);
+  const poseError = poseRefsError(values.pose_refs);
   if (poseError) throw new Error(poseError);
   for (const field of MORE_TEXT_FIELDS) {
-    if ((values[field.key] ?? "").length > field.max) {
+    if (values[field.key].length > field.max) {
       throw new Error(`${field.term} deve ter no máximo ${field.max} caracteres.`);
     }
   }

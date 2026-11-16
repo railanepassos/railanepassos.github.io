@@ -1,12 +1,15 @@
 /**
- * Generic chip input with autocomplete (tags `#` now, people `@` later).
+ * Generic chip input with autocomplete, used for tags (`#`) and people (`@`).
  *
  * Parameterised by the visible `prefix`, the `normalize`/`key` functions (what
  * is stored vs. what is compared) and a `getSuggestions` source. Pure DOM
  * (createElement + textContent): no innerHTML, CSP-safe. The component owns no
  * persistence: callers read `getValues()` on submit (call `commit()` first so
- * text still being typed is not lost).
+ * text still being typed is not lost). Suggestion matching is the shared
+ * `suggestBy` helper (`keyed-list.ts`).
  */
+
+import { suggestBy } from "./keyed-list";
 
 export type ChipInputOptions = {
   /** Stable id of the text input (the label points at it). */
@@ -25,12 +28,10 @@ export type ChipInputOptions = {
   splitOnSpace?: boolean;
   /** Candidates for autocomplete (read on every keystroke). */
   getSuggestions: () => readonly string[];
-  onChange?: (values: string[]) => void;
 };
 
 export type ChipInputHandle = {
   element: HTMLElement;
-  input: HTMLInputElement;
   getValues: () => string[];
   /** Replaces the chips (deduped, normalized) and clears the typed text. */
   setValues: (values: readonly string[]) => void;
@@ -84,10 +85,6 @@ export function createChipInput(opts: ChipInputOptions): ChipInputHandle {
     return values.map(opts.key);
   }
 
-  function notify(): void {
-    opts.onChange?.([...values]);
-  }
-
   function renderChips(): void {
     chipList.replaceChildren();
     for (const value of values) {
@@ -107,7 +104,6 @@ export function createChipInput(opts: ChipInputOptions): ChipInputHandle {
         values = values.filter((v) => opts.key(v) !== opts.key(value));
         renderChips();
         renderSuggestions();
-        notify();
       });
       chip.append(text, remove);
       chipList.appendChild(chip);
@@ -121,7 +117,6 @@ export function createChipInput(opts: ChipInputOptions): ChipInputHandle {
     if (keys().includes(opts.key(display))) return false;
     values = [...values, display];
     renderChips();
-    notify();
     return true;
   }
 
@@ -131,16 +126,7 @@ export function createChipInput(opts: ChipInputOptions): ChipInputHandle {
       suggestionList.hidden = true;
       return;
     }
-    const q = opts.key(input.value);
-    const taken = new Set(keys());
-    const shown: string[] = [];
-    for (const candidate of opts.getSuggestions()) {
-      const k = opts.key(candidate);
-      if (taken.has(k)) continue;
-      if (q !== "" && !k.includes(q)) continue;
-      shown.push(candidate);
-      if (shown.length >= MAX_SUGGESTIONS) break;
-    }
+    const shown = suggestBy(opts.getSuggestions(), input.value, values, opts.key, MAX_SUGGESTIONS);
     for (const candidate of shown) {
       const option = document.createElement("button");
       option.type = "button";
@@ -182,8 +168,7 @@ export function createChipInput(opts: ChipInputOptions): ChipInputHandle {
       values = values.slice(0, -1);
       renderChips();
       renderSuggestions();
-      notify();
-    }
+      }
   });
   input.addEventListener("focus", renderSuggestions);
   input.addEventListener("blur", () => {
@@ -192,7 +177,6 @@ export function createChipInput(opts: ChipInputOptions): ChipInputHandle {
 
   return {
     element: wrapper,
-    input,
     getValues: () => [...values],
     setValues(next) {
       const seen = new Set<string>();

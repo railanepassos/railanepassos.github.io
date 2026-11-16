@@ -31,6 +31,8 @@ function formValues(partial: Partial<LinkFormValues> = {}): LinkFormValues {
     itinerary: "",
     source_url: "",
     pose_refs: [],
+    tags: [],
+    people: [],
     ...partial,
   };
 }
@@ -88,6 +90,10 @@ beforeEach(() => {
   });
 });
 
+function inputOf(c: { element: HTMLElement }): HTMLInputElement {
+  return c.element.querySelector("input") as HTMLInputElement;
+}
+
 function type(input: HTMLInputElement, text: string): void {
   input.value = text;
   input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -107,9 +113,9 @@ describe("chip input without space splitting", () => {
       getSuggestions: () => [],
     });
     document.body.appendChild(c.element);
-    type(c.input, "Maria Clara");
+    type(inputOf(c), "Maria Clara");
     expect(c.getValues()).toEqual([]);
-    type(c.input, "Maria Clara, Bia ");
+    type(inputOf(c), "Maria Clara, Bia ");
     expect(c.getValues()).toEqual(["Maria Clara"]);
     c.commit();
     expect(c.getValues()).toEqual(["Maria Clara", "Bia"]);

@@ -4,7 +4,6 @@ import {
   matches,
   parseQuery,
   removeChip,
-  searchLinks,
   toggleFilter,
 } from "../../src/links/query";
 import type { LinkRow } from "../../src/links/links-repo";
@@ -45,7 +44,7 @@ describe("parseQuery", () => {
   it("parses the full one-line syntax", () => {
     const q = parseQuery("#Museu @alana pelourinho cidade:Salvador custo<50");
     expect(q.tags).toEqual(["museu"]);
-    expect(q.people).toEqual([{ key: "alana", exact: false }]);
+    expect(q.people).toEqual(["alana"]);
     expect(q.terms).toEqual(["pelourinho"]);
     expect(q.city).toBe("salvador");
     expect(q.costMax).toBe(50);
@@ -54,21 +53,18 @@ describe("parseQuery", () => {
   it("folds accents and case in tags, people, terms and city", () => {
     const q = parseQuery("#GRÁTIS @Álvaro Recôncavo cidade:SÃO");
     expect(q.tags).toEqual(["gratis"]);
-    expect(q.people).toEqual([{ key: "alvaro", exact: false }]);
+    expect(q.people).toEqual(["alvaro"]);
     expect(q.terms).toEqual(["reconcavo"]);
     expect(q.city).toBe("sao");
   });
 
-  it("treats quoted @ values as exact multi-word people", () => {
+  it("reads quoted @ values as multi-word people", () => {
     const q = parseQuery('@"Maria Clara" @bia');
-    expect(q.people).toEqual([
-      { key: "maria clara", exact: true },
-      { key: "bia", exact: false },
-    ]);
+    expect(q.people).toEqual(["maria clara", "bia"]);
   });
 
-  it("treats an unclosed quote as a prefix typed so far", () => {
-    expect(parseQuery('@"maria cl').people).toEqual([{ key: "maria cl", exact: false }]);
+  it("keeps what was typed so far when a quote is still open", () => {
+    expect(parseQuery('@"maria cl').people).toEqual(["maria cl"]);
   });
 
   it("supports quoted city and quoted free phrases", () => {
@@ -180,14 +176,25 @@ describe("matches", () => {
     expect(m("#museu")).toBe(false);
   });
 
-  it("filters by @person: prefix when unquoted, exact when quoted", () => {
-    expect(m("@maria")).toBe(true);
-    expect(m("@MARIA")).toBe(true);
+  it("filters by @person: always the exact name, never a prefix", () => {
+    expect(m("@maria")).toBe(false);
     expect(m("@clara")).toBe(false);
     expect(m('@"maria clara"')).toBe(false);
     expect(m('@"Maria Clara Teste"')).toBe(true);
-    expect(m("@maria @bia")).toBe(true);
-    expect(m("@maria @zeca")).toBe(false);
+    expect(m('@"MARIA clará teste"')).toBe(true);
+    expect(m("@bia")).toBe(false);
+    expect(m("@ficticia")).toBe(false);
+    expect(m("@BIA", row({ people: ["Bia"] }))).toBe(true);
+    expect(m('@"Maria Clara Teste" @"Bia Ficticia"')).toBe(true);
+    expect(m('@"Maria Clara Teste" @zeca')).toBe(false);
+  });
+
+  it("searches dossier, itinerary and cost text as free text", () => {
+    const l = row({ dossier: "Construído no século XVIII", itinerary: "Começar pela capela", cost_text: "Grátis às quartas" });
+    expect(m("seculo", l)).toBe(true);
+    expect(m("capela", l)).toBe(true);
+    expect(m("quartas", l)).toBe(true);
+    expect(m("naoexiste", l)).toBe(false);
   });
 
   it("filters by cidade: as an accent-insensitive substring", () => {
@@ -209,15 +216,11 @@ describe("matches", () => {
   });
 
   it("combines everything with AND", () => {
-    expect(m("#praia @maria reconcavo cidade:salvador custo<50")).toBe(true);
-    expect(m("#praia @maria reconcavo cidade:salvador custo<10")).toBe(false);
-    expect(m("#praia @maria reconcavo cidade:recife custo<50")).toBe(false);
+    expect(m('#praia @"maria clara teste" reconcavo cidade:salvador custo<50')).toBe(true);
+    expect(m('#praia @"maria clara teste" reconcavo cidade:salvador custo<10')).toBe(false);
+    expect(m('#praia @"maria clara teste" reconcavo cidade:recife custo<50')).toBe(false);
   });
 
-  it("searchLinks filters a list", () => {
-    const other = row({ id: "x", label: "Praia do Forte", category: "praia" });
-    expect(searchLinks([link, other], "forte").map((l) => l.id)).toEqual(["x"]);
-  });
 });
 
 describe("toggleFilter / removeChip (chip tap == typing)", () => {
@@ -228,23 +231,29 @@ describe("toggleFilter / removeChip (chip tap == typing)", () => {
     expect(toggleFilter(on, "tag", "praia")).toBe("museu");
   });
 
-  it("quotes people so a tap is an exact match", () => {
-    const on = toggleFilter("", "person", "Maria Clara Teste");
-    expect(on).toBe('@"Maria Clara Teste"');
-    expect(parseQuery(on).people).toEqual([{ key: "maria clara teste", exact: true }]);
-    expect(toggleFilter(on, "person", "maria clara teste")).toBe("");
+  it("emits @word for single-word names and quotes only names with spaces", () => {
+    const one = toggleFilter("", "person", "Alana");
+    expect(one).toBe("@Alana");
+    expect(toggleFilter(one, "person", "alana")).toBe("");
+    const two = toggleFilter("", "person", "Maria Clara Teste");
+    expect(two).toBe('@"Maria Clara Teste"');
+    expect(parseQuery(two).people).toEqual(["maria clara teste"]);
+    expect(toggleFilter(two, "person", "maria clara teste")).toBe("");
   });
 
   it("tapping gives the same result as typing the same filter", () => {
     const links = [
-      row({ id: "a", people: ["Bia Ficticia"], tags: ["praia"] }),
-      row({ id: "b", people: ["Bia Ficticia Dois"], tags: ["praia"] }),
+      row({ id: "a", people: ["Alana"], tags: ["praia"] }),
+      row({ id: "b", people: ["Alana Souza"], tags: ["praia"] }),
     ];
-    const tapped = toggleFilter(toggleFilter("", "tag", "praia"), "person", "Bia Ficticia");
-    const typed = '#praia @"bia ficticia"';
-    const ids = (t: string): string[] => searchLinks(links, t).map((l) => l.id);
+    const ids = (t: string): string[] =>
+      links.filter((l) => matches(l, parseQuery(t))).map((l) => l.id);
+    const tapped = toggleFilter(toggleFilter("", "tag", "praia"), "person", "Alana");
     expect(ids(tapped)).toEqual(["a"]);
-    expect(ids(tapped)).toEqual(ids(typed));
+    expect(ids(tapped)).toEqual(ids("#praia @alana"));
+    const tappedFull = toggleFilter("", "person", "Alana Souza");
+    expect(ids(tappedFull)).toEqual(["b"]);
+    expect(ids(tappedFull)).toEqual(ids('@"alana souza"'));
   });
 
   it("removeChip cuts only that token and tidies spaces", () => {

@@ -50,6 +50,8 @@ const ROWS = [
     city: "Porto Seguro",
     cost_text: "grátis",
   }),
+  place("s4", "Jardim Alfa de Teste", { people: ["Alana"] }),
+  place("s5", "Jardim Beta de Teste", { people: ["Alana Souza"] }),
   ...LINK_ROWS,
 ];
 
@@ -67,14 +69,29 @@ const titles = (page: Page): Promise<string[]> =>
 test.describe("search syntax", () => {
   test("#tag @pessoa combine and show removable chips", async ({ page }) => {
     await openAuthedWith(page, ROWS);
-    await search(page, "#praia @maria");
+    await search(page, '#praia @"maria clara teste"');
     await expect(page.locator(".feed-card")).toHaveCount(1);
     await expect(page.locator(".feed-card")).toContainText("Casa do Recôncavo Fictício");
     await expect(page.locator(".links-tagfilter__chip")).toHaveCount(2);
 
-    await page.getByRole("button", { name: "Remover filtro @Maria" }).click();
+    await page.getByRole("button", { name: "Remover filtro @Maria Clara Teste" }).click();
     await expect(page.locator(".feed-card")).toHaveCount(2);
     await expect(page.getByRole("searchbox", { name: "Buscar experiências" })).toHaveValue("#praia");
+  });
+
+  test("@name is an exact match: tapping the Alana chip equals typing @alana", async ({ page }) => {
+    await openAuthedWith(page, ROWS);
+    await page
+      .locator(".feed-card", { hasText: "Jardim Alfa de Teste" })
+      .getByRole("button", { name: "Filtrar por @Alana" })
+      .click();
+    await expect(page.locator("#links-search-input")).toHaveValue("@Alana");
+    await expect(page.locator(".feed-card")).toHaveCount(1);
+    await expect(page.locator(".feed-card")).toContainText("Jardim Alfa de Teste");
+    const tapped = await titles(page);
+
+    await search(page, "@alana");
+    expect(await titles(page)).toEqual(tapped);
   });
 
   test("free text, cidade: and custo< combine; accents and case are ignored", async ({ page }) => {

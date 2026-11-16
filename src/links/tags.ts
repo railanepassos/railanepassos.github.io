@@ -7,9 +7,11 @@
  *  - key: what is compared (`tagKey`): the display form without accents, so
  *    `#Grátis`, `gratis` and `GRÁTIS` are the same tag.
  *
- * Reused by the people input (`@`) and the search syntax: both rely on these
- * shapes (`normalizeTag`/`tagKey`) and on `hasAllTags` for filters.
+ * The generic dedupe/collect/suggest logic is shared with people (`keyed-list.ts`).
+ * `hasAllTags` backs the `#tag` search filter.
  */
+
+import { collectBy, dedupeBy, fold } from "./keyed-list";
 
 export const MAX_TAGS = 30;
 export const MAX_TAG_LENGTH = 40;
@@ -27,70 +29,21 @@ export function normalizeTag(raw: string, maxLength: number = MAX_TAG_LENGTH): s
 
 /** Accent- and case-insensitive comparison key of a tag. */
 export function tagKey(raw: string): string {
-  return normalizeTag(raw).normalize("NFD").replace(/\p{M}/gu, "");
+  return fold(normalizeTag(raw));
 }
 
 /** Normalize, drop blanks and duplicates (by key); first display form wins. */
 export function dedupeTags(tags: readonly string[], maxLength: number = MAX_TAG_LENGTH): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of tags) {
-    const display = normalizeTag(raw, maxLength);
-    if (display === "") continue;
-    const key = tagKey(display);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(display);
-  }
-  return out;
-}
-
-/** Returns a new list with `raw` appended unless blank, duplicate or list is full. */
-export function addTag(
-  tags: readonly string[],
-  raw: string,
-  max: number = MAX_TAGS,
-  maxLength: number = MAX_TAG_LENGTH
-): string[] {
-  const current = dedupeTags(tags, maxLength);
-  if (current.length >= max) return current;
-  return dedupeTags([...current, raw], maxLength);
+  return dedupeBy(tags, (raw) => normalizeTag(raw, maxLength), tagKey);
 }
 
 /** Every tag used across the links, most used first (ties keep first-seen order). */
 export function collectTags(links: ReadonlyArray<{ tags?: readonly string[] | null }>): string[] {
-  const counts = new Map<string, { display: string; count: number }>();
-  for (const link of links) {
-    for (const tag of dedupeTags(link.tags ?? [])) {
-      const key = tagKey(tag);
-      const entry = counts.get(key);
-      if (entry) entry.count += 1;
-      else counts.set(key, { display: tag, count: 1 });
-    }
-  }
-  return [...counts.values()]
-    .sort((a, b) => b.count - a.count)
-    .map((e) => e.display);
-}
-
-/** Autocomplete: accent-insensitive substring match, minus tags already chosen. */
-export function suggestTags(
-  all: readonly string[],
-  query: string,
-  chosen: readonly string[],
-  limit = 6
-): string[] {
-  const q = tagKey(query);
-  const taken = new Set(chosen.map(tagKey));
-  const out: string[] = [];
-  for (const tag of all) {
-    const key = tagKey(tag);
-    if (taken.has(key)) continue;
-    if (q !== "" && !key.includes(q)) continue;
-    out.push(tag);
-    if (out.length >= limit) break;
-  }
-  return out;
+  return collectBy(
+    links.map((l) => l.tags),
+    (tags) => dedupeTags(tags),
+    tagKey
+  );
 }
 
 /** True when the link carries every one of the filter tags (compared by key). */

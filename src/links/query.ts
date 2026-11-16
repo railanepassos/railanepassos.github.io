@@ -9,35 +9,30 @@
  * comparisons ignore case and accents):
  *
  *   #tag               link has this tag (exact tag, compared by key)
- *   @maria             link has a person whose name STARTS WITH "maria"
- *                      (so `@maria` finds "Maria Clara")
- *   @"maria clara"     multi-word person, EXACT full name (quotes keep the
- *                      space). Chip taps always emit this exact form.
+ *   @maria             link has a person named exactly "maria" (the whole
+ *                      name, not a prefix: "Alana" never matches "Alana Souza")
+ *   @"maria clara"     multi-word person, exact full name (quotes keep the
+ *                      space). Chip taps emit `@word` for single-word names
+ *                      and this quoted form only when the name has spaces.
  *   cidade:Salvador    city contains the text; multi-word: cidade:"Porto Seguro"
  *   custo<50           cost strictly below 50. The cost is free text; the first
  *                      number found is used ("R$ 1.200,50" -> 1200.5). A link
  *                      with no number in its cost never matches this filter.
  *   palavra            free text over title, description, note, category,
- *                      city, address, tags and people; "frase exata" in quotes
- *                      matches the contiguous phrase.
+ *                      city, address, cost, dossier, itinerary, tags and
+ *                      people; "frase exata" in quotes matches the phrase.
  *
  * Incomplete tokens typed so far (`#`, `@`, `cidade:`, `custo<`) are ignored.
- * An unclosed quote (`@"maria cl`) counts as a prefix, not an exact match.
+ * An unclosed quote (`@"maria cl`) keeps what was typed so far.
  */
 import { categoryLabel, resolveCategory } from "./category";
 import { displayTitle } from "./feed";
 import type { LinkRow } from "./links-repo";
 import { hasAllTags, normalizeTag, tagKey } from "./tags";
-import { normalizePerson, personKey } from "./people";
+import { fold } from "./keyed-list";
+import { hasAllPeople, normalizePerson, personKey } from "./people";
 
 export type FilterKind = "tag" | "person" | "city" | "cost";
-
-export type PersonFilter = {
-  /** Accent/case-folded name. */
-  key: string;
-  /** true: whole name must equal `key` (quoted); false: name starts with `key`. */
-  exact: boolean;
-};
 
 /** An active structured filter, with the span of its token in the typed text. */
 export type FilterChip = {
@@ -46,7 +41,6 @@ export type FilterChip = {
   label: string;
   /** Comparison key (tag key, person key, folded city, cost as text). */
   key: string;
-  exact: boolean;
   start: number;
   end: number;
 };
@@ -55,15 +49,12 @@ export type ParsedQuery = {
   terms: string[];
   /** Tag keys. */
   tags: string[];
-  people: PersonFilter[];
+  /** Person keys (whole name, folded). */
+  people: string[];
   city?: string;
   costMax?: number;
   chips: FilterChip[];
 };
-
-function fold(text: string): string {
-  return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
-}
 
 /** Whitespace-separated tokens; a quoted stretch may contain spaces. */
 function tokenize(text: string): Array<{ raw: string; start: number; end: number }> {
@@ -107,8 +98,8 @@ export function costNumber(text: string | null | undefined): number | null {
 export function parseQuery(text: string): ParsedQuery {
   const query: ParsedQuery = { terms: [], tags: [], people: [], chips: [] };
   for (const { raw, start, end } of tokenize(text)) {
-    const chip = (kind: FilterKind, label: string, key: string, exact = false): void => {
-      query.chips.push({ kind, label, key, exact, start, end });
+    const chip = (kind: FilterKind, label: string, key: string): void => {
+      query.chips.push({ kind, label, key, start, end });
     };
     if (raw.startsWith("#")) {
       const key = tagKey(raw.slice(1));
@@ -116,13 +107,11 @@ export function parseQuery(text: string): ParsedQuery {
       if (!query.tags.includes(key)) query.tags.push(key);
       chip("tag", `#${normalizeTag(raw)}`, key);
     } else if (raw.startsWith("@")) {
-      const { value, closed } = unquote(raw.slice(1));
+      const { value } = unquote(raw.slice(1));
       const key = personKey(value);
       if (key === "") continue;
-      if (!query.people.some((p) => p.key === key && p.exact === closed)) {
-        query.people.push({ key, exact: closed });
-      }
-      chip("person", `@${normalizePerson(value)}`, key, closed);
+      if (!query.people.includes(key)) query.people.push(key);
+      chip("person", `@${normalizePerson(value)}`, key);
     } else if (/^cidade:/i.test(raw)) {
       const { value } = unquote(raw.slice("cidade:".length));
       const key = fold(value).trim();
@@ -162,6 +151,9 @@ function haystack(link: LinkRow): string {
       categoryLabel(category),
       link.city ?? "",
       link.address ?? "",
+      link.cost_text ?? "",
+      link.dossier ?? "",
+      link.itinerary ?? "",
       ...(link.tags ?? []),
       ...(link.people ?? []),
     ].join(" ")
@@ -170,11 +162,7 @@ function haystack(link: LinkRow): string {
 
 export function matches(link: LinkRow, query: ParsedQuery): boolean {
   if (!hasAllTags(link, query.tags)) return false;
-  const owners = (link.people ?? []).map(personKey);
-  const peopleOk = query.people.every((f) =>
-    owners.some((k) => (f.exact ? k === f.key : k.startsWith(f.key)))
-  );
-  if (!peopleOk) return false;
+  if (!hasAllPeople(link, query.people)) return false;
   if (query.city !== undefined && !fold(link.city ?? "").includes(query.city)) return false;
   if (query.costMax !== undefined) {
     const cost = costNumber(link.cost_text);
@@ -185,13 +173,13 @@ export function matches(link: LinkRow, query: ParsedQuery): boolean {
   return query.terms.every((t) => text.includes(t));
 }
 
-export function searchLinks<T extends LinkRow>(links: readonly T[], text: string): T[] {
-  const query = parseQuery(text);
-  return links.filter((l) => matches(l, query));
-}
-
 function tidy(text: string): string {
   return text.replace(/\s+/g, " ").trim();
+}
+
+function personToken(name: string): string {
+  const clean = normalizePerson(name).replace(/"/g, "");
+  return /\s/.test(clean) ? `@"${clean}"` : `@${clean}`;
 }
 
 /** Removes the chip's token from the typed text. */
@@ -201,20 +189,19 @@ export function removeChip(text: string, chip: FilterChip): string {
 
 /**
  * Chip tap: removes the tag/person token when already typed, else appends it.
- * People are appended quoted, i.e. as an exact match.
+ * The token is exactly what typing the same filter would produce: `#tag`,
+ * `@word`, or `@"two words"` for names with spaces.
  */
 export function toggleFilter(text: string, kind: "tag" | "person", name: string): string {
   const key = kind === "tag" ? tagKey(name) : personKey(name);
   if (key === "") return text;
   const active = parseQuery(text).chips.filter(
-    (c) => c.kind === kind && c.key === key && (kind === "tag" || c.exact)
+    (c) => c.kind === kind && c.key === key
   );
   if (active.length > 0) {
     let next = text;
     for (const chip of [...active].reverse()) next = removeChip(next, chip);
     return next;
   }
-  const token =
-    kind === "tag" ? `#${normalizeTag(name)}` : `@"${normalizePerson(name).replace(/"/g, "")}"`;
-  return tidy(`${text} ${token}`);
+  return tidy(`${text} ${kind === "tag" ? `#${normalizeTag(name)}` : personToken(name)}`);
 }

@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  addTag,
   collectTags,
   dedupeTags,
   hasAllTags,
   normalizeTag,
-  suggestTags,
   tagKey,
-  MAX_TAGS,
   MAX_TAG_LENGTH,
 } from "../../src/links/tags";
 
@@ -35,42 +32,19 @@ describe("tagKey", () => {
   });
 });
 
-describe("dedupeTags / addTag", () => {
+describe("dedupeTags", () => {
   it("treats case and accent variants as the same tag and keeps the first display form", () => {
     expect(dedupeTags(["#Praia", "praia", "grátis", "gratis", "#PRAIA"])).toEqual(["praia", "grátis"]);
   });
   it("drops empty entries", () => {
     expect(dedupeTags(["", "#", "ok"])).toEqual(["ok"]);
   });
-  it("addTag appends a new tag", () => {
-    expect(addTag(["praia"], "#Museu")).toEqual(["praia", "museu"]);
-  });
-  it("addTag ignores duplicates and blanks", () => {
-    const list = ["grátis"];
-    expect(addTag(list, "#GRATIS")).toEqual(["grátis"]);
-    expect(addTag(list, " # ")).toEqual(["grátis"]);
-  });
-  it("addTag stops at the maximum", () => {
-    const full = Array.from({ length: MAX_TAGS }, (_, i) => `t${i}`);
-    expect(addTag(full, "extra")).toEqual(full);
-  });
 });
 
-describe("collectTags / suggestTags", () => {
+describe("collectTags", () => {
   const links = [{ tags: ["praia", "grátis"] }, { tags: ["Praia", "museu"] }, { tags: null }, {}];
   it("collects used tags, most used first, deduped by key", () => {
     expect(collectTags(links)).toEqual(["praia", "grátis", "museu"]);
-  });
-  it("suggests by accent-insensitive substring, excluding already chosen", () => {
-    const all = collectTags(links);
-    expect(suggestTags(all, "gra", [])).toEqual(["grátis"]);
-    expect(suggestTags(all, "#", ["praia"])).toEqual(["grátis", "museu"]);
-    expect(suggestTags(all, "ia", [])).toEqual(["praia"]);
-    expect(suggestTags(all, "zzz", [])).toEqual([]);
-  });
-  it("limits the number of suggestions", () => {
-    const all = Array.from({ length: 20 }, (_, i) => `t${i}`);
-    expect(suggestTags(all, "t", [], 5)).toHaveLength(5);
   });
 });
 

@@ -5,10 +5,11 @@ import type { IconName } from "./ui-icons";
  *
  * One entry drives everything that is the same for every plain-text field:
  * the form input (collapsed "Mais detalhes" section), the repo length check,
- * the form -> payload mapping and the row in the detail view (hidden when
- * empty). To add another text field (dossier, itinerary, ...): add the column
- * in the migration, add the key to `LinkRow`/`CreateLinkInput`/
- * `UpdateLinkPatch`/`LinkFormValues`, and append ONE entry here.
+ * the form -> payload mapping, the row in the detail view (hidden when empty)
+ * and, for the keys listed in `CARD_META_KEYS` (admin-ui.ts), the meta item on
+ * the feed card. To add another text field: add the column in the migration,
+ * add the key to `MoreTextKey`, `LinkRow`/`CreateLinkInput`/`UpdateLinkPatch`
+ * and `emptyMoreTextValues`, and append ONE entry here.
  */
 
 export type MoreTextKey = "cost_text" | "city" | "address" | "dossier" | "itinerary";
@@ -17,6 +18,8 @@ export type MoreTextField = {
   key: MoreTextKey;
   /** Label of the form control. */
   formLabel: string;
+  /** CSS modifier of the card meta item (`feed-card__meta-item--<slug>`). */
+  slug: string;
   /** Short term shown in the detail view and used in error messages. */
   term: string;
   /** Max characters (mirrors the DB check constraint). */
@@ -30,15 +33,17 @@ export type MoreTextField = {
 export const MORE_TEXT_FIELDS: readonly MoreTextField[] = [
   {
     key: "cost_text",
+    slug: "cost",
     formLabel: "Custo (opcional)",
     term: "Custo",
     max: 200,
     icon: "tag",
     placeholder: "Ex.: R$ 20 inteira · grátis às quartas",
   },
-  { key: "city", formLabel: "Cidade (opcional)", term: "Cidade", max: 120, icon: "pin" },
+  { key: "city", slug: "city", formLabel: "Cidade (opcional)", term: "Cidade", max: 120, icon: "pin" },
   {
     key: "address",
+    slug: "address",
     formLabel: "Endereço (opcional)",
     term: "Endereço",
     max: 300,
@@ -46,6 +51,7 @@ export const MORE_TEXT_FIELDS: readonly MoreTextField[] = [
   },
   {
     key: "dossier",
+    slug: "dossier",
     formLabel: "Dossiê (opcional)",
     term: "Dossiê",
     max: 5000,
@@ -55,6 +61,7 @@ export const MORE_TEXT_FIELDS: readonly MoreTextField[] = [
   },
   {
     key: "itinerary",
+    slug: "itinerary",
     formLabel: "Roteiro (opcional)",
     term: "Roteiro",
     max: 5000,

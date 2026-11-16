@@ -9,6 +9,8 @@
  * Names are personal data (LGPD): they live only in the authenticated surface.
  */
 
+import { collectBy, dedupeBy, fold } from "./keyed-list";
+
 export const MAX_PEOPLE = 30;
 export const MAX_PERSON_LENGTH = 80;
 
@@ -24,36 +26,29 @@ export function normalizePerson(raw: string, maxLength: number = MAX_PERSON_LENG
 
 /** Accent- and case-insensitive comparison key of a person. */
 export function personKey(raw: string): string {
-  return normalizePerson(raw).normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  return fold(normalizePerson(raw));
 }
 
 /** Normalize, drop blanks and duplicates (by key); first display form wins. */
 export function dedupePeople(people: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of people) {
-    const display = normalizePerson(raw);
-    if (display === "") continue;
-    const key = personKey(display);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(display);
-  }
-  return out;
+  return dedupeBy(people, normalizePerson, personKey);
 }
 
 /** Every person used across the links, most used first (ties keep first-seen order). */
 export function collectPeople(links: ReadonlyArray<{ people?: readonly string[] | null }>): string[] {
-  const counts = new Map<string, { display: string; count: number }>();
-  for (const link of links) {
-    for (const person of dedupePeople(link.people ?? [])) {
-      const key = personKey(person);
-      const entry = counts.get(key);
-      if (entry) entry.count += 1;
-      else counts.set(key, { display: person, count: 1 });
-    }
-  }
-  return [...counts.values()]
-    .sort((a, b) => b.count - a.count)
-    .map((e) => e.display);
+  return collectBy(
+    links.map((l) => l.people),
+    dedupePeople,
+    personKey
+  );
+}
+
+/** True when the link has, for every filter key, a person whose key EQUALS it. */
+export function hasAllPeople(
+  link: { people?: readonly string[] | null },
+  filterKeys: readonly string[]
+): boolean {
+  if (filterKeys.length === 0) return true;
+  const own = new Set((link.people ?? []).map(personKey));
+  return filterKeys.every((k) => own.has(personKey(k)));
 }

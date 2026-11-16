@@ -27,6 +27,8 @@ function formValues(partial: Partial<LinkFormValues> = {}): LinkFormValues {
     itinerary: "",
     source_url: "",
     pose_refs: [],
+    tags: [],
+    people: [],
     ...partial,
   };
 }
