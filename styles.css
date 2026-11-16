@@ -1488,6 +1488,17 @@ body.links-screen-open {
   gap: 18px;
 }
 
+/* In-flow actions: end of the form, visible only after scrolling there.
+   The form's own bottom padding already includes the safe-area inset. */
+.links-admin-form__actions--flow {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 10px;
+  margin-top: auto;
+  padding: 8px 0 0;
+}
+
 .links-admin-form__actions--sticky {
   position: sticky;
   bottom: 0;
@@ -1545,6 +1556,11 @@ body.links-screen-open {
   .links-admin-form--schedule {
     padding: 16px 24px 24px;
     max-height: none;
+  }
+
+  .links-admin-form__actions--flow {
+    flex-direction: row;
+    justify-content: flex-end;
   }
 
   .links-admin-form__actions--sticky {
