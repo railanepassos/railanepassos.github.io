@@ -303,4 +303,17 @@ describe("Phase 2 fields", () => {
     await expect(repo.createLink({ ...base, source_url: "http://example.com" })).rejects.toThrow(/source_url/);
     await expect(repo.updateLink("1", { source_url: "javascript:alert(1)" })).rejects.toThrow(/source_url/);
   });
+
+  it("rejects invalid pose_refs and accepts valid ones", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(
+      repo.createLink({ ...base, pose_refs: [{ url: "http://example.com" }] })
+    ).rejects.toThrow(/pose_refs/);
+    await expect(
+      repo.updateLink("1", { pose_refs: Array.from({ length: 31 }, () => ({ note: "x" })) })
+    ).rejects.toThrow(/pose_refs/);
+    await expect(
+      repo.updateLink("1", { pose_refs: [{ url: "https://example.com/a", note: "n" }] })
+    ).resolves.toBeUndefined();
+  });
 });

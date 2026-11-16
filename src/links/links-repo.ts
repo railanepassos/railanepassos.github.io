@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isHttpsUrl, isOptionalHttpsUrl } from "./validate";
 import { MORE_TEXT_FIELDS } from "./more-fields";
+import { poseDraftsFromRefs, poseRefsError, readPoseRefs, type PoseRef } from "./poses";
 
 export type LinkStatus = "wishlist" | "done";
 
@@ -27,7 +28,7 @@ export type LinkRow = {
   dossier?: string | null;
   itinerary?: string | null;
   source_url?: string | null;
-  pose_refs?: unknown[] | null;
+  pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
   created_by?: string | null;
@@ -57,7 +58,7 @@ export type CreateLinkInput = {
   dossier?: string | null;
   itinerary?: string | null;
   source_url?: string | null;
-  pose_refs?: unknown[] | null;
+  pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
 };
@@ -84,7 +85,7 @@ export type UpdateLinkPatch = {
   dossier?: string | null;
   itinerary?: string | null;
   source_url?: string | null;
-  pose_refs?: unknown[] | null;
+  pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
 };
@@ -115,7 +116,7 @@ export function normalizeLinkRow(
     dossier: row.dossier ?? null,
     itinerary: row.itinerary ?? null,
     source_url: row.source_url ?? null,
-    pose_refs: row.pose_refs ?? null,
+    pose_refs: row.pose_refs == null ? null : readPoseRefs(row.pose_refs),
     tags: row.tags ?? null,
     people: row.people ?? null,
     created_by: row.created_by,
@@ -137,6 +138,7 @@ function validateLinkFields(fields: {
   dossier?: string | null;
   itinerary?: string | null;
   source_url?: string | null;
+  pose_refs?: PoseRef[] | null;
 }): void {
   if (fields.url !== undefined) {
     if (!isHttpsUrl(fields.url)) {
@@ -188,6 +190,11 @@ function validateLinkFields(fields: {
   if (!isOptionalHttpsUrl(fields.source_url)) {
     throw new Error("source_url must be a valid https URL");
   }
+
+  if (fields.pose_refs != null) {
+    const problem = poseRefsError(poseDraftsFromRefs(fields.pose_refs));
+    if (problem) throw new Error(`pose_refs invalid: ${problem}`);
+  }
 }
 
 export interface LinksRepo {
@@ -226,6 +233,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         dossier: input.dossier,
         itinerary: input.itinerary,
         source_url: input.source_url,
+        pose_refs: input.pose_refs,
       });
 
       const trimmedLabel = input.label.trim();
@@ -257,6 +265,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         dossier: patch.dossier,
         itinerary: patch.itinerary,
         source_url: patch.source_url,
+        pose_refs: patch.pose_refs,
       });
 
       const sanitized =

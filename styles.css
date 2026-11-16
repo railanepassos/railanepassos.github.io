@@ -1637,6 +1637,85 @@ body.links-screen-open {
   padding-bottom: 12px;
 }
 
+/* Photo pose references (form + detail). */
+.links-poses {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.links-poses__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.links-poses__item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.links-poses__tools {
+  display: flex;
+  gap: 8px;
+}
+
+.links-poses__tool,
+.links-poses__add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--navy);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.links-poses__tool:disabled,
+.links-poses__add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.links-detail__poses {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.links-detail__pose {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.links-detail__pose-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--app-accent);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 /* Dossier / itinerary: long text, comfortable line length on a 360px phone. */
 .links-detail__row--long .links-detail__value {
   line-height: 1.6;

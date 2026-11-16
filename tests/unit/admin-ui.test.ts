@@ -27,6 +27,7 @@ function formValues(partial: Partial<LinkFormValues> = {}): LinkFormValues {
     dossier: "",
     itinerary: "",
     source_url: "",
+    pose_refs: [],
     ...partial,
   };
 }
@@ -754,5 +755,148 @@ describe("Phase 2: source post link", () => {
     const wrap = modal.element.querySelector<HTMLElement>("[data-field='source_url']")!;
     expect(wrap.hidden).toBe(true);
     expect(wrap.querySelector("a")!.hasAttribute("href")).toBe(false);
+  });
+});
+
+describe("pose references", () => {
+  function viewCb() {
+    return { onEdit: vi.fn(), onSchedule: vi.fn(), onMarkDone: vi.fn(), onDelete: vi.fn() };
+  }
+
+  function setup(onSubmit = vi.fn()) {
+    const modal = createLinkFormModal(onSubmit);
+    document.body.appendChild(modal.element);
+    modal.openCreate({ url: "https://example.com/lugar" });
+    const q = <T extends HTMLElement>(sel: string) => modal.element.querySelector<T>(sel)!;
+    const click = (name: string) =>
+      modal.element.querySelector<HTMLButtonElement>(`button[aria-label='${name}']`)!.click();
+    const type = (id: string, value: string) => {
+      const input = q<HTMLInputElement>(`#${id}`);
+      input.value = value;
+      input.dispatchEvent(new Event("input"));
+    };
+    const submit = () =>
+      modal.element.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    const items = () => [...modal.element.querySelectorAll(".links-poses__item")];
+    return { modal, q, click, type, submit, items };
+  }
+
+  it("maps poses to payload keys (blank -> null) and validates https", () => {
+    expect(
+      toCreateInput(formValues({ pose_refs: [{ url: "https://example.com/a", note: "n" }] }), 1)
+    ).toMatchObject({ pose_refs: [{ url: "https://example.com/a", note: "n" }] });
+    expect(toCreateInput(formValues(), 1)).toMatchObject({ pose_refs: null });
+    expect(toUpdatePatch(formValues({ pose_refs: [{ url: "", note: "" }] }))).toMatchObject({
+      pose_refs: null,
+    });
+    expect(() =>
+      toUpdatePatch(formValues({ pose_refs: [{ url: "http://example.com", note: "" }] }))
+    ).toThrow(/Pose 1.*https/);
+  });
+
+  it("adds poses and submits them in order", () => {
+    const onSubmit = vi.fn();
+    const { click, type, submit, items } = setup(onSubmit);
+    expect(items()).toHaveLength(0);
+    click("Adicionar pose");
+    click("Adicionar pose");
+    expect(items()).toHaveLength(2);
+    type("links-form-pose-0-url", "https://example.com/a");
+    type("links-form-pose-1-note", "de costas");
+    submit();
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pose_refs: [
+          { url: "https://example.com/a", note: "" },
+          { url: "", note: "de costas" },
+        ],
+      }),
+      null
+    );
+  });
+
+  it("removes and reorders poses", () => {
+    const onSubmit = vi.fn();
+    const { click, type, submit, items } = setup(onSubmit);
+    for (let i = 0; i < 3; i++) click("Adicionar pose");
+    type("links-form-pose-0-note", "A");
+    type("links-form-pose-1-note", "B");
+    type("links-form-pose-2-note", "C");
+    click("Descer pose 1");
+    click("Subir pose 3");
+    click("Remover pose 2");
+    expect(items()).toHaveLength(2);
+    submit();
+    const values = onSubmit.mock.calls[0]![0] as LinkFormValues;
+    expect(values.pose_refs.map((p) => p.note)).toEqual(["B", "A"]);
+  });
+
+  it("shows an inline https error and blocks submit", () => {
+    const onSubmit = vi.fn();
+    const { click, type, submit, q } = setup(onSubmit);
+    click("Adicionar pose");
+    type("links-form-pose-0-url", "http://example.com/a");
+    const err = q<HTMLElement>("#links-form-pose-0-url-error");
+    const input = q<HTMLInputElement>("#links-form-pose-0-url");
+    expect(err.hidden).toBe(false);
+    expect(err.textContent).toMatch(/https/);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(input.getAttribute("aria-describedby")).toBe(err.id);
+    submit();
+    expect(onSubmit).not.toHaveBeenCalled();
+    type("links-form-pose-0-url", "https://example.com/a");
+    expect(err.hidden).toBe(true);
+    expect(input.hasAttribute("aria-invalid")).toBe(false);
+  });
+
+  it("caps the list at 30 poses", () => {
+    const { click, items, q } = setup();
+    for (let i = 0; i < 35; i++) click("Adicionar pose");
+    expect(items()).toHaveLength(30);
+    expect(q<HTMLButtonElement>("button[aria-label='Adicionar pose']").disabled).toBe(true);
+  });
+
+  it("round-trips stored poses on edit and resets on create", () => {
+    const { modal, q, items } = setup();
+    const more = q<HTMLDetailsElement>("details.links-admin-form__more");
+    modal.openEdit(
+      row({ pose_refs: [{ url: "https://example.com/a", note: "n" }, { note: "so nota" }] })
+    );
+    expect(more.open).toBe(true);
+    expect(items()).toHaveLength(2);
+    expect(q<HTMLInputElement>("#links-form-pose-0-url").value).toBe("https://example.com/a");
+    expect(q<HTMLInputElement>("#links-form-pose-1-note").value).toBe("so nota");
+    modal.openCreate({ url: "" });
+    expect(items()).toHaveLength(0);
+  });
+
+  it("detail lists poses in order with safe new-tab links, hidden when empty", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    modal.open(
+      row({
+        pose_refs: [
+          { url: "https://example.com/a", note: "primeira" },
+          { note: "<b>so nota</b>" },
+          { url: "javascript:alert(1)", note: "ruim" },
+        ],
+      })
+    );
+    const wrap = modal.element.querySelector<HTMLElement>("[data-field='pose_refs']")!;
+    expect(wrap.hidden).toBe(false);
+    const lis = [...wrap.querySelectorAll("li")];
+    expect(lis).toHaveLength(3);
+    const a = lis[0]!.querySelector("a")!;
+    expect(a.getAttribute("href")).toBe("https://example.com/a");
+    expect(a.target).toBe("_blank");
+    expect(a.rel).toContain("noopener");
+    expect(lis[0]!.textContent).toContain("primeira");
+    expect(lis[1]!.querySelector("a")).toBeNull();
+    expect(lis[1]!.textContent).toContain("<b>so nota</b>");
+    expect(lis[1]!.querySelector("b")).toBeNull();
+    expect(lis[2]!.querySelector("a")).toBeNull();
+    modal.open(row());
+    expect(wrap.hidden).toBe(true);
+    expect(wrap.querySelectorAll("li")).toHaveLength(0);
   });
 });

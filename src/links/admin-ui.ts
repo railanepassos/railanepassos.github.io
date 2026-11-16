@@ -18,6 +18,17 @@ import { categoryBackdropSrc } from "./card-theme";
 import { displayTitle, linkDomain } from "./feed";
 import { uiIcon, type IconName } from "./ui-icons";
 import { buildMapUrl } from "./map-url";
+import {
+  MAX_POSES,
+  POSE_NOTE_MAX,
+  POSE_URL_TERM,
+  draftsToPoseRefs,
+  moveItem,
+  poseDraftsFromRefs,
+  poseRefsError,
+  readPoseRefs,
+  type PoseDraft,
+} from "./poses";
 import { MORE_TEXT_FIELDS, emptyMoreTextValues, type MoreTextValues } from "./more-fields";
 
 /**
@@ -220,6 +231,8 @@ export type LinkFormValues = MoreTextValues & {
   note: string;
   /** Link of the post the idea came from (https only, optional). */
   source_url: string;
+  /** Photo-pose references, in display order (blank rows are dropped on save). */
+  pose_refs: PoseDraft[];
   /** Picked category; "" = infer from text (Automática). */
   category: string;
 };
@@ -1008,6 +1021,108 @@ export function createLinkFormModal(
   }
   sourceField.input.addEventListener("input", validateSource);
 
+  // Photo-pose references: ordered rows of {link, note}. State lives in `poses`;
+  // the list is re-rendered on structural changes (add/remove/move) only, so
+  // typing never loses focus.
+  let poses: PoseDraft[] = [];
+  const posesField = document.createElement("fieldset");
+  posesField.className = "links-admin-form__field links-poses";
+  const posesLegend = document.createElement("legend");
+  posesLegend.className = "links-admin-form__label";
+  posesLegend.textContent = "Referências de pose";
+  const posesList = document.createElement("ol");
+  posesList.className = "links-poses__list";
+  const addPoseBtn = document.createElement("button");
+  addPoseBtn.type = "button";
+  addPoseBtn.className = "links-poses__add";
+  addPoseBtn.setAttribute("aria-label", "Adicionar pose");
+  addPoseBtn.append(uiIcon("plus", 18), document.createTextNode("Adicionar pose"));
+  posesField.append(posesLegend, posesList, addPoseBtn);
+  moreBody.appendChild(posesField);
+
+  function validatePose(index: number): boolean {
+    const input = posesList.querySelector<HTMLInputElement>(`#links-form-pose-${index}-url`);
+    const err = posesList.querySelector<HTMLElement>(`#links-form-pose-${index}-url-error`);
+    if (!input || !err) return true;
+    const message = httpsUrlError(input.value, POSE_URL_TERM);
+    err.hidden = message === null;
+    err.textContent = message ?? "";
+    if (message) input.setAttribute("aria-invalid", "true");
+    else input.removeAttribute("aria-invalid");
+    return message === null;
+  }
+
+  function renderPoses(focus?: string): void {
+    posesList.replaceChildren();
+    poses.forEach((pose, i) => {
+      const n = i + 1;
+      const item = document.createElement("li");
+      item.className = "links-poses__item";
+      const urlField = labelledInput(`links-form-pose-${i}-url`, `Pose ${n}: link`, "url");
+      urlField.input.placeholder = "https://";
+      urlField.input.autocomplete = "off";
+      urlField.input.value = pose.url;
+      const err = document.createElement("p");
+      err.id = `links-form-pose-${i}-url-error`;
+      err.className = "links-admin-form__field-error";
+      err.hidden = true;
+      urlField.input.setAttribute("aria-describedby", err.id);
+      urlField.wrapper.appendChild(err);
+      urlField.input.addEventListener("input", () => {
+        pose.url = urlField.input.value;
+        validatePose(i);
+      });
+      const noteField = labelledInput(`links-form-pose-${i}-note`, `Pose ${n}: nota`, "text");
+      noteField.input.maxLength = POSE_NOTE_MAX;
+      noteField.input.value = pose.note;
+      noteField.input.addEventListener("input", () => {
+        pose.note = noteField.input.value;
+      });
+
+      const tools = document.createElement("div");
+      tools.className = "links-poses__tools";
+      const up = poseToolButton("↑", `Subir pose ${n}`);
+      up.disabled = i === 0;
+      up.addEventListener("click", () => {
+        poses = moveItem(poses, i, i - 1);
+        renderPoses(`up-${i - 1}`);
+      });
+      const down = poseToolButton("↓", `Descer pose ${n}`);
+      down.disabled = i === poses.length - 1;
+      down.addEventListener("click", () => {
+        poses = moveItem(poses, i, i + 1);
+        renderPoses(`down-${i + 1}`);
+      });
+      const remove = poseToolButton("×", `Remover pose ${n}`);
+      remove.addEventListener("click", () => {
+        poses = poses.filter((_, j) => j !== i);
+        renderPoses("add");
+      });
+      up.dataset.focusKey = `up-${i}`;
+      down.dataset.focusKey = `down-${i}`;
+      tools.append(up, down, remove);
+
+      item.append(urlField.wrapper, noteField.wrapper, tools);
+      posesList.appendChild(item);
+      validatePose(i);
+    });
+    addPoseBtn.disabled = poses.length >= MAX_POSES;
+    if (focus === "add") addPoseBtn.focus();
+    else if (focus) {
+      const target = posesList.querySelector<HTMLElement>(`[data-focus-key='${focus}']`);
+      // A moved row can land at an edge where that button is disabled.
+      if (target && !(target as HTMLButtonElement).disabled) target.focus();
+    }
+  }
+  addPoseBtn.addEventListener("click", () => {
+    if (poses.length >= MAX_POSES) return;
+    poses.push({ url: "", note: "" });
+    renderPoses();
+    posesList
+      .querySelector<HTMLInputElement>(`#links-form-pose-${poses.length - 1}-url`)
+      ?.focus();
+  });
+
   function readMoreText(): MoreTextValues {
     const out = emptyMoreTextValues();
     for (const f of moreText) out[f.key] = f.input.value.trim();
@@ -1025,7 +1140,9 @@ export function createLinkFormModal(
     }
     sourceField.input.value = link?.source_url ?? "";
     validateSource();
-    more.open = any || sourceField.input.value !== "";
+    poses = poseDraftsFromRefs(readPoseRefs(link?.pose_refs));
+    renderPoses();
+    more.open = any || sourceField.input.value !== "" || poses.length > 0;
     syncMoreHeights();
   }
 
@@ -1162,6 +1279,12 @@ export function createLinkFormModal(
       sourceField.input.focus();
       return;
     }
+    const badPose = poses.findIndex((_, i) => !validatePose(i));
+    if (badPose >= 0) {
+      more.open = true;
+      posesList.querySelector<HTMLInputElement>(`#links-form-pose-${badPose}-url`)?.focus();
+      return;
+    }
     onSubmit(
       {
         url: urlField.input.value.trim(),
@@ -1170,6 +1293,7 @@ export function createLinkFormModal(
         image_url: imageField.input.value.trim(),
         note: memoryField.input.value.trim(),
         source_url: sourceField.input.value.trim(),
+        pose_refs: poses.map((p) => ({ url: p.url.trim(), note: p.note.trim() })),
         category: pickedCategory,
         ...readMoreText(),
       },
@@ -1507,6 +1631,40 @@ export type ViewModalHandle = {
   currentId: () => string | null;
 };
 
+/** One pose in the detail list: optional https link (new tab) + plain-text note. */
+function renderPoseItem(ref: { url?: string; note?: string }, index: number): HTMLElement {
+  const li = document.createElement("li");
+  li.className = "links-detail__pose";
+  if (ref.url) {
+    const a = document.createElement("a");
+    a.className = "links-detail__pose-link";
+    a.href = ref.url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    const label = document.createElement("span");
+    label.textContent = `Ver referência ${index + 1}`;
+    a.append(label, uiIcon("external", 16));
+    li.appendChild(a);
+  }
+  if (ref.note) {
+    const note = document.createElement("span");
+    note.className = "links-detail__pose-note";
+    note.textContent = ref.note;
+    li.appendChild(note);
+  }
+  return li;
+}
+
+function poseToolButton(glyph: string, ariaLabel: string): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "links-poses__tool";
+  btn.setAttribute("aria-label", ariaLabel);
+  btn.title = ariaLabel;
+  btn.textContent = glyph;
+  return btn;
+}
+
 function infoRow(icon: IconName, term: string): { row: HTMLElement; value: HTMLElement } {
   const row = document.createElement("div");
   row.className = "links-detail__row";
@@ -1649,7 +1807,16 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   sourceWrap.className = "links-detail__row links-detail__row--action";
   sourceWrap.dataset.field = "source_url";
   sourceWrap.appendChild(sourceLink);
-  info.append(mapWrap, sourceWrap, linkRow.row);
+  info.append(mapWrap, sourceWrap);
+
+  // Photo poses: ordered list, each with an optional new-tab link and note.
+  const posesRow = infoRow("clipboard", "Referências de pose");
+  posesRow.row.dataset.field = "pose_refs";
+  posesRow.row.classList.add("links-detail__row--long");
+  const posesOl = document.createElement("ol");
+  posesOl.className = "links-detail__poses";
+  posesRow.value.appendChild(posesOl);
+  info.append(posesRow.row, linkRow.row);
 
   body.append(chips, title, info);
 
@@ -1745,6 +1912,10 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     if (source) sourceLink.href = source;
     else sourceLink.removeAttribute("href");
 
+    const poseRefs = readPoseRefs(link.pose_refs);
+    posesRow.row.hidden = poseRefs.length === 0;
+    posesOl.replaceChildren(...poseRefs.map(renderPoseItem));
+
     domainText.textContent = linkDomain(link.url);
     original.href = link.url;
     openLink.href = link.url;
@@ -1802,6 +1973,7 @@ export function toCreateInput(values: LinkFormValues, sortOrder: number): Create
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
     source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
+    pose_refs: draftsToPoseRefs(resolved.pose_refs ?? []),
     ...moreTextPayload(resolved),
   };
 }
@@ -1819,6 +1991,7 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
     source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
+    pose_refs: draftsToPoseRefs(resolved.pose_refs ?? []),
     ...moreTextPayload(resolved),
   };
 }
@@ -1859,6 +2032,8 @@ function assertFormValues(values: LinkFormValues): void {
   }
   const sourceError = httpsUrlError(values.source_url ?? "", SOURCE_TERM);
   if (sourceError) throw new Error(sourceError);
+  const poseError = poseRefsError(values.pose_refs ?? []);
+  if (poseError) throw new Error(poseError);
   for (const field of MORE_TEXT_FIELDS) {
     if ((values[field.key] ?? "").length > field.max) {
       throw new Error(`${field.term} deve ter no máximo ${field.max} caracteres.`);
