@@ -56,7 +56,7 @@ test.describe("Links admin page — smoke", () => {
   test("app.js script tag is present with defer attribute", async ({
     page,
   }) => {
-    const script = page.locator('script[src="app.js"]');
+    const script = page.locator('script[src^="app.js?v="]');
     await expect(script).toBeAttached();
     const defer = await script.getAttribute("defer");
     expect(defer).not.toBeNull();

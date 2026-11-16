@@ -6,7 +6,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node scripts/stamp-assets.mjs",
     "serve": "python3 -m http.server 8080 --bind 0.0.0.0",
     "test:unit": "vitest run --coverage",
     "test:e2e": "playwright test",
