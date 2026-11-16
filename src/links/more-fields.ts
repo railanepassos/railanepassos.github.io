@@ -11,7 +11,7 @@ import type { IconName } from "./ui-icons";
  * `UpdateLinkPatch`/`LinkFormValues`, and append ONE entry here.
  */
 
-export type MoreTextKey = "cost_text" | "city" | "address";
+export type MoreTextKey = "cost_text" | "city" | "address" | "dossier" | "itinerary";
 
 export type MoreTextField = {
   key: MoreTextKey;
@@ -44,11 +44,29 @@ export const MORE_TEXT_FIELDS: readonly MoreTextField[] = [
     max: 300,
     icon: "pin",
   },
+  {
+    key: "dossier",
+    formLabel: "Dossiê (opcional)",
+    term: "Dossiê",
+    max: 5000,
+    icon: "note",
+    placeholder: "História, curiosidades, o que não perder",
+    multiline: true,
+  },
+  {
+    key: "itinerary",
+    formLabel: "Roteiro (opcional)",
+    term: "Roteiro",
+    max: 5000,
+    icon: "clock",
+    placeholder: "Ordem das paradas, horários, dicas",
+    multiline: true,
+  },
 ];
 
 /** Maps each registered text key to a trimmed string value. */
 export type MoreTextValues = Record<MoreTextKey, string>;
 
 export function emptyMoreTextValues(): MoreTextValues {
-  return { cost_text: "", city: "", address: "" };
+  return { cost_text: "", city: "", address: "", dossier: "", itinerary: "" };
 }

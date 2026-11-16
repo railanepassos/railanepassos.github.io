@@ -291,6 +291,13 @@ describe("Phase 2 fields", () => {
     await expect(repo.updateLink("1", { address: "x".repeat(301) })).rejects.toThrow(/address/);
   });
 
+  it("rejects over-long dossier and itinerary", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(repo.createLink({ ...base, dossier: "x".repeat(5001) })).rejects.toThrow(/dossier/);
+    await expect(repo.updateLink("1", { itinerary: "x".repeat(5001) })).rejects.toThrow(/itinerary/);
+    await expect(repo.updateLink("1", { dossier: "x".repeat(5000) })).resolves.toBeUndefined();
+  });
+
   it("rejects a non-https source_url", async () => {
     const repo = createLinksRepo(makeFakeClient());
     await expect(repo.createLink({ ...base, source_url: "http://example.com" })).rejects.toThrow(/source_url/);

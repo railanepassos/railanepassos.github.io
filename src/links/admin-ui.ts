@@ -967,12 +967,17 @@ export function createLinkFormModal(
   more.append(moreSummary, moreBody);
 
   const moreText = MORE_TEXT_FIELDS.map((field) => {
-    const f = labelledInput(`links-form-${field.key}`, field.formLabel, "text");
+    const id = `links-form-${field.key}`;
+    const f = field.multiline
+      ? labelledTextarea(id, field.formLabel)
+      : labelledInput(id, field.formLabel, "text");
     f.input.maxLength = field.max;
     if (field.placeholder) f.input.placeholder = field.placeholder;
+    if (field.multiline) f.input.classList.add("links-admin-form__control--long");
     attachCharCounter(f.wrapper, f.input, field.max);
     moreBody.appendChild(f.wrapper);
-    return { key: field.key, input: f.input };
+    const syncHeight = "syncHeight" in f ? f.syncHeight : () => {};
+    return { key: field.key, input: f.input, syncHeight };
   });
 
   function readMoreText(): MoreTextValues {
@@ -991,7 +996,16 @@ export function createLinkFormModal(
       if (value) any = true;
     }
     more.open = any;
+    syncMoreHeights();
   }
+
+  // A closed <details> has no layout, so auto-grow would measure 0: re-measure
+  // when the section opens.
+  function syncMoreHeights(): void {
+    if (!more.open) return;
+    for (const f of moreText) f.syncHeight();
+  }
+  more.addEventListener("toggle", syncMoreHeights);
 
   function syncPreview(): void {
     const category = isCategory(pickedCategory)
@@ -1570,6 +1584,9 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   const moreRows = MORE_TEXT_FIELDS.map((field) => {
     const r = infoRow(field.icon, field.term);
     r.row.dataset.field = field.key;
+    // Long text reads as its own section (line breaks kept via textContent +
+    // pre-line in CSS; never innerHTML).
+    if (field.multiline) r.row.classList.add("links-detail__row--long");
     info.appendChild(r.row);
     return { field, ...r };
   });

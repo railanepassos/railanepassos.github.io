@@ -24,6 +24,8 @@ function formValues(partial: Partial<LinkFormValues> = {}): LinkFormValues {
     cost_text: "",
     city: "",
     address: "",
+    dossier: "",
+    itinerary: "",
     ...partial,
   };
 }
@@ -611,5 +613,57 @@ describe("Phase 2: cost, city and address", () => {
 
     modal.openEdit(row());
     expect(more.open).toBe(false);
+  });
+});
+
+describe("Phase 2: dossier and itinerary", () => {
+  function viewCb() {
+    return { onEdit: vi.fn(), onSchedule: vi.fn(), onMarkDone: vi.fn(), onDelete: vi.fn() };
+  }
+
+  it("maps dossier and itinerary to payload keys (blank -> null)", () => {
+    expect(
+      toCreateInput(formValues({ dossier: "Historia\nCuriosidade", itinerary: "09h chegada" }), 1)
+    ).toMatchObject({ dossier: "Historia\nCuriosidade", itinerary: "09h chegada" });
+    expect(toUpdatePatch(formValues({ dossier: "", itinerary: " " }))).toMatchObject({
+      dossier: null,
+      itinerary: null,
+    });
+  });
+
+  it("rejects over-long dossier in the form", () => {
+    expect(() => toCreateInput(formValues({ dossier: "x".repeat(5001) }), 1)).toThrow(/Dossiê/);
+  });
+
+  it("form uses textareas and round-trips line breaks", () => {
+    const onSubmit = vi.fn();
+    const modal = createLinkFormModal(onSubmit);
+    document.body.appendChild(modal.element);
+    const d = modal.element.querySelector("#links-form-dossier");
+    expect(d?.tagName).toBe("TEXTAREA");
+    expect(modal.element.querySelector("#links-form-itinerary")?.tagName).toBe("TEXTAREA");
+    modal.openEdit(row({ dossier: "linha 1\nlinha 2", itinerary: "A\nB" }));
+    expect((d as HTMLTextAreaElement).value).toBe("linha 1\nlinha 2");
+    modal.element.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ dossier: "linha 1\nlinha 2", itinerary: "A\nB" }),
+      "link-1"
+    );
+  });
+
+  it("detail shows both sections as plain text and hides them when empty", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    const evil = "<img src=x onerror=alert(1)>\nsegunda linha";
+    modal.open(row({ dossier: evil, itinerary: "09h chegada\n10h almoco" }));
+    const d = modal.element.querySelector<HTMLElement>("[data-field='dossier']")!;
+    const i = modal.element.querySelector<HTMLElement>("[data-field='itinerary']")!;
+    expect(d.hidden).toBe(false);
+    expect(d.querySelector("img")).toBeNull();
+    expect(d.textContent).toContain(evil);
+    expect(i.textContent).toContain("09h chegada\n10h almoco");
+    modal.open(row());
+    expect(d.hidden).toBe(true);
+    expect(i.hidden).toBe(true);
   });
 });

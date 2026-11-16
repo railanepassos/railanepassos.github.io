@@ -134,6 +134,8 @@ function validateLinkFields(fields: {
   cost_text?: string | null;
   city?: string | null;
   address?: string | null;
+  dossier?: string | null;
+  itinerary?: string | null;
   source_url?: string | null;
 }): void {
   if (fields.url !== undefined) {
@@ -221,6 +223,8 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         cost_text: input.cost_text,
         city: input.city,
         address: input.address,
+        dossier: input.dossier,
+        itinerary: input.itinerary,
         source_url: input.source_url,
       });
 
@@ -250,6 +254,8 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         cost_text: patch.cost_text,
         city: patch.city,
         address: patch.address,
+        dossier: patch.dossier,
+        itinerary: patch.itinerary,
         source_url: patch.source_url,
       });
 

@@ -1610,6 +1610,10 @@ body.links-screen-open {
   overflow-y: auto;
 }
 
+.links-admin-form__control--long {
+  min-height: 140px;
+}
+
 .links-admin-form__more {
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1631,6 +1635,12 @@ body.links-screen-open {
   flex-direction: column;
   gap: 12px;
   padding-bottom: 12px;
+}
+
+/* Dossier / itinerary: long text, comfortable line length on a 360px phone. */
+.links-detail__row--long .links-detail__value {
+  line-height: 1.6;
+  max-width: 68ch;
 }
 
 .links-detail__row--action {
