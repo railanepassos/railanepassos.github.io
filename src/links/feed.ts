@@ -144,29 +144,3 @@ export function toggleCategory(selected: readonly Category[], category: Category
   else next.add(category);
   return CATEGORY_OPTIONS.filter((c) => next.has(c));
 }
-
-function normalize(text: string): string {
-  return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
-}
-
-/** Every whitespace-separated term must appear in label/description/note/category. */
-export function matchesSearch(link: LinkRow, query: string): boolean {
-  const terms = normalize(query).split(/\s+/).filter(Boolean);
-  if (terms.length === 0) return true;
-  const category = resolveCategory(link);
-  const haystack = normalize(
-    [
-      link.label,
-      displayTitle(link),
-      link.description ?? "",
-      link.note ?? "",
-      category,
-      categoryLabel(category),
-    ].join(" ")
-  );
-  return terms.every((t) => haystack.includes(t));
-}
-
-export function searchLinks<T extends LinkRow>(links: readonly T[], query: string): T[] {
-  return links.filter((l) => matchesSearch(l, query));
-}

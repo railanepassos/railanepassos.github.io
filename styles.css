@@ -1610,6 +1610,133 @@ body.links-screen-open {
   overflow-y: auto;
 }
 
+.links-admin-form__control--long {
+  min-height: 140px;
+}
+
+.links-admin-form__more {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 12px;
+}
+
+.links-admin-form__more-summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--navy);
+  cursor: pointer;
+}
+
+.links-admin-form__more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+/* Photo pose references (form + detail). */
+.links-poses {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.links-poses__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.links-poses__item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.links-poses__tools {
+  display: flex;
+  gap: 8px;
+}
+
+.links-poses__tool,
+.links-poses__add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--navy);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.links-poses__tool:disabled,
+.links-poses__add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.links-detail__poses {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.links-detail__pose {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.links-detail__pose-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--app-accent);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Dossier / itinerary: long text, comfortable line length on a 360px phone. */
+.links-detail__row--long .links-detail__value {
+  line-height: 1.6;
+  max-width: 68ch;
+}
+
+.links-detail__row--action {
+  padding-left: 32px;
+}
+
+.links-detail__map {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--app-accent);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
 .links-admin-form__counter {
   align-self: flex-end;
   font-size: 0.72rem;
@@ -3537,4 +3664,114 @@ body.links-authed .links-app__layout {
   :root {
     --app-vh: 1dvh;
   }
+}
+
+/* --- Tags (chips on card/detail, chip input, active filter) --------------- */
+.feed-card__tags,
+.feed-card__people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.feed-card__tag,
+.feed-card__person,
+.links-detail__tag,
+.links-detail__person {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--app-line-strong);
+  border-radius: 14px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-dark);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.links-detail__tag,
+.links-detail__person {
+  margin: 0 6px 6px 0;
+}
+
+.links-tagfilter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.chip-input__box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--app-line-strong);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.chip-input__chips {
+  display: contents;
+}
+
+.chip-input__chip {
+  height: 30px;
+  padding: 0 4px 0 12px;
+  font-size: 13px;
+}
+
+.chip-input__remove {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chip-input__input {
+  flex: 1 1 120px;
+  min-width: 0;
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--app-ink);
+  font: inherit;
+  font-size: 16px;
+}
+
+.chip-input__input:focus {
+  outline: none;
+}
+
+.chip-input__box:focus-within {
+  border-color: var(--app-ink);
+}
+
+.chip-input__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chip-input__suggestion {
+  height: 32px;
+  font-size: 13px;
+}
+
+.links-admin-form__field-error {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--app-danger, #b42318);
+}
+
+.links-admin-form__field-error[hidden] {
+  display: none;
 }

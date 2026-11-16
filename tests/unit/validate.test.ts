@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { isHttpsUrl, deriveLabelFromUrl } from "../../src/links/validate";
+import { httpsUrlError, isHttpsUrl, isOptionalHttpsUrl, deriveLabelFromUrl } from "../../src/links/validate";
+
+describe("isOptionalHttpsUrl", () => {
+  it("accepts empty values and https URLs", () => {
+    expect(isOptionalHttpsUrl(null)).toBe(true);
+    expect(isOptionalHttpsUrl(undefined)).toBe(true);
+    expect(isOptionalHttpsUrl("")).toBe(true);
+    expect(isOptionalHttpsUrl("https://example.com/p")).toBe(true);
+  });
+
+  it("rejects non-https values", () => {
+    expect(isOptionalHttpsUrl("http://example.com")).toBe(false);
+    expect(isOptionalHttpsUrl("javascript:alert(1)")).toBe(false);
+    expect(isOptionalHttpsUrl("not a url")).toBe(false);
+  });
+});
 
 describe("isHttpsUrl", () => {
   it("accepts https URLs", () => {
@@ -24,5 +39,20 @@ describe("deriveLabelFromUrl", () => {
 
   it("returns an empty string for an unparsable url", () => {
     expect(deriveLabelFromUrl("not-a-url")).toBe("");
+  });
+});
+
+describe("httpsUrlError", () => {
+  it("returns null for empty and https values", () => {
+    expect(httpsUrlError("", "Link do post")).toBeNull();
+    expect(httpsUrlError("https://example.com/p/1", "Link do post")).toBeNull();
+  });
+
+  it("names the field when the value is not https", () => {
+    expect(httpsUrlError("http://example.com", "Link do post")).toBe(
+      "Link do post precisa ser uma URL https válida."
+    );
+    expect(httpsUrlError("javascript:alert(1)", "Link do post")).not.toBeNull();
+    expect(httpsUrlError("not a url", "Foto")).toBe("Foto precisa ser uma URL https válida.");
   });
 });

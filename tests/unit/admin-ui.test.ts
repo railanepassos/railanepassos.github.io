@@ -21,6 +21,15 @@ function formValues(partial: Partial<LinkFormValues> = {}): LinkFormValues {
     image_url: "",
     note: "",
     category: "",
+    cost_text: "",
+    city: "",
+    address: "",
+    dossier: "",
+    itinerary: "",
+    source_url: "",
+    pose_refs: [],
+    tags: [],
+    people: [],
     ...partial,
   };
 }
@@ -512,5 +521,384 @@ describe("createLinkFormModal paste button", () => {
     expect(
       modal.element.querySelector('[data-action="paste-url"]')
     ).toBeNull();
+  });
+});
+
+describe("Phase 2: cost, city and address", () => {
+  it("maps the new form values to create input and patch (blank -> null)", () => {
+    const full = formValues({
+      cost_text: "R$ 20 inteira",
+      city: "Cidade Modelo",
+      address: "Rua Exemplo, 100",
+    });
+    expect(toCreateInput(full, 0)).toMatchObject({
+      cost_text: "R$ 20 inteira",
+      city: "Cidade Modelo",
+      address: "Rua Exemplo, 100",
+    });
+    expect(toUpdatePatch(formValues({ cost_text: "", city: "", address: "" }))).toMatchObject({
+      cost_text: null,
+      city: null,
+      address: null,
+    });
+  });
+
+  it("rejects over-long values in the form with a PT-BR message", () => {
+    expect(() => toCreateInput(formValues({ cost_text: "x".repeat(201) }), 0)).toThrow(/Custo/);
+  });
+
+  function cb() {
+    return { onView: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(), onMarkDone: vi.fn(), onSchedule: vi.fn() };
+  }
+
+  it("shows cost and city on the card when present", () => {
+    const card = renderAdminCard(row({ cost_text: "grátis", city: "Cidade Modelo" }), cb());
+    const meta = card.querySelector(".feed-card__meta")?.textContent ?? "";
+    expect(meta).toContain("grátis");
+    expect(meta).toContain("Cidade Modelo");
+  });
+
+  it("renders a legacy card without cost/city items", () => {
+    const card = renderAdminCard(row(), cb());
+    expect(card.querySelector(".feed-card__meta-item--cost")).toBeNull();
+    expect(card.querySelector(".feed-card__meta-item--city")).toBeNull();
+  });
+
+  function viewCb() {
+    return { onEdit: vi.fn(), onSchedule: vi.fn(), onMarkDone: vi.fn(), onDelete: vi.fn() };
+  }
+
+  it("detail shows the fields and a safe map link", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ cost_text: "R$ 20", city: "Cidade Modelo", address: "Rua Exemplo, 100" }));
+    const text = modal.element.textContent ?? "";
+    expect(text).toContain("R$ 20");
+    expect(text).toContain("Cidade Modelo");
+    expect(text).toContain("Rua Exemplo, 100");
+    const map = modal.element.querySelector<HTMLAnchorElement>("a[data-action='open-map']");
+    expect(map?.hidden).toBe(false);
+    expect(map?.href).toBe(
+      "https://www.google.com/maps/search/?api=1&query=Rua%20Exemplo%2C%20100%2C%20Cidade%20Modelo"
+    );
+    expect(map?.target).toBe("_blank");
+    expect(map?.rel).toContain("noopener");
+  });
+
+  it("detail hides empty sections and the map link for legacy items", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    modal.open(row());
+    for (const key of ["cost_text", "city", "address"]) {
+      const r = modal.element.querySelector<HTMLElement>(`[data-field='${key}']`);
+      expect(r?.hidden).toBe(true);
+    }
+    const map = modal.element.querySelector<HTMLElement>("a[data-action='open-map']");
+    expect(map?.hidden).toBe(true);
+  });
+
+  it("form keeps the new fields inside a collapsed Mais detalhes section and round-trips them", () => {
+    const onSubmit = vi.fn();
+    const modal = createLinkFormModal(onSubmit);
+    document.body.appendChild(modal.element);
+    const more = modal.element.querySelector("details.links-admin-form__more") as HTMLDetailsElement;
+    expect(more.querySelector("summary")?.textContent).toBe("Mais detalhes");
+    modal.openCreate();
+    expect(more.open).toBe(false);
+
+    modal.openEdit(row({ cost_text: "R$ 20", city: "Cidade Modelo", address: "Rua Exemplo, 100" }));
+    expect(more.open).toBe(true);
+    expect((modal.element.querySelector("#links-form-cost_text") as HTMLInputElement).value).toBe("R$ 20");
+    modal.element.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ cost_text: "R$ 20", city: "Cidade Modelo", address: "Rua Exemplo, 100" }),
+      "link-1"
+    );
+
+    modal.openEdit(row());
+    expect(more.open).toBe(false);
+  });
+});
+
+describe("Phase 2: dossier and itinerary", () => {
+  function viewCb() {
+    return { onEdit: vi.fn(), onSchedule: vi.fn(), onMarkDone: vi.fn(), onDelete: vi.fn() };
+  }
+
+  it("maps dossier and itinerary to payload keys (blank -> null)", () => {
+    expect(
+      toCreateInput(formValues({ dossier: "Historia\nCuriosidade", itinerary: "09h chegada" }), 1)
+    ).toMatchObject({ dossier: "Historia\nCuriosidade", itinerary: "09h chegada" });
+    expect(toUpdatePatch(formValues({ dossier: "", itinerary: " " }))).toMatchObject({
+      dossier: null,
+      itinerary: null,
+    });
+  });
+
+  it("rejects over-long dossier in the form", () => {
+    expect(() => toCreateInput(formValues({ dossier: "x".repeat(5001) }), 1)).toThrow(/Dossiê/);
+  });
+
+  it("form uses textareas and round-trips line breaks", () => {
+    const onSubmit = vi.fn();
+    const modal = createLinkFormModal(onSubmit);
+    document.body.appendChild(modal.element);
+    const d = modal.element.querySelector("#links-form-dossier");
+    expect(d?.tagName).toBe("TEXTAREA");
+    expect(modal.element.querySelector("#links-form-itinerary")?.tagName).toBe("TEXTAREA");
+    modal.openEdit(row({ dossier: "linha 1\nlinha 2", itinerary: "A\nB" }));
+    expect((d as HTMLTextAreaElement).value).toBe("linha 1\nlinha 2");
+    modal.element.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ dossier: "linha 1\nlinha 2", itinerary: "A\nB" }),
+      "link-1"
+    );
+  });
+
+  it("detail shows both sections as plain text and hides them when empty", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    const evil = "<img src=x onerror=alert(1)>\nsegunda linha";
+    modal.open(row({ dossier: evil, itinerary: "09h chegada\n10h almoco" }));
+    const d = modal.element.querySelector<HTMLElement>("[data-field='dossier']")!;
+    const i = modal.element.querySelector<HTMLElement>("[data-field='itinerary']")!;
+    expect(d.hidden).toBe(false);
+    expect(d.querySelector("img")).toBeNull();
+    expect(d.textContent).toContain(evil);
+    expect(i.textContent).toContain("09h chegada\n10h almoco");
+    modal.open(row());
+    expect(d.hidden).toBe(true);
+    expect(i.hidden).toBe(true);
+  });
+});
+
+describe("Phase 2: source post link", () => {
+  function viewCb() {
+    return { onEdit: vi.fn(), onSchedule: vi.fn(), onMarkDone: vi.fn(), onDelete: vi.fn() };
+  }
+
+  it("maps source_url to payload keys (blank -> null)", () => {
+    expect(
+      toCreateInput(formValues({ source_url: "https://example.com/p/abc" }), 1)
+    ).toMatchObject({ source_url: "https://example.com/p/abc" });
+    expect(toCreateInput(formValues(), 1)).toMatchObject({ source_url: null });
+    expect(toUpdatePatch(formValues({ source_url: "" }))).toMatchObject({ source_url: null });
+  });
+
+  it("rejects a non-https source link with a PT-BR message", () => {
+    expect(() => toCreateInput(formValues({ source_url: "http://example.com/p" }), 1)).toThrow(
+      /Link do post original/
+    );
+    expect(() => toUpdatePatch(formValues({ source_url: "javascript:alert(1)" }))).toThrow(
+      /https/
+    );
+  });
+
+  it("form shows an inline error for a non-https link, clears it when fixed, and blocks submit", () => {
+    const onSubmit = vi.fn();
+    const modal = createLinkFormModal(onSubmit);
+    document.body.appendChild(modal.element);
+    modal.openCreate({ url: "https://example.com/lugar" });
+    const input = modal.element.querySelector<HTMLInputElement>("#links-form-source_url")!;
+    const err = modal.element.querySelector<HTMLElement>("#links-form-source_url-error")!;
+    expect(err.hidden).toBe(true);
+    input.value = "http://example.com/p";
+    input.dispatchEvent(new Event("input"));
+    expect(err.hidden).toBe(false);
+    expect(err.textContent).toMatch(/https/);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    modal.element.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    input.value = "https://example.com/p";
+    input.dispatchEvent(new Event("input"));
+    expect(err.hidden).toBe(true);
+    expect(input.getAttribute("aria-invalid")).toBeNull();
+    modal.element.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ source_url: "https://example.com/p" }),
+      null
+    );
+  });
+
+  it("form round-trips an existing source link and opens Mais detalhes", () => {
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    const more = modal.element.querySelector("details.links-admin-form__more") as HTMLDetailsElement;
+    modal.openEdit(row({ source_url: "https://example.com/p/1" }));
+    expect(more.open).toBe(true);
+    expect(modal.element.querySelector<HTMLInputElement>("#links-form-source_url")!.value).toBe(
+      "https://example.com/p/1"
+    );
+    modal.openEdit(row());
+    expect(modal.element.querySelector<HTMLInputElement>("#links-form-source_url")!.value).toBe("");
+    expect(modal.element.querySelector<HTMLElement>("#links-form-source_url-error")!.hidden).toBe(true);
+  });
+
+  it("detail shows Ver post original with a safe new-tab link, hidden when empty", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ source_url: "https://example.com/p/1" }));
+    const wrap = modal.element.querySelector<HTMLElement>("[data-field='source_url']")!;
+    const a = wrap.querySelector<HTMLAnchorElement>("a")!;
+    expect(wrap.hidden).toBe(false);
+    expect(a.textContent).toContain("Ver post original");
+    expect(a.getAttribute("href")).toBe("https://example.com/p/1");
+    expect(a.target).toBe("_blank");
+    expect(a.rel).toContain("noopener");
+    modal.open(row());
+    expect(wrap.hidden).toBe(true);
+    expect(a.hasAttribute("href")).toBe(false);
+  });
+
+  it("detail never links a non-https stored value", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ source_url: "javascript:alert(1)" }));
+    const wrap = modal.element.querySelector<HTMLElement>("[data-field='source_url']")!;
+    expect(wrap.hidden).toBe(true);
+    expect(wrap.querySelector("a")!.hasAttribute("href")).toBe(false);
+  });
+});
+
+describe("pose references", () => {
+  function viewCb() {
+    return { onEdit: vi.fn(), onSchedule: vi.fn(), onMarkDone: vi.fn(), onDelete: vi.fn() };
+  }
+
+  function setup(onSubmit = vi.fn()) {
+    const modal = createLinkFormModal(onSubmit);
+    document.body.appendChild(modal.element);
+    modal.openCreate({ url: "https://example.com/lugar" });
+    const q = <T extends HTMLElement>(sel: string) => modal.element.querySelector<T>(sel)!;
+    const click = (name: string) =>
+      modal.element.querySelector<HTMLButtonElement>(`button[aria-label='${name}']`)!.click();
+    const type = (id: string, value: string) => {
+      const input = q<HTMLInputElement>(`#${id}`);
+      input.value = value;
+      input.dispatchEvent(new Event("input"));
+    };
+    const submit = () =>
+      modal.element.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    const items = () => [...modal.element.querySelectorAll(".links-poses__item")];
+    return { modal, q, click, type, submit, items };
+  }
+
+  it("maps poses to payload keys (blank -> null) and validates https", () => {
+    expect(
+      toCreateInput(formValues({ pose_refs: [{ url: "https://example.com/a", note: "n" }] }), 1)
+    ).toMatchObject({ pose_refs: [{ url: "https://example.com/a", note: "n" }] });
+    expect(toCreateInput(formValues(), 1)).toMatchObject({ pose_refs: null });
+    expect(toUpdatePatch(formValues({ pose_refs: [{ url: "", note: "" }] }))).toMatchObject({
+      pose_refs: null,
+    });
+    expect(() =>
+      toUpdatePatch(formValues({ pose_refs: [{ url: "http://example.com", note: "" }] }))
+    ).toThrow(/Pose 1.*https/);
+  });
+
+  it("adds poses and submits them in order", () => {
+    const onSubmit = vi.fn();
+    const { click, type, submit, items } = setup(onSubmit);
+    expect(items()).toHaveLength(0);
+    click("Adicionar pose");
+    click("Adicionar pose");
+    expect(items()).toHaveLength(2);
+    type("links-form-pose-0-url", "https://example.com/a");
+    type("links-form-pose-1-note", "de costas");
+    submit();
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pose_refs: [
+          { url: "https://example.com/a", note: "" },
+          { url: "", note: "de costas" },
+        ],
+      }),
+      null
+    );
+  });
+
+  it("removes and reorders poses", () => {
+    const onSubmit = vi.fn();
+    const { click, type, submit, items } = setup(onSubmit);
+    for (let i = 0; i < 3; i++) click("Adicionar pose");
+    type("links-form-pose-0-note", "A");
+    type("links-form-pose-1-note", "B");
+    type("links-form-pose-2-note", "C");
+    click("Descer pose 1");
+    click("Subir pose 3");
+    click("Remover pose 2");
+    expect(items()).toHaveLength(2);
+    submit();
+    const values = onSubmit.mock.calls[0]![0] as LinkFormValues;
+    expect(values.pose_refs.map((p) => p.note)).toEqual(["B", "A"]);
+  });
+
+  it("shows an inline https error and blocks submit", () => {
+    const onSubmit = vi.fn();
+    const { click, type, submit, q } = setup(onSubmit);
+    click("Adicionar pose");
+    type("links-form-pose-0-url", "http://example.com/a");
+    const err = q<HTMLElement>("#links-form-pose-0-url-error");
+    const input = q<HTMLInputElement>("#links-form-pose-0-url");
+    expect(err.hidden).toBe(false);
+    expect(err.textContent).toMatch(/https/);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(input.getAttribute("aria-describedby")).toBe(err.id);
+    submit();
+    expect(onSubmit).not.toHaveBeenCalled();
+    type("links-form-pose-0-url", "https://example.com/a");
+    expect(err.hidden).toBe(true);
+    expect(input.hasAttribute("aria-invalid")).toBe(false);
+  });
+
+  it("caps the list at 30 poses", () => {
+    const { click, items, q } = setup();
+    for (let i = 0; i < 35; i++) click("Adicionar pose");
+    expect(items()).toHaveLength(30);
+    expect(q<HTMLButtonElement>("button[aria-label='Adicionar pose']").disabled).toBe(true);
+  });
+
+  it("round-trips stored poses on edit and resets on create", () => {
+    const { modal, q, items } = setup();
+    const more = q<HTMLDetailsElement>("details.links-admin-form__more");
+    modal.openEdit(
+      row({ pose_refs: [{ url: "https://example.com/a", note: "n" }, { note: "so nota" }] })
+    );
+    expect(more.open).toBe(true);
+    expect(items()).toHaveLength(2);
+    expect(q<HTMLInputElement>("#links-form-pose-0-url").value).toBe("https://example.com/a");
+    expect(q<HTMLInputElement>("#links-form-pose-1-note").value).toBe("so nota");
+    modal.openCreate({ url: "" });
+    expect(items()).toHaveLength(0);
+  });
+
+  it("detail lists poses in order with safe new-tab links, hidden when empty", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    modal.open(
+      row({
+        pose_refs: [
+          { url: "https://example.com/a", note: "primeira" },
+          { note: "<b>so nota</b>" },
+          { url: "javascript:alert(1)", note: "ruim" },
+        ],
+      })
+    );
+    const wrap = modal.element.querySelector<HTMLElement>("[data-field='pose_refs']")!;
+    expect(wrap.hidden).toBe(false);
+    const lis = [...wrap.querySelectorAll("li")];
+    expect(lis).toHaveLength(3);
+    const a = lis[0]!.querySelector("a")!;
+    expect(a.getAttribute("href")).toBe("https://example.com/a");
+    expect(a.target).toBe("_blank");
+    expect(a.rel).toContain("noopener");
+    expect(lis[0]!.textContent).toContain("primeira");
+    expect(lis[1]!.querySelector("a")).toBeNull();
+    expect(lis[1]!.textContent).toContain("<b>so nota</b>");
+    expect(lis[1]!.querySelector("b")).toBeNull();
+    expect(lis[2]!.querySelector("a")).toBeNull();
+    modal.open(row());
+    expect(wrap.hidden).toBe(true);
+    expect(wrap.querySelectorAll("li")).toHaveLength(0);
   });
 });

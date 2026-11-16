@@ -74,7 +74,7 @@ export function createAppBarActions(
   input.type = "search";
   input.id = "links-search-input";
   input.className = "links-search__input";
-  input.placeholder = "Buscar lugar, nota ou categoria";
+  input.placeholder = "Buscar: lugar, #tag, @pessoa, cidade:, custo<";
   input.setAttribute("aria-label", "Buscar experiências");
   input.autocomplete = "off";
   input.setAttribute("enterkeyhint", "search");

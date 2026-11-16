@@ -5,6 +5,9 @@ import { createAuth, type Auth } from "./auth";
 import { createAuthStorage, setRememberMe } from "./session-storage";
 import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
 import { renderGuestGate } from "./render";
+import { collectTags } from "./tags";
+import { collectPeople } from "./people";
+import { matches, parseQuery, removeChip, toggleFilter } from "./query";
 import { renderLinksSkeleton, renderToolbarSkeleton } from "./skeleton";
 import {
   createLoginButton,
@@ -31,7 +34,6 @@ import { sortLinksForDisplay, visibleListLinks } from "./sort-links";
 import {
   categoryCounts,
   linksForSection,
-  searchLinks,
   sectionCounts,
   toggleCategory,
   type Section,
@@ -148,6 +150,11 @@ function bootDynamic(
   let notice = warning ?? null;
   let categoryFilter: Category[] = [];
   let section: Section = "feed";
+  /**
+   * Text of the search box, the single source of truth for every search filter
+   * (`#tag`, `@pessoa`, `cidade:`, `custo<`, free text; see query.ts). Chip taps
+   * and chip removal edit this text and the input, so typing == tapping.
+   */
   let query = "";
   let pendingSharedUrl: string | null = pickSharedUrl(
     new URLSearchParams(location.search)
@@ -167,21 +174,27 @@ function bootDynamic(
     }
   });
 
-  const formModal: LinkFormHandle = createLinkFormModal(async (values, editingId) => {
-    formModal.setBusy(true);
-    try {
-      if (editingId) {
-        await submitEdit(editingId, values);
-      } else {
-        await submitCreate(values);
+  const formModal: LinkFormHandle = createLinkFormModal(
+    async (values, editingId) => {
+      formModal.setBusy(true);
+      try {
+        if (editingId) {
+          await submitEdit(editingId, values);
+        } else {
+          await submitCreate(values);
+        }
+        formModal.close();
+      } catch (err) {
+        formModal.setError(messageOf(err, GENERIC_ERROR));
+      } finally {
+        formModal.setBusy(false);
       }
-      formModal.close();
-    } catch (err) {
-      formModal.setError(messageOf(err, GENERIC_ERROR));
-    } finally {
-      formModal.setBusy(false);
+    },
+    {
+      getTagSuggestions: () => collectTags(links),
+      getPeopleSuggestions: () => collectPeople(links),
     }
-  });
+  );
 
   const deleteSheet: DeleteSheetHandle = createDeleteConfirmSheet();
   const scheduleSheet: ScheduleSheetHandle = createScheduleSheet();
@@ -190,6 +203,8 @@ function bootDynamic(
     onSchedule: (l) => openSchedule(l),
     onMarkDone: (l) => void markDone(l),
     onDelete: (l) => void deleteLink(l),
+    onTag: (tag) => toggleTagFilter(tag),
+    onPerson: (person) => togglePeopleFilter(person),
     onOpenChange: () => syncSelectedCard(),
   });
 
@@ -207,10 +222,7 @@ function bootDynamic(
       categoryFilter = [];
       renderList();
     },
-    onQuery: (q) => {
-      query = q;
-      renderList();
-    },
+    onQuery: (q) => setQuery(q),
     onAdd: () => formModal.openCreate(),
     onDeck: () => deckScreen.open(links, "wishlist"),
     onDraw: () => runDraw(),
@@ -548,6 +560,43 @@ function bootDynamic(
     }
   }
 
+  /** Sets the search text, mirrors it into the search input and re-renders. */
+  function setQuery(next: string, scrollTop = false): void {
+    query = next;
+    const input = document.getElementById("links-search-input");
+    if (input instanceof HTMLInputElement && input.value !== next) input.value = next;
+    renderList();
+    if (scrollTop) window.scrollTo({ top: 0 });
+  }
+
+  function toggleTagFilter(tag: string): void {
+    setQuery(toggleFilter(query, "tag", tag), true);
+  }
+
+  function togglePeopleFilter(person: string): void {
+    setQuery(toggleFilter(query, "person", person), true);
+  }
+
+  /** Active structured filters (#tag, @pessoa, cidade:, custo<) as removable chips (null when none). */
+  function renderFilterBar(): HTMLElement | null {
+    const chips = parseQuery(query).chips;
+    if (chips.length === 0) return null;
+    const bar = document.createElement("div");
+    bar.className = "links-tagfilter";
+    bar.setAttribute("role", "group");
+    bar.setAttribute("aria-label", "Filtros ativos");
+    for (const filter of chips) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "links-chip links-chip--active links-tagfilter__chip";
+      chip.setAttribute("aria-label", `Remover filtro ${filter.label}`);
+      chip.textContent = `${filter.label} ×`;
+      chip.addEventListener("click", () => setQuery(removeChip(query, filter)));
+      bar.appendChild(chip);
+    }
+    return bar;
+  }
+
   function emptyText(): string {
     if (query.trim().length > 0) return "Nada encontrado para essa busca.";
     if (categoryFilter.length > 0) return "Nenhuma experiência nas categorias selecionadas.";
@@ -567,10 +616,13 @@ function bootDynamic(
       return;
     }
     setShellVisible(true);
-    const sectionLinks = searchLinks(linksForSection(links, section), query);
+    const parsed = parseQuery(query);
+    const sectionLinks = linksForSection(links, section).filter((l) => matches(l, parsed));
     const visible = filterLinksByCategory(sectionLinks, categoryFilter);
     renderChrome(sectionLinks, visible.length);
     const selected = viewModal.currentId();
+    const filterBar = renderFilterBar();
+    if (filterBar) els.list.appendChild(filterBar);
     if (visible.length === 0) {
       const empty = document.createElement("p");
       empty.className = "links-status";
@@ -587,6 +639,8 @@ function bootDynamic(
               onDelete: (l) => void deleteLink(l),
               onMarkDone: (l) => void markDone(l),
               onSchedule: (l) => openSchedule(l),
+              onTag: (tag) => toggleTagFilter(tag),
+              onPerson: (person) => togglePeopleFilter(person),
             },
             { selected: link.id === selected }
           )

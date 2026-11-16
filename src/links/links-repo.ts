@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isHttpsUrl } from "./validate";
+import { isHttpsUrl, isOptionalHttpsUrl } from "./validate";
+import { MORE_TEXT_FIELDS } from "./more-fields";
+import { poseDraftsFromRefs, poseRefsError, readPoseRefs, type PoseRef } from "./poses";
+import { MAX_TAGS, MAX_TAG_LENGTH } from "./tags";
+import { MAX_PEOPLE, MAX_PERSON_LENGTH } from "./people";
 
 export type LinkStatus = "wishlist" | "done";
 
@@ -20,6 +24,15 @@ export type LinkRow = {
   image_url: string | null;
   note: string | null;
   completed_at: string | null;
+  cost_text?: string | null;
+  city?: string | null;
+  address?: string | null;
+  dossier?: string | null;
+  itinerary?: string | null;
+  source_url?: string | null;
+  pose_refs?: PoseRef[] | null;
+  tags?: string[] | null;
+  people?: string[] | null;
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -41,6 +54,15 @@ export type CreateLinkInput = {
   image_url?: string | null;
   note?: string | null;
   completed_at?: string | null;
+  cost_text?: string | null;
+  city?: string | null;
+  address?: string | null;
+  dossier?: string | null;
+  itinerary?: string | null;
+  source_url?: string | null;
+  pose_refs?: PoseRef[] | null;
+  tags?: string[] | null;
+  people?: string[] | null;
 };
 
 export type UpdateLinkPatch = {
@@ -59,6 +81,15 @@ export type UpdateLinkPatch = {
   image_url?: string | null;
   note?: string | null;
   completed_at?: string | null;
+  cost_text?: string | null;
+  city?: string | null;
+  address?: string | null;
+  dossier?: string | null;
+  itinerary?: string | null;
+  source_url?: string | null;
+  pose_refs?: PoseRef[] | null;
+  tags?: string[] | null;
+  people?: string[] | null;
 };
 
 export function normalizeLinkRow(
@@ -81,6 +112,15 @@ export function normalizeLinkRow(
     image_url: row.image_url ?? null,
     note: row.note ?? null,
     completed_at: row.completed_at ?? null,
+    cost_text: row.cost_text ?? null,
+    city: row.city ?? null,
+    address: row.address ?? null,
+    dossier: row.dossier ?? null,
+    itinerary: row.itinerary ?? null,
+    source_url: row.source_url ?? null,
+    pose_refs: row.pose_refs == null ? null : readPoseRefs(row.pose_refs),
+    tags: row.tags ?? null,
+    people: row.people ?? null,
     created_by: row.created_by,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -94,6 +134,15 @@ function validateLinkFields(fields: {
   icon_url?: string | null;
   image_url?: string | null;
   note?: string | null;
+  cost_text?: string | null;
+  city?: string | null;
+  address?: string | null;
+  dossier?: string | null;
+  itinerary?: string | null;
+  source_url?: string | null;
+  pose_refs?: PoseRef[] | null;
+  tags?: string[] | null;
+  people?: string[] | null;
 }): void {
   if (fields.url !== undefined) {
     if (!isHttpsUrl(fields.url)) {
@@ -134,6 +183,40 @@ function validateLinkFields(fields: {
       throw new Error("note must not exceed 500 characters");
     }
   }
+
+  for (const field of MORE_TEXT_FIELDS) {
+    const value = fields[field.key];
+    if (value != null && value.length > field.max) {
+      throw new Error(`${field.key} must not exceed ${field.max} characters`);
+    }
+  }
+
+  if (fields.tags != null) {
+    if (fields.tags.length > MAX_TAGS) {
+      throw new Error(`tags must not exceed ${MAX_TAGS} items`);
+    }
+    if (fields.tags.some((t) => t.length > MAX_TAG_LENGTH)) {
+      throw new Error(`tags must not exceed ${MAX_TAG_LENGTH} characters each`);
+    }
+  }
+
+  if (fields.people != null) {
+    if (fields.people.length > MAX_PEOPLE) {
+      throw new Error(`people must not exceed ${MAX_PEOPLE} items`);
+    }
+    if (fields.people.some((p) => p.length > MAX_PERSON_LENGTH)) {
+      throw new Error(`people must not exceed ${MAX_PERSON_LENGTH} characters each`);
+    }
+  }
+
+  if (!isOptionalHttpsUrl(fields.source_url)) {
+    throw new Error("source_url must be a valid https URL");
+  }
+
+  if (fields.pose_refs != null) {
+    const problem = poseRefsError(poseDraftsFromRefs(fields.pose_refs));
+    if (problem) throw new Error(`pose_refs invalid: ${problem}`);
+  }
 }
 
 export interface LinksRepo {
@@ -166,6 +249,15 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         icon_url: input.icon_url,
         image_url: input.image_url,
         note: input.note,
+        cost_text: input.cost_text,
+        city: input.city,
+        address: input.address,
+        dossier: input.dossier,
+        itinerary: input.itinerary,
+        source_url: input.source_url,
+        pose_refs: input.pose_refs,
+        tags: input.tags,
+        people: input.people,
       });
 
       const trimmedLabel = input.label.trim();
@@ -191,6 +283,15 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         icon_url: patch.icon_url,
         image_url: patch.image_url,
         note: patch.note,
+        cost_text: patch.cost_text,
+        city: patch.city,
+        address: patch.address,
+        dossier: patch.dossier,
+        itinerary: patch.itinerary,
+        source_url: patch.source_url,
+        pose_refs: patch.pose_refs,
+        tags: patch.tags,
+        people: patch.people,
       });
 
       const sanitized =
