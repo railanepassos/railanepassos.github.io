@@ -317,6 +317,19 @@ describe("Phase 2 fields", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("rejects impressions and lessons beyond the DB limits, accepts valid ones", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(repo.updateLink("1", { impressions: "x".repeat(5001) })).rejects.toThrow(/impressions/);
+    await expect(
+      repo.updateLink("1", { lessons: Array.from({ length: 21 }, () => "x") })
+    ).rejects.toThrow(/lessons/);
+    await expect(repo.updateLink("1", { lessons: ["x".repeat(301)] })).rejects.toThrow(/lessons/);
+    await expect(
+      repo.updateLink("1", { impressions: "Gostei.\nCaro.", lessons: ["levar lanche"] })
+    ).resolves.toBeUndefined();
+    await expect(repo.updateLink("1", { impressions: null, lessons: null })).resolves.toBeUndefined();
+  });
+
   it("rejects too many or over-long tags", async () => {
     const repo = createLinksRepo(makeFakeClient());
     const many = Array.from({ length: 31 }, (_, i) => `t${i}`);

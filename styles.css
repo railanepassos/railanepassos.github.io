@@ -1722,6 +1722,21 @@ body.links-screen-open {
   max-width: 68ch;
 }
 
+/* Impressions keep their line breaks (textContent + pre-line, never innerHTML). */
+.links-detail__row--prose .links-detail__value {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.links-detail__lessons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+  overflow-wrap: anywhere;
+}
+
 .links-detail__row--action {
   padding-left: 32px;
 }

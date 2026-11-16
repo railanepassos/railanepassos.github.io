@@ -29,6 +29,7 @@ import {
   readPoseRefs,
   type PoseDraft,
 } from "./poses";
+import { readLessons } from "./lessons";
 import {
   MORE_TEXT_FIELDS,
   emptyMoreTextValues,
@@ -1927,6 +1928,15 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   ratingRow.row.dataset.field = "rating";
   const wantAgainRow = infoRow("heart", "Voltaria?");
   wantAgainRow.row.dataset.field = "want_again";
+  const impressionsRow = infoRow("note", "Impressões");
+  impressionsRow.row.dataset.field = "impressions";
+  impressionsRow.row.classList.add("links-detail__row--long", "links-detail__row--prose");
+  const lessonsRow = infoRow("check", "Lições aprendidas");
+  lessonsRow.row.dataset.field = "lessons";
+  lessonsRow.row.classList.add("links-detail__row--long");
+  const lessonsOl = document.createElement("ol");
+  lessonsOl.className = "links-detail__lessons";
+  lessonsRow.value.appendChild(lessonsOl);
   const reviewEdit = document.createElement("button");
   reviewEdit.type = "button";
   reviewEdit.className = "links-detail__map links-detail__review-edit";
@@ -1938,7 +1948,14 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   reviewEditWrap.className = "links-detail__row links-detail__row--action";
   reviewEditWrap.dataset.field = "review-edit";
   reviewEditWrap.appendChild(reviewEdit);
-  info.append(visitRow.row, ratingRow.row, wantAgainRow.row, reviewEditWrap);
+  info.append(
+    visitRow.row,
+    ratingRow.row,
+    wantAgainRow.row,
+    impressionsRow.row,
+    lessonsRow.row,
+    reviewEditWrap
+  );
 
   // Registry-driven rows (cost, city, address, ...), each hidden when empty.
   // The map button sits right under them and is only shown when there is
@@ -2126,6 +2143,18 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     const again = isDone && link.want_again;
     wantAgainRow.row.hidden = !again;
     wantAgainRow.value.textContent = again ? "Sim" : "";
+    const impressionsText = isDone ? (link.impressions ?? "").trim() : "";
+    impressionsRow.row.hidden = impressionsText === "";
+    impressionsRow.value.textContent = impressionsText;
+    const lessonItems = isDone ? readLessons(link.lessons) : [];
+    lessonsRow.row.hidden = lessonItems.length === 0;
+    lessonsOl.replaceChildren(
+      ...lessonItems.map((text) => {
+        const li = document.createElement("li");
+        li.textContent = text;
+        return li;
+      })
+    );
     reviewEditWrap.hidden = !isDone || !cb.onEditReview;
 
     const panel = isPanelMode();

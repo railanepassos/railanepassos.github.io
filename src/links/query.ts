@@ -154,6 +154,8 @@ function haystack(link: LinkRow): string {
       link.cost_text ?? "",
       link.dossier ?? "",
       link.itinerary ?? "",
+      link.impressions ?? "",
+      ...(link.lessons ?? []),
       ...(link.tags ?? []),
       ...(link.people ?? []),
     ].join(" ")

@@ -1,4 +1,5 @@
 import type { LinkRow } from "./links-repo";
+import { lessonsError, normalizeLessons, readLessons } from "./lessons";
 
 /**
  * "Como foi" (Phase 3): what the visit was like. Pure helpers shared by the
@@ -38,23 +39,42 @@ export function normalizeRating(value: unknown): number | null {
 export type ReviewValues = {
   rating: number | null;
   want_again: boolean;
+  /** Free text (line breaks kept); "" when empty. */
+  impressions: string;
+  /** Short items, in order; blank rows are dropped on save. */
+  lessons: string[];
 };
 
 /** The columns of `LinkRow` the review reads. */
-export type ReviewSource = Partial<Pick<LinkRow, "rating" | "want_again">>;
+export type ReviewSource = Partial<
+  Pick<LinkRow, "rating" | "want_again" | "impressions" | "lessons">
+>;
 
 export function reviewFromLink(link: ReviewSource): ReviewValues {
   return {
     rating: normalizeRating(link.rating),
     want_again: Boolean(link.want_again),
+    impressions: link.impressions ?? "",
+    lessons: readLessons(link.lessons),
   };
 }
 
 /** Columns written by the sheet (a cleared rating is an explicit null). */
-export type ReviewPatch = { rating: number | null; want_again: boolean };
+export type ReviewPatch = {
+  rating: number | null;
+  want_again: boolean;
+  impressions: string | null;
+  lessons: string[] | null;
+};
 
 export function reviewToPatch(values: ReviewValues): ReviewPatch {
-  return { rating: values.rating, want_again: values.want_again };
+  const impressions = values.impressions.trim();
+  return {
+    rating: values.rating,
+    want_again: values.want_again,
+    impressions: impressions === "" ? null : impressions,
+    lessons: normalizeLessons(values.lessons),
+  };
 }
 
 /** First problem found (PT-BR), or null. */
@@ -62,7 +82,10 @@ export function reviewError(values: ReviewValues): string | null {
   if (values.rating !== null && !isValidRating(values.rating)) {
     return `A nota deve ser de ${RATING_MIN} a ${RATING_MAX}.`;
   }
-  return null;
+  if (values.impressions.trim().length > REVIEW_LIMITS.impressionsMax) {
+    return `Impressões devem ter no máximo ${REVIEW_LIMITS.impressionsMax} caracteres.`;
+  }
+  return lessonsError(values.lessons);
 }
 
 /** Compact form for the card: "4/5". */

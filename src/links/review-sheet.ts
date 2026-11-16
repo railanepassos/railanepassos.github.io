@@ -2,7 +2,9 @@ import { createScreenChrome } from "./admin-ui";
 import { setScreenBusy } from "./skeleton";
 import { syncBodyScreenLock } from "./screen-lock";
 import { uiIcon } from "./ui-icons";
-import { RATING_MAX, RATING_MIN, type ReviewValues } from "./review";
+import { RATING_MAX, RATING_MIN, REVIEW_LIMITS, type ReviewValues } from "./review";
+import { LESSON_MAX, MAX_LESSONS } from "./lessons";
+import { moveItem } from "./poses";
 
 /**
  * "Como foi" bottom sheet: opened after marking a place as done (skippable) and
@@ -169,9 +171,143 @@ function createWantAgainControl(): ReviewControl {
   };
 }
 
+function createImpressionsControl(): ReviewControl {
+  const field = document.createElement("div");
+  field.className = "links-admin-form__field links-review__field";
+
+  const label = document.createElement("label");
+  label.className = "links-admin-form__label";
+  label.htmlFor = "links-review-impressions";
+  label.textContent = "Impressões";
+
+  const input = document.createElement("textarea");
+  input.className = "links-admin-form__control links-admin-form__control--textarea";
+  input.id = "links-review-impressions";
+  input.rows = 4;
+  input.maxLength = REVIEW_LIMITS.impressionsMax;
+  input.placeholder = "O que gostou, o que não gostou, se valeu o preço.";
+
+  field.append(label, input);
+  return {
+    element: field,
+    set: (values) => {
+      input.value = values.impressions;
+    },
+    read: (draft) => {
+      draft.impressions = input.value;
+    },
+  };
+}
+
+function lessonToolButton(glyph: string, ariaLabel: string): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "links-poses__tool";
+  btn.setAttribute("aria-label", ariaLabel);
+  btn.title = ariaLabel;
+  btn.textContent = glyph;
+  return btn;
+}
+
+/** Ordered list of short items; same pattern as the pose list in the place form. */
+function createLessonsControl(): ReviewControl {
+  let lessons: string[] = [];
+
+  const fieldset = document.createElement("fieldset");
+  fieldset.className = "links-admin-form__field links-poses links-lessons";
+  const legend = document.createElement("legend");
+  legend.className = "links-admin-form__label";
+  legend.textContent = "Lições aprendidas";
+  const list = document.createElement("ol");
+  list.className = "links-poses__list";
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "links-poses__add";
+  addBtn.setAttribute("aria-label", "Adicionar lição");
+  addBtn.append(uiIcon("plus", 18), document.createTextNode("Adicionar lição"));
+  fieldset.append(legend, list, addBtn);
+
+  function render(focus?: string): void {
+    list.replaceChildren();
+    lessons.forEach((text, i) => {
+      const n = i + 1;
+      const item = document.createElement("li");
+      item.className = "links-poses__item links-lessons__item";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "links-admin-form__control links-lessons__text";
+      input.id = `links-review-lesson-${i}`;
+      input.maxLength = LESSON_MAX;
+      input.autocomplete = "off";
+      input.setAttribute("aria-label", `Lição ${n}`);
+      input.value = text;
+      input.addEventListener("input", () => {
+        lessons[i] = input.value;
+      });
+
+      const tools = document.createElement("div");
+      tools.className = "links-poses__tools";
+      const up = lessonToolButton("↑", `Subir lição ${n}`);
+      up.disabled = i === 0;
+      up.dataset.focusKey = `up-${i}`;
+      up.addEventListener("click", () => {
+        lessons = moveItem(lessons, i, i - 1);
+        render(`up-${i - 1}`);
+      });
+      const down = lessonToolButton("↓", `Descer lição ${n}`);
+      down.disabled = i === lessons.length - 1;
+      down.dataset.focusKey = `down-${i}`;
+      down.addEventListener("click", () => {
+        lessons = moveItem(lessons, i, i + 1);
+        render(`down-${i + 1}`);
+      });
+      const remove = lessonToolButton("×", `Remover lição ${n}`);
+      remove.addEventListener("click", () => {
+        lessons = lessons.filter((_, j) => j !== i);
+        render("add");
+      });
+      tools.append(up, down, remove);
+
+      item.append(input, tools);
+      list.appendChild(item);
+    });
+    addBtn.disabled = lessons.length >= MAX_LESSONS;
+    if (focus === "add") addBtn.focus();
+    else if (focus) {
+      const target = list.querySelector<HTMLElement>(`[data-focus-key='${focus}']`);
+      // A moved row can land at an edge where that button is disabled.
+      if (target && !(target as HTMLButtonElement).disabled) target.focus();
+    }
+  }
+
+  addBtn.addEventListener("click", () => {
+    if (lessons.length >= MAX_LESSONS) return;
+    lessons.push("");
+    render();
+    list.querySelector<HTMLInputElement>(`#links-review-lesson-${lessons.length - 1}`)?.focus();
+  });
+
+  return {
+    element: fieldset,
+    set: (values) => {
+      lessons = [...values.lessons];
+      render();
+    },
+    read: (draft) => {
+      draft.lessons = [...lessons];
+    },
+  };
+}
+
 /** Controls in on-screen order. Add the next field's control here. */
 function buildControls(): ReviewControl[] {
-  return [createRatingControl(), createWantAgainControl()];
+  return [
+    createRatingControl(),
+    createWantAgainControl(),
+    createImpressionsControl(),
+    createLessonsControl(),
+  ];
 }
 
 export function createReviewSheet(): ReviewSheetHandle {
@@ -268,7 +404,7 @@ export function createReviewSheet(): ReviewSheetHandle {
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     if (!onSaveCb || busy) return;
-    const draft: ReviewValues = { rating: null, want_again: false };
+    const draft: ReviewValues = { rating: null, want_again: false, impressions: "", lessons: [] };
     for (const control of controls) control.read(draft);
     setError("");
     void Promise.resolve(onSaveCb(draft)).catch(() => undefined);

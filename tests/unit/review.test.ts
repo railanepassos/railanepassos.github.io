@@ -12,7 +12,17 @@ import {
   reviewError,
   reviewFromLink,
   reviewToPatch,
+  REVIEW_LIMITS,
+  type ReviewValues,
 } from "../../src/links/review";
+
+const blank = (over: Partial<ReviewValues> = {}): ReviewValues => ({
+  rating: null,
+  want_again: false,
+  impressions: "",
+  lessons: [],
+  ...over,
+});
 
 describe("rating validation", () => {
   it("accepts integers 1 to 5 only", () => {
@@ -33,10 +43,10 @@ describe("rating validation", () => {
   });
 
   it("reviewError: null rating is fine (optional), out-of-range is a PT-BR message", () => {
-    expect(reviewError({ rating: null, want_again: false })).toBeNull();
-    expect(reviewError({ rating: 3, want_again: true })).toBeNull();
-    expect(reviewError({ rating: 6, want_again: false })).toMatch(/nota/i);
-    expect(reviewError({ rating: 0, want_again: false })).toMatch(/1 a 5/);
+    expect(reviewError(blank())).toBeNull();
+    expect(reviewError(blank({ rating: 3, want_again: true }))).toBeNull();
+    expect(reviewError(blank({ rating: 6 }))).toMatch(/nota/i);
+    expect(reviewError(blank({ rating: 0 }))).toMatch(/1 a 5/);
   });
 });
 
@@ -49,20 +59,50 @@ describe("rating formatting", () => {
 
 describe("review <-> link row", () => {
   it("reads current values from a row, with defaults for legacy rows", () => {
-    expect(reviewFromLink({ rating: 4, want_again: true })).toEqual({ rating: 4, want_again: true });
-    expect(reviewFromLink({ rating: undefined, want_again: false })).toEqual({
-      rating: null,
-      want_again: false,
-    });
+    expect(reviewFromLink({ rating: 4, want_again: true })).toEqual(
+      blank({ rating: 4, want_again: true })
+    );
+    expect(reviewFromLink({ rating: undefined, want_again: false })).toEqual(blank());
     expect(reviewFromLink({ rating: 99, want_again: false }).rating).toBeNull();
   });
 
-  it("builds the PATCH payload; clearing the rating sends null", () => {
-    expect(reviewToPatch({ rating: 5, want_again: true })).toEqual({ rating: 5, want_again: true });
-    expect(reviewToPatch({ rating: null, want_again: false })).toEqual({
-      rating: null,
-      want_again: false,
+  it("reads impressions and lessons, tolerating nulls and junk", () => {
+    expect(
+      reviewFromLink({ impressions: "Valeu a pena.\nVoltaria.", lessons: ["levar lanche", ""] })
+    ).toMatchObject({ impressions: "Valeu a pena.\nVoltaria.", lessons: ["levar lanche"] });
+    expect(reviewFromLink({ impressions: null, lessons: null })).toMatchObject({
+      impressions: "",
+      lessons: [],
     });
+  });
+
+  it("builds the PATCH payload; clearing the rating sends null", () => {
+    expect(reviewToPatch(blank({ rating: 5, want_again: true }))).toEqual({
+      rating: 5,
+      want_again: true,
+      impressions: null,
+      lessons: null,
+    });
+  });
+
+  it("PATCH trims impressions, drops blank lessons, and sends null when empty", () => {
+    expect(
+      reviewToPatch(
+        blank({ impressions: "  Gostei muito.\nCaro.  ", lessons: [" levar lanche ", "", "  "] })
+      )
+    ).toMatchObject({ impressions: "Gostei muito.\nCaro.", lessons: ["levar lanche"] });
+    expect(reviewToPatch(blank({ impressions: "   ", lessons: ["", " "] }))).toMatchObject({
+      impressions: null,
+      lessons: null,
+    });
+  });
+
+  it("reviewError enforces the migration limits for impressions and lessons", () => {
+    expect(REVIEW_LIMITS.impressionsMax).toBe(5000);
+    expect(reviewError(blank({ impressions: "x".repeat(5000) }))).toBeNull();
+    expect(reviewError(blank({ impressions: "x".repeat(5001) }))).toMatch(/Impressões.*5000/);
+    expect(reviewError(blank({ lessons: Array.from({ length: 21 }, () => "x") }))).toMatch(/20/);
+    expect(reviewError(blank({ lessons: ["x".repeat(301)] }))).toMatch(/Lição 1/);
   });
 
   it("hasRating only for done places with a valid rating", () => {

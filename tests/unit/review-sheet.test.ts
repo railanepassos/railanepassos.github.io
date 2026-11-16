@@ -12,7 +12,15 @@ beforeEach(() => {
   });
 });
 
-function setup(initial = { rating: null as number | null, want_again: false }) {
+type Initial = {
+  rating: number | null;
+  want_again: boolean;
+  impressions?: string;
+  lessons?: string[];
+};
+
+function setup(base: Initial = { rating: null, want_again: false }) {
+  const initial = { impressions: "", lessons: [] as string[], ...base };
   const onSave = vi.fn();
   const onSkip = vi.fn();
   const sheet = createReviewSheet();
@@ -56,7 +64,7 @@ describe("createReviewSheet", () => {
     radios()[1]!.click();
     expect(checked()).toHaveLength(0);
     button("Salvar").click();
-    expect(onSave).toHaveBeenCalledWith({ rating: null, want_again: false });
+    expect(onSave).toHaveBeenCalledWith({ rating: null, want_again: false, impressions: "", lessons: [] });
   });
 
   it("has an explicit clear control that only shows when there is a rating", () => {
@@ -86,7 +94,7 @@ describe("createReviewSheet", () => {
     expect(sheet.element.textContent).toContain("Voltaria?");
     voltaria.click();
     button("Salvar").click();
-    expect(onSave).toHaveBeenCalledWith({ rating: 4, want_again: true });
+    expect(onSave).toHaveBeenCalledWith({ rating: 4, want_again: true, impressions: "", lessons: [] });
   });
 
   it("Pular closes without saving; the close X and Escape behave the same", () => {
@@ -112,11 +120,77 @@ describe("createReviewSheet", () => {
   it("edit mode labels the dismiss button Cancelar and shows save errors", () => {
     const sheet = createReviewSheet();
     document.body.appendChild(sheet.element);
-    sheet.open({ label: "Museu", mode: "edit", initial: { rating: null, want_again: false }, onSave: vi.fn() });
+    sheet.open({ label: "Museu", mode: "edit", initial: { rating: null, want_again: false, impressions: "", lessons: [] }, onSave: vi.fn() });
     expect(
       Array.from(sheet.element.querySelectorAll("button")).some((b) => b.textContent === "Cancelar")
     ).toBe(true);
     sheet.setError("Falhou");
     expect(sheet.element.querySelector("[role='alert']")!.textContent).toBe("Falhou");
+  });
+
+  describe("impressions and lessons", () => {
+    type S = { element: HTMLElement };
+    const impressionsBox = (sheet: S) => sheet.element.querySelector<HTMLTextAreaElement>("textarea")!;
+    const lessonInputs = (sheet: S) =>
+      Array.from(sheet.element.querySelectorAll<HTMLInputElement>(".links-lessons__text"));
+    const tool = (sheet: S, name: string) =>
+      sheet.element.querySelector<HTMLButtonElement>(`button[aria-label='${name}']`)!;
+    const type = (input: HTMLInputElement, value: string) => {
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    it("opens prefilled with impressions and the lesson list", () => {
+      const { sheet } = setup({
+        rating: null,
+        want_again: false,
+        impressions: "Gostei\nmuito",
+        lessons: ["levar lanche", "chegar cedo"],
+      });
+      expect(impressionsBox(sheet).value).toBe("Gostei\nmuito");
+      expect(impressionsBox(sheet).maxLength).toBe(5000);
+      expect(lessonInputs(sheet).map((i) => i.value)).toEqual(["levar lanche", "chegar cedo"]);
+      expect(lessonInputs(sheet)[0]!.maxLength).toBe(300);
+    });
+
+    it("adds, reorders and removes lessons, saving them in order", () => {
+      const { sheet, onSave, button } = setup();
+      impressionsBox(sheet).value = "Valeu a pena";
+      tool(sheet, "Adicionar lição").click();
+      type(lessonInputs(sheet)[0]!, "levar lanche");
+      tool(sheet, "Adicionar lição").click();
+      type(lessonInputs(sheet)[1]!, "chegar cedo");
+      tool(sheet, "Adicionar lição").click();
+      type(lessonInputs(sheet)[2]!, "apagar");
+      tool(sheet, "Subir lição 2").click();
+      tool(sheet, "Remover lição 3").click();
+      expect(lessonInputs(sheet).map((i) => i.value)).toEqual(["chegar cedo", "levar lanche"]);
+      button("Salvar").click();
+      expect(onSave).toHaveBeenCalledWith({
+        rating: null,
+        want_again: false,
+        impressions: "Valeu a pena",
+        lessons: ["chegar cedo", "levar lanche"],
+      });
+    });
+
+    it("disables the add button at 20 lessons", () => {
+      const { sheet } = setup({
+        rating: null,
+        want_again: false,
+        lessons: Array.from({ length: 20 }, (_, i) => `l${i}`),
+      });
+      expect(tool(sheet, "Adicionar lição").disabled).toBe(true);
+    });
+
+    it("reopening resets the controls to the new initial values", () => {
+      const { sheet } = setup({ rating: null, want_again: false, lessons: ["a"] });
+      sheet.open({
+        label: "Outro",
+        initial: { rating: null, want_again: false, impressions: "", lessons: [] },
+        onSave: vi.fn(),
+      });
+      expect(lessonInputs(sheet)).toHaveLength(0);
+    });
   });
 });
