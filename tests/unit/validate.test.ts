@@ -1,5 +1,50 @@
 import { describe, expect, it } from "vitest";
-import { httpsUrlError, isHttpsUrl, isOptionalHttpsUrl, deriveLabelFromUrl } from "../../src/links/validate";
+import {
+  httpsUrlError,
+  isHttpsUrl,
+  isOptionalHttpsUrl,
+  deriveLabelFromUrl,
+  normalizeUrlInput,
+} from "../../src/links/validate";
+
+describe("normalizeUrlInput", () => {
+  it("returns empty for blank input", () => {
+    expect(normalizeUrlInput("")).toBe("");
+    expect(normalizeUrlInput("   ")).toBe("");
+  });
+
+  it("prefixes https when there is no scheme, without adding www", () => {
+    expect(normalizeUrlInput("google.com")).toBe("https://google.com");
+    expect(normalizeUrlInput("www.x.com")).toBe("https://www.x.com");
+    expect(normalizeUrlInput("  example.com/teste?a=1 ")).toBe("https://example.com/teste?a=1");
+  });
+
+  it("upgrades http and protocol-relative URLs to https", () => {
+    expect(normalizeUrlInput("http://site.com")).toBe("https://site.com");
+    expect(normalizeUrlInput("HTTP://site.com/a")).toBe("https://site.com/a");
+    expect(normalizeUrlInput("//x.com")).toBe("https://x.com");
+  });
+
+  it("keeps https URLs as they are", () => {
+    expect(normalizeUrlInput("https://example.com/p")).toBe("https://example.com/p");
+  });
+
+  it("leaves unfixable input untouched so validation still fails", () => {
+    expect(normalizeUrlInput("not a url")).toBe("not a url");
+    expect(normalizeUrlInput("exemplo com.br")).toBe("exemplo com.br");
+    expect(normalizeUrlInput("localhost")).toBe("localhost");
+    expect(normalizeUrlInput("javascript:alert(1)")).toBe("javascript:alert(1)");
+    expect(normalizeUrlInput("ftp://x.com")).toBe("ftp://x.com");
+    expect(normalizeUrlInput("https://nodot")).toBe("https://nodot");
+    expect(normalizeUrlInput("http://nodot")).toBe("http://nodot");
+  });
+
+  it("always yields a valid https URL for fixable input", () => {
+    for (const raw of ["google.com", "http://a.com", "//b.com/x", "c.org/y"]) {
+      expect(isHttpsUrl(normalizeUrlInput(raw))).toBe(true);
+    }
+  });
+});
 
 describe("isOptionalHttpsUrl", () => {
   it("accepts empty values and https URLs", () => {
@@ -43,16 +88,21 @@ describe("deriveLabelFromUrl", () => {
 });
 
 describe("httpsUrlError", () => {
+  it("accepts values that normalize to https", () => {
+    expect(httpsUrlError("google.com", "Link do post")).toBeNull();
+    expect(httpsUrlError("http://example.com", "Link do post")).toBeNull();
+  });
+
   it("returns null for empty and https values", () => {
     expect(httpsUrlError("", "Link do post")).toBeNull();
     expect(httpsUrlError("https://example.com/p/1", "Link do post")).toBeNull();
   });
 
   it("names the field when the value is not https", () => {
-    expect(httpsUrlError("http://example.com", "Link do post")).toBe(
-      "Link do post precisa ser uma URL https válida."
+    expect(httpsUrlError("ftp://example.com", "Link do post")).toBe(
+      "Link do post inválido."
     );
     expect(httpsUrlError("javascript:alert(1)", "Link do post")).not.toBeNull();
-    expect(httpsUrlError("not a url", "Foto")).toBe("Foto precisa ser uma URL https válida.");
+    expect(httpsUrlError("not a url", "Foto")).toBe("Foto inválido.");
   });
 });

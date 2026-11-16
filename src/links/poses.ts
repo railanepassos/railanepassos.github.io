@@ -1,4 +1,4 @@
-import { httpsUrlError, isHttpsUrl } from "./validate";
+import { isHttpsUrl, normalizeUrlInput } from "./validate";
 
 /** Photo-pose reference stored in links.pose_refs (jsonb array). */
 export type PoseRef = { url?: string; note?: string };
@@ -17,8 +17,9 @@ export function poseRefsError(drafts: readonly PoseDraft[]): string | null {
   }
   for (let i = 0; i < drafts.length; i++) {
     const draft = drafts[i]!;
-    const urlError = httpsUrlError(draft.url, POSE_URL_TERM);
-    if (urlError) return `Pose ${i + 1}: ${urlError}`;
+    // Strict on purpose: forms normalize before this, the stored value must be https.
+    const url = draft.url.trim();
+    if (url !== "" && !isHttpsUrl(url)) return `Pose ${i + 1}: ${POSE_URL_TERM} inválido.`;
     if (draft.note.trim().length > POSE_NOTE_MAX) {
       return `Pose ${i + 1}: a nota deve ter no máximo ${POSE_NOTE_MAX} caracteres.`;
     }
@@ -30,7 +31,7 @@ export function poseRefsError(drafts: readonly PoseDraft[]): string | null {
 export function draftsToPoseRefs(drafts: readonly PoseDraft[]): PoseRef[] | null {
   const out: PoseRef[] = [];
   for (const draft of drafts) {
-    const url = draft.url.trim();
+    const url = normalizeUrlInput(draft.url);
     const note = draft.note.trim();
     if (!url && !note) continue;
     const ref: PoseRef = {};

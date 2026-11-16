@@ -8,7 +8,14 @@ import {
   categoryLabel,
   type Category,
 } from "./category";
-import { deriveLabelFromUrl, httpsUrlError, isHttpsUrl } from "./validate";
+import {
+  deriveLabelFromUrl,
+  httpsUrlError,
+  isHttpsUrl,
+  isOptionalHttpsUrl,
+  normalizeUrlInput,
+  normalizeUrlOnBlur,
+} from "./validate";
 import { composeEditorEmail, EDITOR_EMAIL_DOMAIN } from "./editor-email";
 import { buildSpinLabels } from "./pick-random";
 import { setScreenBusy } from "./skeleton";
@@ -1004,6 +1011,7 @@ export function createLinkFormModal(
   urlField.input.required = true;
   urlField.input.placeholder = "https://...";
   urlField.input.setAttribute("inputmode", "url");
+  normalizeUrlOnBlur(urlField.input);
 
   const labelField = labelledInput("links-form-label", "Nome do lugar ou experiência (opcional)", "text");
   labelField.input.maxLength = 200;
@@ -1064,11 +1072,12 @@ export function createLinkFormModal(
 
   const imageField = labelledInput(
     "links-form-image",
-    "Foto (opcional) — URL https://",
+    "Foto (opcional) — link da imagem",
     "url"
   );
   imageField.input.placeholder = "https://...";
   imageField.input.setAttribute("inputmode", "url");
+  normalizeUrlOnBlur(imageField.input);
 
   const memoryField = labelledInput(
     "links-form-note",
@@ -1150,6 +1159,7 @@ export function createLinkFormModal(
     return message === null;
   }
   sourceField.input.addEventListener("input", validateSource);
+  normalizeUrlOnBlur(sourceField.input);
 
   // Photo-pose references: ordered rows of {link, note}. State lives in `poses`;
   // the list is re-rendered on structural changes (add/remove/move) only, so
@@ -1202,6 +1212,7 @@ export function createLinkFormModal(
         pose.url = urlField.input.value;
         validatePose(i);
       });
+      normalizeUrlOnBlur(urlField.input);
       const noteField = labelledInput(`links-form-pose-${i}-note`, `Pose ${n}: nota`, "text");
       noteField.input.maxLength = POSE_NOTE_MAX;
       noteField.input.value = pose.note;
@@ -1324,7 +1335,7 @@ export function createLinkFormModal(
   });
 
   const actions = document.createElement("div");
-  actions.className = "links-admin-form__actions links-admin-form__actions--sticky";
+  actions.className = "links-admin-form__actions links-admin-form__actions--flow";
 
   const submitBtn = document.createElement("button");
   submitBtn.type = "submit";
@@ -1427,13 +1438,13 @@ export function createLinkFormModal(
       {
         tags: tagsInput.getValues(),
         people: peopleInput.getValues(),
-        url: urlField.input.value.trim(),
+        url: normalizeUrlInput(urlField.input.value),
         label: labelField.input.value.trim(),
         description: descField.input.value.trim(),
-        image_url: imageField.input.value.trim(),
+        image_url: normalizeUrlInput(imageField.input.value),
         note: memoryField.input.value.trim(),
-        source_url: sourceField.input.value.trim(),
-        pose_refs: poses.map((p) => ({ url: p.url.trim(), note: p.note.trim() })),
+        source_url: normalizeUrlInput(sourceField.input.value),
+        pose_refs: poses.map((p) => ({ url: normalizeUrlInput(p.url), note: p.note.trim() })),
         category: pickedCategory,
         ...readMoreText(),
       },
@@ -2322,13 +2333,13 @@ function withResolvedLabel(values: LinkFormValues): LinkFormValues {
 
 function assertFormValues(values: LinkFormValues): void {
   if (!isHttpsUrl(values.url)) {
-    throw new Error("Informe uma URL https válida.");
+    throw new Error("Link inválido.");
   }
   if (values.label.length < 1) {
     throw new Error("O título é obrigatório.");
   }
   if (values.image_url.length > 0 && !isHttpsUrl(values.image_url)) {
-    throw new Error("A foto precisa ser uma URL https válida.");
+    throw new Error("Foto inválida.");
   }
   if (dedupeTags(values.tags).length > MAX_TAGS) {
     throw new Error(`Use no máximo ${MAX_TAGS} tags.`);
@@ -2336,8 +2347,8 @@ function assertFormValues(values: LinkFormValues): void {
   if (dedupePeople(values.people).length > MAX_PEOPLE) {
     throw new Error(`Use no máximo ${MAX_PEOPLE} pessoas.`);
   }
-  const sourceError = httpsUrlError(values.source_url, SOURCE_TERM);
-  if (sourceError) throw new Error(sourceError);
+  // Strict: the form normalizes before this, the stored value must be https.
+  if (!isOptionalHttpsUrl(values.source_url)) throw new Error(`${SOURCE_TERM} inválido.`);
   const poseError = poseRefsError(values.pose_refs);
   if (poseError) throw new Error(poseError);
   for (const field of MORE_TEXT_FIELDS) {

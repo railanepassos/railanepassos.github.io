@@ -326,16 +326,34 @@ describe("createReviewSheet", () => {
     const input = sheet.element.querySelector<HTMLInputElement>("input[type='url']")!;
     const err = sheet.element.querySelector<HTMLElement>(`#${input.id}-error`)!;
     expect(err.hidden).toBe(true);
-    input.value = "http://x.com";
+    input.value = "not a url";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     expect(err.hidden).toBe(false);
-    expect(err.textContent).toMatch(/https/);
+    expect(err.textContent).toMatch(/inválido/);
     expect(input.getAttribute("aria-invalid")).toBe("true");
     expect(input.getAttribute("aria-describedby")).toBe(err.id);
     input.value = "https://x.com/a";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     expect(err.hidden).toBe(true);
     expect(input.hasAttribute("aria-invalid")).toBe(false);
+  });
+
+  it("writes the normalized https link back into the field on blur", () => {
+    const { sheet } = setup();
+    const input = sheet.element.querySelector<HTMLInputElement>("input[type='url']")!;
+    const err = sheet.element.querySelector<HTMLElement>(`#${input.id}-error`)!;
+    input.value = "youtu.be/dQw4w9WgXcQ";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(err.hidden).toBe(true);
+    input.dispatchEvent(new Event("blur"));
+    expect(input.value).toBe("https://youtu.be/dQw4w9WgXcQ");
+  });
+
+  it("puts the actions in the normal flow, not sticky", () => {
+    const { sheet } = setup();
+    const actions = sheet.element.querySelector(".links-admin-form__actions")!;
+    expect(actions.classList.contains("links-admin-form__actions--sticky")).toBe(false);
+    expect(actions.classList.contains("links-admin-form__actions--flow")).toBe(true);
   });
 
   describe("keyboard keeps the active field visible", () => {

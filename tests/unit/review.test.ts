@@ -96,9 +96,20 @@ describe("review <-> link row", () => {
     );
   });
 
+  it("PATCH normalizes the memory link to https", () => {
+    expect(reviewToPatch(blank({ memory_url: " youtu.be/dQw4w9WgXcQ " })).memory_url).toBe(
+      "https://youtu.be/dQw4w9WgXcQ"
+    );
+    expect(reviewToPatch(blank({ memory_url: "http://photos.example/a" })).memory_url).toBe(
+      "https://photos.example/a"
+    );
+  });
+
   it("memory link: empty and https are fine, anything else is a PT-BR message", () => {
     expect(reviewError(blank({ memory_url: "https://youtu.be/dQw4w9WgXcQ" }))).toBeNull();
-    expect(reviewError(blank({ memory_url: "http://youtu.be/dQw4w9WgXcQ" }))).toMatch(/https/);
+    expect(reviewError(blank({ memory_url: "http://youtu.be/dQw4w9WgXcQ" }))).toBeNull();
+    expect(reviewError(blank({ memory_url: "youtu.be/dQw4w9WgXcQ" }))).toBeNull();
+    expect(reviewError(blank({ memory_url: "ftp://youtu.be/x" }))).toMatch(/inválido/);
     expect(reviewError(blank({ memory_url: "foto" }))).toMatch(/Link da memória/);
     expect(reviewError(blank({ memory_url: `https://x.com/${"a".repeat(2000)}` }))).toMatch(/2000/);
   });

@@ -9,6 +9,14 @@ import {
   readPoseRefs,
 } from "../../src/links/poses";
 
+describe("draftsToPoseRefs normalization", () => {
+  it("writes pose links as https", () => {
+    expect(draftsToPoseRefs([{ url: "example.com/a", note: "" }])).toEqual([
+      { url: "https://example.com/a" },
+    ]);
+  });
+});
+
 describe("draftsToPoseRefs", () => {
   it("returns null when there is nothing to save", () => {
     expect(draftsToPoseRefs([])).toBeNull();
@@ -41,7 +49,7 @@ describe("poseRefsError", () => {
 
   it("rejects non-https links naming the pose number", () => {
     expect(poseRefsError([{ url: "http://example.com", note: "" }])).toBe(
-      "Pose 1: Link da pose precisa ser uma URL https válida."
+      "Pose 1: Link da pose inválido."
     );
     expect(
       poseRefsError([

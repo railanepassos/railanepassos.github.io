@@ -428,7 +428,7 @@ describe("toCreateInput label fallback", () => {
 
   it("still rejects an invalid URL even though label can fall back", () => {
     expect(() => toCreateInput(formValues({ url: "not-a-url" }), 0)).toThrow(
-      /URL https/
+      /Link inválido/
     );
   });
 });
@@ -690,7 +690,7 @@ describe("Phase 2: source post link", () => {
       /Link do post original/
     );
     expect(() => toUpdatePatch(formValues({ source_url: "javascript:alert(1)" }))).toThrow(
-      /https/
+      /inválido/
     );
   });
 
@@ -702,10 +702,10 @@ describe("Phase 2: source post link", () => {
     const input = modal.element.querySelector<HTMLInputElement>("#links-form-source_url")!;
     const err = modal.element.querySelector<HTMLElement>("#links-form-source_url-error")!;
     expect(err.hidden).toBe(true);
-    input.value = "http://example.com/p";
+    input.value = "not a url";
     input.dispatchEvent(new Event("input"));
     expect(err.hidden).toBe(false);
-    expect(err.textContent).toMatch(/https/);
+    expect(err.textContent).toMatch(/inválido/);
     expect(input.getAttribute("aria-invalid")).toBe("true");
     modal.element.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
     expect(onSubmit).not.toHaveBeenCalled();
@@ -793,7 +793,7 @@ describe("pose references", () => {
     });
     expect(() =>
       toUpdatePatch(formValues({ pose_refs: [{ url: "http://example.com", note: "" }] }))
-    ).toThrow(/Pose 1.*https/);
+    ).toThrow(/Pose 1.*inválido/);
   });
 
   it("adds poses and submits them in order", () => {
@@ -837,11 +837,11 @@ describe("pose references", () => {
     const onSubmit = vi.fn();
     const { click, type, submit, q } = setup(onSubmit);
     click("Adicionar pose");
-    type("links-form-pose-0-url", "http://example.com/a");
+    type("links-form-pose-0-url", "not a url");
     const err = q<HTMLElement>("#links-form-pose-0-url-error");
     const input = q<HTMLInputElement>("#links-form-pose-0-url");
     expect(err.hidden).toBe(false);
-    expect(err.textContent).toMatch(/https/);
+    expect(err.textContent).toMatch(/inválido/);
     expect(input.getAttribute("aria-invalid")).toBe("true");
     expect(input.getAttribute("aria-describedby")).toBe(err.id);
     submit();

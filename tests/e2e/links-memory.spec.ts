@@ -118,21 +118,21 @@ test.describe("Como foi memory link", () => {
     expect(requested).toHaveLength(0);
   });
 
-  test("a non-https link shows the inline error and is not saved", async ({ page }) => {
+  test("an invalid link shows the inline error and is not saved", async ({ page }) => {
     const writes = await openAuthedWith(page, [DONE, ...LINK_ROWS]);
     await openDetail(page, "Lugar Feito");
     await page.locator(".links-detail").getByRole("button", { name: "Editar Como foi" }).click();
     const sheet = page.getByRole("dialog", { name: "Como foi" });
     const input = sheet.getByLabel("Link da memória");
-    await input.fill("http://example.com/foto");
+    await input.fill("ftp://example.com/foto");
     const error = sheet.locator("#links-review-memory-url-error");
     await expect(error).toBeVisible();
-    await expect(error).toContainText("https");
+    await expect(error).toContainText("inválido");
     await expect(input).toHaveAttribute("aria-invalid", "true");
     await expect(input).toHaveAttribute("aria-describedby", "links-review-memory-url-error");
 
     await sheet.getByRole("button", { name: "Salvar" }).click();
-    await expect(sheet.getByRole("alert")).toContainText("https");
+    await expect(sheet.getByRole("alert")).toContainText("inválido");
     expect(writes.patched).toBeNull();
 
     await input.fill("https://example.com/foto");

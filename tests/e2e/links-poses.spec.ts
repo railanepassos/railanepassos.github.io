@@ -70,14 +70,14 @@ test.describe("pose references", () => {
     await expect(sheet.getByLabel("Pose 3: nota")).toHaveCount(0);
 
     const url = sheet.getByLabel("Pose 1: link");
-    await url.fill("http://example.com/pose");
-    await expect(sheet.getByText("precisa ser uma URL https válida")).toBeVisible();
+    await url.fill("not a url");
+    await expect(sheet.getByText("inválido")).toBeVisible();
     await sheet.getByRole("button", { name: "Salvar" }).click();
     await page.waitForTimeout(200);
     expect(writes.created).toBeNull();
 
     await url.fill("https://example.com/pose");
-    await expect(sheet.getByText("precisa ser uma URL https válida")).toBeHidden();
+    await expect(sheet.getByText("inválido")).toBeHidden();
     await sheet.getByRole("button", { name: "Salvar" }).click();
     await expect.poll(() => writes.created).not.toBeNull();
     expect(writes.created).toMatchObject({
