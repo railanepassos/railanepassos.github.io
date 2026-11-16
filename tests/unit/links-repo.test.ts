@@ -304,6 +304,17 @@ describe("Phase 2 fields", () => {
     await expect(repo.updateLink("1", { source_url: "javascript:alert(1)" })).rejects.toThrow(/source_url/);
   });
 
+  it("rejects a non-https or oversized memory_url, accepts https or null", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(repo.updateLink("1", { memory_url: "http://example.com" })).rejects.toThrow(/memory_url/);
+    await expect(repo.createLink({ ...base, memory_url: "javascript:alert(1)" })).rejects.toThrow(/memory_url/);
+    await expect(
+      repo.updateLink("1", { memory_url: `https://x.com/${"a".repeat(2000)}` })
+    ).rejects.toThrow(/memory_url/);
+    await expect(repo.updateLink("1", { memory_url: "https://youtu.be/dQw4w9WgXcQ" })).resolves.toBeUndefined();
+    await expect(repo.updateLink("1", { memory_url: null })).resolves.toBeUndefined();
+  });
+
   it("rejects invalid pose_refs and accepts valid ones", async () => {
     const repo = createLinksRepo(makeFakeClient());
     await expect(

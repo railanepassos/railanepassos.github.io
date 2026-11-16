@@ -1,5 +1,6 @@
 import type { LinkRow } from "./links-repo";
 import { lessonsError, normalizeLessons, readLessons } from "./lessons";
+import { httpsUrlError } from "./validate";
 
 /**
  * "Como foi" (Phase 3): what the visit was like. Pure helpers shared by the
@@ -9,6 +10,8 @@ import { lessonsError, normalizeLessons, readLessons } from "./lessons";
  * `ReviewValues`, `reviewFromLink`, `reviewToPatch` and `reviewError` here, and
  * add one control in review-sheet.ts.
  */
+
+export const MEMORY_URL_TERM = "Link da memória";
 
 export const RATING_MIN = 1;
 export const RATING_MAX = 5;
@@ -43,11 +46,13 @@ export type ReviewValues = {
   impressions: string;
   /** Short items, in order; blank rows are dropped on save. */
   lessons: string[];
+  /** Raw text of the memory link field ("" when empty). */
+  memory_url: string;
 };
 
 /** The columns of `LinkRow` the review reads. */
 export type ReviewSource = Partial<
-  Pick<LinkRow, "rating" | "want_again" | "impressions" | "lessons">
+  Pick<LinkRow, "rating" | "want_again" | "impressions" | "lessons" | "memory_url">
 >;
 
 export function reviewFromLink(link: ReviewSource): ReviewValues {
@@ -56,6 +61,7 @@ export function reviewFromLink(link: ReviewSource): ReviewValues {
     want_again: Boolean(link.want_again),
     impressions: link.impressions ?? "",
     lessons: readLessons(link.lessons),
+    memory_url: link.memory_url ?? "",
   };
 }
 
@@ -65,15 +71,18 @@ export type ReviewPatch = {
   want_again: boolean;
   impressions: string | null;
   lessons: string[] | null;
+  memory_url: string | null;
 };
 
 export function reviewToPatch(values: ReviewValues): ReviewPatch {
   const impressions = values.impressions.trim();
+  const memoryUrl = values.memory_url.trim();
   return {
     rating: values.rating,
     want_again: values.want_again,
     impressions: impressions === "" ? null : impressions,
     lessons: normalizeLessons(values.lessons),
+    memory_url: memoryUrl === "" ? null : memoryUrl,
   };
 }
 
@@ -85,7 +94,19 @@ export function reviewError(values: ReviewValues): string | null {
   if (values.impressions.trim().length > REVIEW_LIMITS.impressionsMax) {
     return `Impressões devem ter no máximo ${REVIEW_LIMITS.impressionsMax} caracteres.`;
   }
-  return lessonsError(values.lessons);
+  const lessonsProblem = lessonsError(values.lessons);
+  if (lessonsProblem) return lessonsProblem;
+  return memoryUrlError(values.memory_url);
+}
+
+/** Inline-friendly check of the memory link field alone (PT-BR), or null. */
+export function memoryUrlError(value: string): string | null {
+  const problem = httpsUrlError(value, MEMORY_URL_TERM);
+  if (problem) return problem;
+  if (value.trim().length > REVIEW_LIMITS.memoryUrlMax) {
+    return `${MEMORY_URL_TERM} deve ter no máximo ${REVIEW_LIMITS.memoryUrlMax} caracteres.`;
+  }
+  return null;
 }
 
 /** Compact form for the card: "4/5". */

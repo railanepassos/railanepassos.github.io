@@ -18,6 +18,7 @@ import { categoryBackdropSrc } from "./card-theme";
 import { displayTitle, linkDomain } from "./feed";
 import { uiIcon, type IconName } from "./ui-icons";
 import { buildMapUrl } from "./map-url";
+import { parseMemoryLink } from "./memory-link";
 import {
   MAX_POSES,
   POSE_NOTE_MAX,
@@ -1937,6 +1938,31 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   const lessonsOl = document.createElement("ol");
   lessonsOl.className = "links-detail__lessons";
   lessonsRow.value.appendChild(lessonsOl);
+  // Memory link: YouTube thumbnail + "Assistir", or "Ver álbum". Plain image
+  // and new-tab link only (no iframe/embed).
+  const memoryThumb = document.createElement("img");
+  memoryThumb.className = "links-detail__memory-thumb";
+  memoryThumb.alt = "";
+  memoryThumb.loading = "lazy";
+  memoryThumb.referrerPolicy = "no-referrer";
+  memoryThumb.width = 480;
+  memoryThumb.height = 360;
+  memoryThumb.hidden = true;
+  memoryThumb.addEventListener("error", () => {
+    memoryThumb.hidden = true;
+  });
+  const memoryAction = document.createElement("a");
+  memoryAction.className = "links-detail__map links-detail__memory-action";
+  memoryAction.dataset.action = "open-memory";
+  memoryAction.rel = "noopener noreferrer";
+  memoryAction.target = "_blank";
+  const memoryActionText = document.createElement("span");
+  memoryAction.append(uiIcon("external", 16), memoryActionText);
+  const memoryWrap = document.createElement("div");
+  memoryWrap.className = "links-detail__row links-detail__row--action links-detail__memory";
+  memoryWrap.dataset.field = "memory_url";
+  memoryWrap.hidden = true;
+  memoryWrap.append(memoryThumb, memoryAction);
   const reviewEdit = document.createElement("button");
   reviewEdit.type = "button";
   reviewEdit.className = "links-detail__map links-detail__review-edit";
@@ -1954,6 +1980,7 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     wantAgainRow.row,
     impressionsRow.row,
     lessonsRow.row,
+    memoryWrap,
     reviewEditWrap
   );
 
@@ -2155,6 +2182,22 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
         return li;
       })
     );
+    const memory = isDone ? parseMemoryLink(link.memory_url) : null;
+    memoryWrap.hidden = memory === null;
+    memoryThumb.hidden = true;
+    memoryThumb.removeAttribute("src");
+    if (memory?.kind === "youtube") {
+      memoryThumb.src = memory.thumbnailUrl;
+      memoryThumb.hidden = false;
+      memoryActionText.textContent = "Assistir";
+      memoryAction.href = memory.watchUrl;
+    } else if (memory?.kind === "album") {
+      memoryActionText.textContent = "Ver álbum";
+      memoryAction.href = memory.url;
+    } else {
+      memoryActionText.textContent = "";
+      memoryAction.removeAttribute("href");
+    }
     reviewEditWrap.hidden = !isDone || !cb.onEditReview;
 
     const panel = isPanelMode();

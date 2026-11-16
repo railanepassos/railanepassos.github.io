@@ -164,6 +164,7 @@ function validateLinkFields(fields: {
   rating?: number | null;
   impressions?: string | null;
   lessons?: string[] | null;
+  memory_url?: string | null;
 }): void {
   if (fields.url !== undefined) {
     if (!isHttpsUrl(fields.url)) {
@@ -243,6 +244,13 @@ function validateLinkFields(fields: {
     if (problem) throw new Error(`lessons invalid: ${problem}`);
   }
 
+  if (!isOptionalHttpsUrl(fields.memory_url)) {
+    throw new Error("memory_url must be a valid https URL");
+  }
+  if (fields.memory_url != null && fields.memory_url.length > REVIEW_LIMITS.memoryUrlMax) {
+    throw new Error(`memory_url must not exceed ${REVIEW_LIMITS.memoryUrlMax} characters`);
+  }
+
   if (!isOptionalHttpsUrl(fields.source_url)) {
     throw new Error("source_url must be a valid https URL");
   }
@@ -295,6 +303,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         rating: input.rating,
         impressions: input.impressions,
         lessons: input.lessons,
+        memory_url: input.memory_url,
       });
 
       const trimmedLabel = input.label.trim();
@@ -332,6 +341,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         rating: patch.rating,
         impressions: patch.impressions,
         lessons: patch.lessons,
+        memory_url: patch.memory_url,
       });
 
       const sanitized =

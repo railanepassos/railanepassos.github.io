@@ -1741,6 +1741,28 @@ body.links-screen-open {
   padding-left: 32px;
 }
 
+.links-detail__memory {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.links-detail__memory[hidden],
+.links-detail__memory-thumb[hidden] {
+  display: none;
+}
+
+.links-detail__memory-thumb {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 12px;
+  background: var(--app-line);
+}
+
 .links-detail__map {
   display: inline-flex;
   align-items: center;

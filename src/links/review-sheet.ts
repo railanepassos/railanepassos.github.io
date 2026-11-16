@@ -2,7 +2,14 @@ import { createScreenChrome } from "./admin-ui";
 import { setScreenBusy } from "./skeleton";
 import { syncBodyScreenLock } from "./screen-lock";
 import { uiIcon } from "./ui-icons";
-import { RATING_MAX, RATING_MIN, REVIEW_LIMITS, type ReviewValues } from "./review";
+import {
+  MEMORY_URL_TERM,
+  RATING_MAX,
+  RATING_MIN,
+  REVIEW_LIMITS,
+  memoryUrlError,
+  type ReviewValues,
+} from "./review";
 import { LESSON_MAX, MAX_LESSONS } from "./lessons";
 import { moveItem } from "./poses";
 
@@ -300,6 +307,57 @@ function createLessonsControl(): ReviewControl {
   };
 }
 
+/** Memory link: YouTube video or album, https only, validated inline. */
+function createMemoryUrlControl(): ReviewControl {
+  const field = document.createElement("div");
+  field.className = "links-admin-form__field links-review__field";
+
+  const id = "links-review-memory-url";
+  const label = document.createElement("label");
+  label.className = "links-admin-form__label";
+  label.htmlFor = id;
+  label.textContent = MEMORY_URL_TERM;
+
+  const input = document.createElement("input");
+  input.className = "links-admin-form__control";
+  input.id = id;
+  input.type = "url";
+  input.placeholder = "https://";
+  input.autocomplete = "off";
+  input.dataset.field = "memory_url";
+
+  const hint = document.createElement("p");
+  hint.className = "links-review__toggle-hint";
+  hint.textContent = "Vídeo do YouTube ou álbum de fotos.";
+
+  const error = document.createElement("p");
+  error.id = `${id}-error`;
+  error.className = "links-admin-form__field-error";
+  error.hidden = true;
+  input.setAttribute("aria-describedby", error.id);
+
+  function validate(): void {
+    const message = memoryUrlError(input.value);
+    error.textContent = message ?? "";
+    error.hidden = message === null;
+    if (message === null) input.removeAttribute("aria-invalid");
+    else input.setAttribute("aria-invalid", "true");
+  }
+  input.addEventListener("input", validate);
+
+  field.append(label, input, hint, error);
+  return {
+    element: field,
+    set: (values) => {
+      input.value = values.memory_url;
+      validate();
+    },
+    read: (draft) => {
+      draft.memory_url = input.value;
+    },
+  };
+}
+
 /** Controls in on-screen order. Add the next field's control here. */
 function buildControls(): ReviewControl[] {
   return [
@@ -307,6 +365,7 @@ function buildControls(): ReviewControl[] {
     createWantAgainControl(),
     createImpressionsControl(),
     createLessonsControl(),
+    createMemoryUrlControl(),
   ];
 }
 
@@ -404,7 +463,13 @@ export function createReviewSheet(): ReviewSheetHandle {
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     if (!onSaveCb || busy) return;
-    const draft: ReviewValues = { rating: null, want_again: false, impressions: "", lessons: [] };
+    const draft: ReviewValues = {
+      rating: null,
+      want_again: false,
+      impressions: "",
+      lessons: [],
+      memory_url: "",
+    };
     for (const control of controls) control.read(draft);
     setError("");
     void Promise.resolve(onSaveCb(draft)).catch(() => undefined);

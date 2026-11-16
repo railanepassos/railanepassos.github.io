@@ -17,10 +17,11 @@ type Initial = {
   want_again: boolean;
   impressions?: string;
   lessons?: string[];
+  memory_url?: string;
 };
 
 function setup(base: Initial = { rating: null, want_again: false }) {
-  const initial = { impressions: "", lessons: [] as string[], ...base };
+  const initial = { impressions: "", lessons: [] as string[], memory_url: "", ...base };
   const onSave = vi.fn();
   const onSkip = vi.fn();
   const sheet = createReviewSheet();
@@ -64,7 +65,13 @@ describe("createReviewSheet", () => {
     radios()[1]!.click();
     expect(checked()).toHaveLength(0);
     button("Salvar").click();
-    expect(onSave).toHaveBeenCalledWith({ rating: null, want_again: false, impressions: "", lessons: [] });
+    expect(onSave).toHaveBeenCalledWith({
+      rating: null,
+      want_again: false,
+      impressions: "",
+      lessons: [],
+      memory_url: "",
+    });
   });
 
   it("has an explicit clear control that only shows when there is a rating", () => {
@@ -94,7 +101,13 @@ describe("createReviewSheet", () => {
     expect(sheet.element.textContent).toContain("Voltaria?");
     voltaria.click();
     button("Salvar").click();
-    expect(onSave).toHaveBeenCalledWith({ rating: 4, want_again: true, impressions: "", lessons: [] });
+    expect(onSave).toHaveBeenCalledWith({
+      rating: 4,
+      want_again: true,
+      impressions: "",
+      lessons: [],
+      memory_url: "",
+    });
   });
 
   it("Pular closes without saving; the close X and Escape behave the same", () => {
@@ -120,7 +133,7 @@ describe("createReviewSheet", () => {
   it("edit mode labels the dismiss button Cancelar and shows save errors", () => {
     const sheet = createReviewSheet();
     document.body.appendChild(sheet.element);
-    sheet.open({ label: "Museu", mode: "edit", initial: { rating: null, want_again: false, impressions: "", lessons: [] }, onSave: vi.fn() });
+    sheet.open({ label: "Museu", mode: "edit", initial: { rating: null, want_again: false, impressions: "", lessons: [], memory_url: "" }, onSave: vi.fn() });
     expect(
       Array.from(sheet.element.querySelectorAll("button")).some((b) => b.textContent === "Cancelar")
     ).toBe(true);
@@ -171,6 +184,7 @@ describe("createReviewSheet", () => {
         want_again: false,
         impressions: "Valeu a pena",
         lessons: ["chegar cedo", "levar lanche"],
+        memory_url: "",
       });
     });
 
@@ -187,10 +201,49 @@ describe("createReviewSheet", () => {
       const { sheet } = setup({ rating: null, want_again: false, lessons: ["a"] });
       sheet.open({
         label: "Outro",
-        initial: { rating: null, want_again: false, impressions: "", lessons: [] },
+        initial: { rating: null, want_again: false, impressions: "", lessons: [], memory_url: "" },
         onSave: vi.fn(),
       });
       expect(lessonInputs(sheet)).toHaveLength(0);
     });
+  });
+
+  it("has a labelled memory link field, prefilled and saved", () => {
+    const { sheet, onSave, button } = setup({
+      rating: null,
+      want_again: false,
+      memory_url: "https://youtu.be/dQw4w9WgXcQ",
+    });
+    const input = sheet.element.querySelector<HTMLInputElement>("input[type='url']")!;
+    expect(input.value).toBe("https://youtu.be/dQw4w9WgXcQ");
+    expect(sheet.element.querySelector(`label[for='${input.id}']`)!.textContent).toBe(
+      "Link da memória"
+    );
+    input.value = "  https://photos.app.goo.gl/abc  ";
+    button("Salvar").click();
+    expect(onSave).toHaveBeenCalledWith({
+      rating: null,
+      want_again: false,
+      impressions: "",
+      lessons: [],
+      memory_url: "https://photos.app.goo.gl/abc",
+    });
+  });
+
+  it("shows an inline https error while typing and clears it when valid or empty", () => {
+    const { sheet } = setup();
+    const input = sheet.element.querySelector<HTMLInputElement>("input[type='url']")!;
+    const err = sheet.element.querySelector<HTMLElement>(`#${input.id}-error`)!;
+    expect(err.hidden).toBe(true);
+    input.value = "http://x.com";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(err.hidden).toBe(false);
+    expect(err.textContent).toMatch(/https/);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(input.getAttribute("aria-describedby")).toBe(err.id);
+    input.value = "https://x.com/a";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(err.hidden).toBe(true);
+    expect(input.hasAttribute("aria-invalid")).toBe(false);
   });
 });

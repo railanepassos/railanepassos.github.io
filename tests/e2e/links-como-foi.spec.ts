@@ -61,7 +61,7 @@ test.describe("Como foi sheet", () => {
 
     expect(writes.allPatched).toHaveLength(2);
     expect(writes.allPatched[0]).toMatchObject({ status: "done" });
-    expect(writes.allPatched[1]).toEqual({ rating: 4, want_again: true, impressions: null, lessons: null });
+    expect(writes.allPatched[1]).toEqual({ rating: 4, want_again: true, impressions: null, lessons: null, memory_url: null });
 
     // The rating shows on the card, in the Feitos section.
     await goToDone(page);
@@ -142,7 +142,7 @@ test.describe("Como foi sheet", () => {
     await sheet.getByRole("button", { name: "Salvar" }).click();
 
     await expect.poll(() => writes.patched).not.toBeNull();
-    expect(writes.patched).toEqual({ rating: 5, want_again: false, impressions: null, lessons: null });
+    expect(writes.patched).toEqual({ rating: 5, want_again: false, impressions: null, lessons: null, memory_url: null });
     // Back on the detail with the new rating.
     await expect(detail.locator("[data-field='rating']")).toContainText("5 de 5");
     await expect(detail.locator("[data-field='want_again']")).toBeHidden();
@@ -157,7 +157,7 @@ test.describe("Como foi sheet", () => {
     await sheet.getByRole("button", { name: "Limpar nota" }).click();
     await sheet.getByRole("button", { name: "Salvar" }).click();
     await expect.poll(() => writes.patched).not.toBeNull();
-    expect(writes.patched).toEqual({ rating: null, want_again: true, impressions: null, lessons: null });
+    expect(writes.patched).toEqual({ rating: null, want_again: true, impressions: null, lessons: null, memory_url: null });
     await expect(page.locator(".links-detail [data-field='rating']")).toBeHidden();
   });
 

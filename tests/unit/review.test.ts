@@ -21,6 +21,7 @@ const blank = (over: Partial<ReviewValues> = {}): ReviewValues => ({
   want_again: false,
   impressions: "",
   lessons: [],
+  memory_url: "",
   ...over,
 });
 
@@ -82,7 +83,24 @@ describe("review <-> link row", () => {
       want_again: true,
       impressions: null,
       lessons: null,
+      memory_url: null,
     });
+    expect(
+      reviewToPatch(blank({ memory_url: "  https://photos.app.goo.gl/x  " })).memory_url
+    ).toBe("https://photos.app.goo.gl/x");
+  });
+
+  it("reads the memory link from a row", () => {
+    expect(reviewFromLink({ memory_url: "https://youtu.be/dQw4w9WgXcQ" }).memory_url).toBe(
+      "https://youtu.be/dQw4w9WgXcQ"
+    );
+  });
+
+  it("memory link: empty and https are fine, anything else is a PT-BR message", () => {
+    expect(reviewError(blank({ memory_url: "https://youtu.be/dQw4w9WgXcQ" }))).toBeNull();
+    expect(reviewError(blank({ memory_url: "http://youtu.be/dQw4w9WgXcQ" }))).toMatch(/https/);
+    expect(reviewError(blank({ memory_url: "foto" }))).toMatch(/Link da memória/);
+    expect(reviewError(blank({ memory_url: `https://x.com/${"a".repeat(2000)}` }))).toMatch(/2000/);
   });
 
   it("PATCH trims impressions, drops blank lessons, and sends null when empty", () => {
