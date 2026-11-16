@@ -43,6 +43,8 @@ export type Writes = {
   created: Record<string, unknown> | null;
   /** Body of the last PATCH (update). */
   patched: Record<string, unknown> | null;
+  /** Every PATCH body, in order (a flow can write more than once). */
+  allPatched: Array<Record<string, unknown>>;
 };
 
 /** Opens /p/a8f3k2/ with a fake session. GET returns `rows`; POST/PATCH are captured. */
@@ -50,7 +52,7 @@ export async function openAuthedWith(
   page: Page,
   rows: Array<Record<string, unknown>>
 ): Promise<Writes> {
-  const writes: Writes = { created: null, patched: null };
+  const writes: Writes = { created: null, patched: null, allPatched: [] };
   await page.addInitScript(
     ([key, value]) => {
       localStorage.setItem(key, value);
@@ -72,6 +74,7 @@ export async function openAuthedWith(
       });
     } else if (method === "PATCH") {
       writes.patched = request.postDataJSON();
+      writes.allPatched.push(writes.patched!);
       await route.fulfill({ status: 204, body: "" });
     } else {
       await route.fulfill({ status: 204, body: "" });

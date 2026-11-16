@@ -33,6 +33,7 @@ import { pickRandomItem } from "./pick-random";
 import { sortLinksForDisplay, visibleListLinks } from "./sort-links";
 import {
   categoryCounts,
+  displayTitle,
   linksForSection,
   sectionCounts,
   toggleCategory,
@@ -48,6 +49,8 @@ import {
   type ShellState,
 } from "./app-shell";
 import { buildIcs, downloadIcs } from "./ics";
+import { createReviewSheet, type ReviewSheetHandle } from "./review-sheet";
+import { UNMARK_DONE_PATCH, reviewError, reviewFromLink, reviewToPatch } from "./review";
 import { createDeckScreen, type DeckHandle } from "./deck-ui";
 import { nextPriority } from "./deck-queue";
 import { pickSharedUrl } from "./share-target";
@@ -198,10 +201,13 @@ function bootDynamic(
 
   const deleteSheet: DeleteSheetHandle = createDeleteConfirmSheet();
   const scheduleSheet: ScheduleSheetHandle = createScheduleSheet();
+  const reviewSheet: ReviewSheetHandle = createReviewSheet();
   const viewModal: ViewModalHandle = createViewModal({
     onEdit: (l) => formModal.openEdit(l),
     onSchedule: (l) => openSchedule(l),
     onMarkDone: (l) => void markDone(l),
+    onUnmarkDone: (l) => void unmarkDone(l),
+    onEditReview: (l) => openReview(l, "edit"),
     onDelete: (l) => void deleteLink(l),
     onTag: (tag) => toggleTagFilter(tag),
     onPerson: (person) => togglePeopleFilter(person),
@@ -256,6 +262,7 @@ function bootDynamic(
     deleteSheet.element,
     viewModal.element,
     scheduleSheet.element,
+    reviewSheet.element,
     drawSheet.element,
     deckScreen.element
   );
@@ -323,11 +330,69 @@ function bootDynamic(
       );
       renderList();
       deckScreen.refresh(links);
+      const done = findLink(link.id);
+      if (done) openReview(done, "after-done");
     } catch (err) {
       await reloadFromServer(messageOf(err, GENERIC_ERROR));
     } finally {
       deckScreen.setBusy(false);
     }
+  }
+
+  /** Back to the wishlist. Only status/completed_at change: "Como foi" is kept. */
+  async function unmarkDone(link: LinkRow): Promise<void> {
+    deckScreen.setBusy(true);
+    try {
+      await repo.updateLink(link.id, { ...UNMARK_DONE_PATCH });
+      links = sortLinks(
+        links.map((row) => (row.id === link.id ? { ...row, ...UNMARK_DONE_PATCH } : row))
+      );
+      renderList();
+      deckScreen.refresh(links);
+    } catch (err) {
+      await reloadFromServer(messageOf(err, GENERIC_ERROR));
+    } finally {
+      deckScreen.setBusy(false);
+    }
+  }
+
+  /**
+   * "Como foi" sheet. After marking done it can be skipped (nothing is saved);
+   * from the detail ("edit") the detail comes back when the sheet closes.
+   */
+  function openReview(link: LinkRow, mode: "after-done" | "edit"): void {
+    const reopenDetail = (): void => {
+      if (mode !== "edit") return;
+      const current = findLink(link.id);
+      if (current) viewModal.open(current);
+    };
+    reviewSheet.open({
+      label: displayTitle(link),
+      mode,
+      initial: reviewFromLink(link),
+      onSkip: reopenDetail,
+      onSave: async (values) => {
+        const problem = reviewError(values);
+        if (problem) {
+          reviewSheet.setError(problem);
+          return;
+        }
+        reviewSheet.setBusy(true);
+        try {
+          const patch = reviewToPatch(values);
+          await repo.updateLink(link.id, patch);
+          links = sortLinks(links.map((row) => (row.id === link.id ? { ...row, ...patch } : row)));
+          renderList();
+          deckScreen.refresh(links);
+          reviewSheet.close();
+          reopenDetail();
+        } catch (err) {
+          reviewSheet.setError(messageOf(err, GENERIC_ERROR));
+        } finally {
+          reviewSheet.setBusy(false);
+        }
+      },
+    });
   }
 
   async function wantLink(link: LinkRow): Promise<void> {
@@ -638,6 +703,7 @@ function bootDynamic(
               onEdit: (l) => formModal.openEdit(l),
               onDelete: (l) => void deleteLink(l),
               onMarkDone: (l) => void markDone(l),
+              onUnmarkDone: (l) => void unmarkDone(l),
               onSchedule: (l) => openSchedule(l),
               onTag: (tag) => toggleTagFilter(tag),
               onPerson: (person) => togglePeopleFilter(person),

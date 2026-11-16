@@ -3,6 +3,7 @@ import { isHttpsUrl, isOptionalHttpsUrl } from "./validate";
 import { MORE_TEXT_FIELDS } from "./more-fields";
 import { poseDraftsFromRefs, poseRefsError, readPoseRefs, type PoseRef } from "./poses";
 import { MAX_TAGS, MAX_TAG_LENGTH } from "./tags";
+import { isValidRating, normalizeRating } from "./review";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH } from "./people";
 
 export type LinkStatus = "wishlist" | "done";
@@ -33,6 +34,10 @@ export type LinkRow = {
   pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
+  rating?: number | null;
+  impressions?: string | null;
+  lessons?: string[] | null;
+  memory_url?: string | null;
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -63,6 +68,10 @@ export type CreateLinkInput = {
   pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
+  rating?: number | null;
+  impressions?: string | null;
+  lessons?: string[] | null;
+  memory_url?: string | null;
 };
 
 export type UpdateLinkPatch = {
@@ -90,6 +99,10 @@ export type UpdateLinkPatch = {
   pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
+  rating?: number | null;
+  impressions?: string | null;
+  lessons?: string[] | null;
+  memory_url?: string | null;
 };
 
 export function normalizeLinkRow(
@@ -121,6 +134,10 @@ export function normalizeLinkRow(
     pose_refs: row.pose_refs == null ? null : readPoseRefs(row.pose_refs),
     tags: row.tags ?? null,
     people: row.people ?? null,
+    rating: normalizeRating(row.rating),
+    impressions: row.impressions ?? null,
+    lessons: row.lessons ?? null,
+    memory_url: row.memory_url ?? null,
     created_by: row.created_by,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -143,6 +160,7 @@ function validateLinkFields(fields: {
   pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
+  rating?: number | null;
 }): void {
   if (fields.url !== undefined) {
     if (!isHttpsUrl(fields.url)) {
@@ -209,6 +227,10 @@ function validateLinkFields(fields: {
     }
   }
 
+  if (fields.rating != null && !isValidRating(fields.rating)) {
+    throw new Error("rating must be an integer from 1 to 5");
+  }
+
   if (!isOptionalHttpsUrl(fields.source_url)) {
     throw new Error("source_url must be a valid https URL");
   }
@@ -258,6 +280,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         pose_refs: input.pose_refs,
         tags: input.tags,
         people: input.people,
+        rating: input.rating,
       });
 
       const trimmedLabel = input.label.trim();
@@ -292,6 +315,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         pose_refs: patch.pose_refs,
         tags: patch.tags,
         people: patch.people,
+        rating: patch.rating,
       });
 
       const sanitized =

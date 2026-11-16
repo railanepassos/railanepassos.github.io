@@ -333,3 +333,39 @@ describe("Phase 2 fields", () => {
     await expect(repo.updateLink("1", { people: ["Maria Clara"] })).resolves.toBeUndefined();
   });
 });
+
+// ─── Phase 3 "Como foi" fields ───────────────────────────────────────────────
+
+describe("Phase 3 fields", () => {
+  const base = { url: "https://example.com", label: "Example", sort_order: 0 };
+
+  it("normalizes missing and invalid rating to null on read, keeps a valid one", async () => {
+    const client = makeFakeClient({
+      links: {
+        data: [
+          { id: "1", url: "https://example.com", label: "A" },
+          { id: "2", url: "https://example.com", label: "B", rating: 4, impressions: "ótimo" },
+          { id: "3", url: "https://example.com", label: "C", rating: 9 },
+        ],
+        error: null,
+      },
+    });
+    const [a, b, c] = await createLinksRepo(client).listLinks();
+    expect(a!.rating).toBeNull();
+    expect(a!.impressions).toBeNull();
+    expect(a!.lessons).toBeNull();
+    expect(a!.memory_url).toBeNull();
+    expect(b!.rating).toBe(4);
+    expect(b!.impressions).toBe("ótimo");
+    expect(c!.rating).toBeNull();
+  });
+
+  it("rejects ratings outside 1-5 (integers) and accepts null to clear", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(repo.createLink({ ...base, rating: 0 })).rejects.toThrow(/rating/);
+    await expect(repo.updateLink("1", { rating: 6 })).rejects.toThrow(/rating/);
+    await expect(repo.updateLink("1", { rating: 2.5 })).rejects.toThrow(/rating/);
+    await expect(repo.updateLink("1", { rating: 5 })).resolves.toBeUndefined();
+    await expect(repo.updateLink("1", { rating: null })).resolves.toBeUndefined();
+  });
+});
