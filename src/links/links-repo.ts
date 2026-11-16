@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isHttpsUrl, isOptionalHttpsUrl } from "./validate";
 import { MORE_TEXT_FIELDS } from "./more-fields";
 import { poseDraftsFromRefs, poseRefsError, readPoseRefs, type PoseRef } from "./poses";
+import { MAX_TAGS, MAX_TAG_LENGTH } from "./tags";
 
 export type LinkStatus = "wishlist" | "done";
 
@@ -139,6 +140,7 @@ function validateLinkFields(fields: {
   itinerary?: string | null;
   source_url?: string | null;
   pose_refs?: PoseRef[] | null;
+  tags?: string[] | null;
 }): void {
   if (fields.url !== undefined) {
     if (!isHttpsUrl(fields.url)) {
@@ -184,6 +186,15 @@ function validateLinkFields(fields: {
     const value = fields[field.key];
     if (value != null && value.length > field.max) {
       throw new Error(`${field.key} must not exceed ${field.max} characters`);
+    }
+  }
+
+  if (fields.tags != null) {
+    if (fields.tags.length > MAX_TAGS) {
+      throw new Error(`tags must not exceed ${MAX_TAGS} items`);
+    }
+    if (fields.tags.some((t) => t.length > MAX_TAG_LENGTH)) {
+      throw new Error(`tags must not exceed ${MAX_TAG_LENGTH} characters each`);
     }
   }
 
@@ -234,6 +245,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         itinerary: input.itinerary,
         source_url: input.source_url,
         pose_refs: input.pose_refs,
+        tags: input.tags,
       });
 
       const trimmedLabel = input.label.trim();
@@ -266,6 +278,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         itinerary: patch.itinerary,
         source_url: patch.source_url,
         pose_refs: patch.pose_refs,
+        tags: patch.tags,
       });
 
       const sanitized =

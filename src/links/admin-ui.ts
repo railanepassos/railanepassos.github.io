@@ -30,6 +30,8 @@ import {
   type PoseDraft,
 } from "./poses";
 import { MORE_TEXT_FIELDS, emptyMoreTextValues, type MoreTextValues } from "./more-fields";
+import { createChipInput } from "./chip-input";
+import { MAX_TAGS, MAX_TAG_LENGTH, dedupeTags, normalizeTag, tagKey } from "./tags";
 
 /**
  * DOM building blocks for the authenticated admin experience:
@@ -235,6 +237,8 @@ export type LinkFormValues = MoreTextValues & {
   pose_refs: PoseDraft[];
   /** Picked category; "" = infer from text (Automática). */
   category: string;
+  /** Free tags (display form, no `#`). Optional so older callers keep compiling. */
+  tags?: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -408,6 +412,8 @@ export type AdminCardCallbacks = {
   onDelete: (link: LinkRow) => void;
   onMarkDone: (link: LinkRow) => void;
   onSchedule: (link: LinkRow) => void;
+  /** Tap on a tag chip: filter the feed by that tag. */
+  onTag?: (tag: string) => void;
 };
 
 export type AdminCardOptions = {
@@ -509,6 +515,24 @@ export function renderAdminCard(
     meta.appendChild(item);
   }
   body.append(heading, meta);
+  const cardTags = dedupeTags(link.tags ?? []);
+  if (cardTags.length > 0) {
+    const tagRow = document.createElement("div");
+    tagRow.className = "feed-card__tags";
+    for (const tag of cardTags) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "feed-card__tag";
+      btn.textContent = `#${tag}`;
+      btn.setAttribute("aria-label", `Filtrar por #${tag}`);
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        cb.onTag?.(tag);
+      });
+      tagRow.appendChild(btn);
+    }
+    body.appendChild(tagRow);
+  }
 
   const actions = document.createElement("div");
   actions.className = "feed-card__actions";
@@ -879,8 +903,14 @@ export type LinkFormHandle = {
   setBusy: (busy: boolean) => void;
 };
 
+export type LinkFormOptions = {
+  /** Tags already used across items (autocomplete source). */
+  getTagSuggestions?: () => readonly string[];
+};
+
 export function createLinkFormModal(
-  onSubmit: (values: LinkFormValues, editingId: string | null) => void
+  onSubmit: (values: LinkFormValues, editingId: string | null) => void,
+  formOptions: LinkFormOptions = {}
 ): LinkFormHandle {
   let previouslyFocused: HTMLElement | null = null;
   let editingId: string | null = null;
@@ -998,6 +1028,18 @@ export function createLinkFormModal(
     return { key: field.key, input: f.input, syncHeight };
   });
 
+  const tagsInput = createChipInput({
+    id: "links-form-tags",
+    label: "Tags (opcional)",
+    prefix: "#",
+    placeholder: "praia, grátis…",
+    normalize: normalizeTag,
+    key: tagKey,
+    max: MAX_TAGS,
+    maxLength: MAX_TAG_LENGTH,
+    getSuggestions: () => formOptions.getTagSuggestions?.() ?? [],
+  });
+  moreBody.appendChild(tagsInput.element);
   // Source post link: https only, validated inline as the user types.
   const sourceField = labelledInput("links-form-source_url", SOURCE_TERM, "url");
   sourceField.input.placeholder = "https://";
@@ -1138,6 +1180,9 @@ export function createLinkFormModal(
       f.input.dispatchEvent(new Event("input"));
       if (value) any = true;
     }
+    const tags = link?.tags ?? [];
+    tagsInput.setValues(tags);
+    if (tags.length > 0) any = true;
     sourceField.input.value = link?.source_url ?? "";
     validateSource();
     poses = poseDraftsFromRefs(readPoseRefs(link?.pose_refs));
@@ -1274,6 +1319,7 @@ export function createLinkFormModal(
 
   form.addEventListener("submit", (e) => {
     e.preventDefault();
+    tagsInput.commit();
     if (!validateSource()) {
       more.open = true;
       sourceField.input.focus();
@@ -1287,6 +1333,7 @@ export function createLinkFormModal(
     }
     onSubmit(
       {
+        tags: tagsInput.getValues(),
         url: urlField.input.value.trim(),
         label: labelField.input.value.trim(),
         description: descField.input.value.trim(),
@@ -1620,6 +1667,8 @@ export type ViewModalCallbacks = {
   onSchedule: (link: LinkRow) => void;
   onMarkDone: (link: LinkRow) => void;
   onDelete: (link: LinkRow) => void;
+  /** Tap on a tag chip: close the detail and filter the feed by that tag. */
+  onTag?: (tag: string) => void;
   /** Fired with the open link id, or null when the detail closes. */
   onOpenChange?: (id: string | null) => void;
 };
@@ -1784,6 +1833,10 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     info.appendChild(r.row);
     return { field, ...r };
   });
+  const tagsRow = infoRow("tag", "Tags");
+  tagsRow.row.dataset.field = "tags";
+  tagsRow.row.hidden = true;
+  info.appendChild(tagsRow.row);
   const mapLink = document.createElement("a");
   mapLink.className = "links-detail__map";
   mapLink.dataset.action = "open-map";
@@ -1900,6 +1953,22 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
       r.row.hidden = !value;
       r.value.textContent = value;
     }
+    const detailTags = dedupeTags(link.tags ?? []);
+    tagsRow.row.hidden = detailTags.length === 0;
+    tagsRow.value.replaceChildren(
+      ...detailTags.map((tag) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "links-detail__tag";
+        btn.textContent = `#${tag}`;
+        btn.setAttribute("aria-label", `Filtrar por #${tag}`);
+        btn.addEventListener("click", () => {
+          close();
+          cb.onTag?.(tag);
+        });
+        return btn;
+      })
+    );
     const mapUrl = buildMapUrl(link.address, link.city);
     mapWrap.hidden = mapUrl === null;
     mapLink.hidden = mapUrl === null;
@@ -1975,6 +2044,7 @@ export function toCreateInput(values: LinkFormValues, sortOrder: number): Create
     source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
     pose_refs: draftsToPoseRefs(resolved.pose_refs ?? []),
     ...moreTextPayload(resolved),
+    tags: tagsPayload(resolved),
   };
 }
 
@@ -1993,6 +2063,7 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
     source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
     pose_refs: draftsToPoseRefs(resolved.pose_refs ?? []),
     ...moreTextPayload(resolved),
+    tags: tagsPayload(resolved),
   };
 }
 
@@ -2004,6 +2075,12 @@ function moreTextPayload(values: LinkFormValues): Record<string, string | null> 
     out[field.key] = value.length > 0 ? value : null;
   }
   return out;
+}
+
+/** Normalized, deduped tags; empty -> null. */
+function tagsPayload(values: LinkFormValues): string[] | null {
+  const tags = dedupeTags(values.tags ?? []);
+  return tags.length > 0 ? tags : null;
 }
 
 /** Explicit chip choice wins; otherwise infer from the text fields. */
@@ -2029,6 +2106,9 @@ function assertFormValues(values: LinkFormValues): void {
   }
   if (values.image_url.length > 0 && !isHttpsUrl(values.image_url)) {
     throw new Error("A foto precisa ser uma URL https válida.");
+  }
+  if (dedupeTags(values.tags ?? []).length > MAX_TAGS) {
+    throw new Error(`Use no máximo ${MAX_TAGS} tags.`);
   }
   const sourceError = httpsUrlError(values.source_url ?? "", SOURCE_TERM);
   if (sourceError) throw new Error(sourceError);

@@ -5,6 +5,7 @@ import { createAuth, type Auth } from "./auth";
 import { createAuthStorage, setRememberMe } from "./session-storage";
 import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
 import { renderGuestGate } from "./render";
+import { collectTags, hasAllTags, tagKey, toggleKey } from "./tags";
 import { renderLinksSkeleton, renderToolbarSkeleton } from "./skeleton";
 import {
   createLoginButton,
@@ -149,6 +150,8 @@ function bootDynamic(
   let categoryFilter: Category[] = [];
   let section: Section = "feed";
   let query = "";
+  /** Active tag filter (accent-insensitive keys, AND). Tap a tag chip toggles it. */
+  let tagFilter: string[] = [];
   let pendingSharedUrl: string | null = pickSharedUrl(
     new URLSearchParams(location.search)
   );
@@ -167,21 +170,24 @@ function bootDynamic(
     }
   });
 
-  const formModal: LinkFormHandle = createLinkFormModal(async (values, editingId) => {
-    formModal.setBusy(true);
-    try {
-      if (editingId) {
-        await submitEdit(editingId, values);
-      } else {
-        await submitCreate(values);
+  const formModal: LinkFormHandle = createLinkFormModal(
+    async (values, editingId) => {
+      formModal.setBusy(true);
+      try {
+        if (editingId) {
+          await submitEdit(editingId, values);
+        } else {
+          await submitCreate(values);
+        }
+        formModal.close();
+      } catch (err) {
+        formModal.setError(messageOf(err, GENERIC_ERROR));
+      } finally {
+        formModal.setBusy(false);
       }
-      formModal.close();
-    } catch (err) {
-      formModal.setError(messageOf(err, GENERIC_ERROR));
-    } finally {
-      formModal.setBusy(false);
-    }
-  });
+    },
+    { getTagSuggestions: () => collectTags(links) }
+  );
 
   const deleteSheet: DeleteSheetHandle = createDeleteConfirmSheet();
   const scheduleSheet: ScheduleSheetHandle = createScheduleSheet();
@@ -190,6 +196,7 @@ function bootDynamic(
     onSchedule: (l) => openSchedule(l),
     onMarkDone: (l) => void markDone(l),
     onDelete: (l) => void deleteLink(l),
+    onTag: (tag) => toggleTagFilter(tag),
     onOpenChange: () => syncSelectedCard(),
   });
 
@@ -514,6 +521,7 @@ function bootDynamic(
       els.adminRoot.appendChild(createAppBarActions(shellHandlers, els.appBar));
     } else {
       query = "";
+      tagFilter = [];
       els.appBar?.classList.remove("links-appbar--searching");
       els.adminRoot.appendChild(createLoginButton(() => loginModal.open()));
     }
@@ -548,8 +556,35 @@ function bootDynamic(
     }
   }
 
+  function toggleTagFilter(tag: string): void {
+    tagFilter = toggleKey(tagFilter, tag);
+    renderList();
+    window.scrollTo({ top: 0 });
+  }
+
+  /** Active tag filters as removable chips above the feed (null when none). */
+  function renderTagFilterBar(): HTMLElement | null {
+    if (tagFilter.length === 0) return null;
+    const display = new Map(collectTags(links).map((t) => [tagKey(t), t]));
+    const bar = document.createElement("div");
+    bar.className = "links-tagfilter";
+    bar.setAttribute("role", "group");
+    bar.setAttribute("aria-label", "Filtros de tag ativos");
+    for (const key of tagFilter) {
+      const label = `#${display.get(key) ?? key}`;
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "links-chip links-chip--active links-tagfilter__chip";
+      chip.setAttribute("aria-label", `Remover filtro ${label}`);
+      chip.textContent = `${label} ×`;
+      chip.addEventListener("click", () => toggleTagFilter(key));
+      bar.appendChild(chip);
+    }
+    return bar;
+  }
+
   function emptyText(): string {
-    if (query.trim().length > 0) return "Nada encontrado para essa busca.";
+    if (query.trim().length > 0 || tagFilter.length > 0) return "Nada encontrado para essa busca.";
     if (categoryFilter.length > 0) return "Nenhuma experiência nas categorias selecionadas.";
     if (section === "agenda") return "Nada agendado ainda. Use Agendar em um card.";
     if (section === "done") return "Nenhuma experiência marcada como feita ainda.";
@@ -567,10 +602,14 @@ function bootDynamic(
       return;
     }
     setShellVisible(true);
-    const sectionLinks = searchLinks(linksForSection(links, section), query);
+    const sectionLinks = searchLinks(linksForSection(links, section), query).filter((l) =>
+      hasAllTags(l, tagFilter)
+    );
     const visible = filterLinksByCategory(sectionLinks, categoryFilter);
     renderChrome(sectionLinks, visible.length);
     const selected = viewModal.currentId();
+    const filterBar = renderTagFilterBar();
+    if (filterBar) els.list.appendChild(filterBar);
     if (visible.length === 0) {
       const empty = document.createElement("p");
       empty.className = "links-status";
@@ -587,6 +626,7 @@ function bootDynamic(
               onDelete: (l) => void deleteLink(l),
               onMarkDone: (l) => void markDone(l),
               onSchedule: (l) => openSchedule(l),
+              onTag: (tag) => toggleTagFilter(tag),
             },
             { selected: link.id === selected }
           )

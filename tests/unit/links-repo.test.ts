@@ -316,4 +316,12 @@ describe("Phase 2 fields", () => {
       repo.updateLink("1", { pose_refs: [{ url: "https://example.com/a", note: "n" }] })
     ).resolves.toBeUndefined();
   });
+
+  it("rejects too many or over-long tags", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    const many = Array.from({ length: 31 }, (_, i) => `t${i}`);
+    await expect(repo.createLink({ ...base, tags: many })).rejects.toThrow(/tags/);
+    await expect(repo.updateLink("1", { tags: ["x".repeat(41)] })).rejects.toThrow(/tags/);
+    await expect(repo.updateLink("1", { tags: ["praia"] })).resolves.toBeUndefined();
+  });
 });
