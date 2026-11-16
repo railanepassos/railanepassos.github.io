@@ -12,93 +12,67 @@
     <link rel="manifest" href="/p/a8f3k2/manifest.json">
     <title>Experience Bucket List</title>
 </head>
-<body class="page-sub page-links-admin">
-    <div class="page-shell">
-        <header class="site-header">
-            <div class="site-header__inner">
-                <span class="logo" aria-hidden="true">
-                    <span class="logo__name">Workflow <span class="logo__accent">Tech Engineering</span></span>
-                </span>
+<body class="page-links-admin">
+    <div class="links-app">
+        <header class="links-appbar" id="links-appbar">
+            <h1 class="links-appbar__title">Experience Bucket List</h1>
+            <div id="links-admin-root" class="links-appbar__actions">
+                <div class="links-skeleton links-skeleton--toolbar" role="status" aria-busy="true" aria-label="Carregando ações">
+                    <div class="links-skeleton__toolbar-row">
+                        <span class="links-skeleton__bone links-skeleton__icon" aria-hidden="true"></span>
+                        <span class="links-skeleton__bone links-skeleton__icon" aria-hidden="true"></span>
+                        <span class="links-skeleton__bone links-skeleton__icon" aria-hidden="true"></span>
+                    </div>
+                </div>
             </div>
         </header>
 
-        <main class="page-main page-links-admin__main">
-            <div class="page-links-admin__content">
-                <h1 class="sub-title">Experience Bucket List</h1>
-                <p class="sub-description">
-                    Guia pessoal de viagens e experiências: salve posts, lugares e roteiros
-                    que quiser viver. Depois, volte aqui para revisar e priorizar o que
-                    ainda falta conhecer.
-                </p>
+        <div class="links-app__layout">
+            <nav id="links-sidenav" class="links-sidenav" aria-label="Seções" hidden></nav>
 
-                <div id="links-admin-root">
-                    <div class="links-skeleton links-skeleton--toolbar" role="status" aria-busy="true" aria-label="Carregando ações">
-                        <div class="links-skeleton__toolbar-row">
-                            <span class="links-skeleton__bone links-skeleton__icon" aria-hidden="true"></span>
-                            <span class="links-skeleton__bone links-skeleton__icon" aria-hidden="true"></span>
-                            <span class="links-skeleton__bone links-skeleton__icon" aria-hidden="true"></span>
-                            <span class="links-skeleton__bone links-skeleton__icon" aria-hidden="true"></span>
+            <main class="links-app__main">
+                <div id="links-chips" class="links-chips-bar" hidden></div>
+                <div id="links-heading" class="links-app__heading" hidden></div>
+                <nav id="links-list" class="links-feed" aria-label="Experiências salvas">
+                    <div class="links-skeleton" role="status" aria-busy="true" aria-label="Carregando experiências">
+                    <div class="links-skeleton__card">
+                        <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
+                        <div class="links-skeleton__text">
+                            <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
+                            <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
+                            <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
                         </div>
                     </div>
-                </div>
-                <nav id="links-list" class="sub-list" aria-label="Experiências salvas">
-                    <div class="links-skeleton" role="status" aria-busy="true" aria-label="Carregando experiências">
-                        <div class="links-skeleton__card">
-                            <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
-                            <div class="links-skeleton__text">
-                                <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
-                                <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
-                                <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
-                            </div>
+                    <div class="links-skeleton__card">
+                        <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
+                        <div class="links-skeleton__text">
+                            <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
+                            <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
+                            <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
                         </div>
-                        <div class="links-skeleton__card">
-                            <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
-                            <div class="links-skeleton__text">
-                                <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
-                                <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
-                                <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
-                            </div>
+                    </div>
+                    <div class="links-skeleton__card">
+                        <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
+                        <div class="links-skeleton__text">
+                            <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
+                            <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
+                            <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
                         </div>
-                        <div class="links-skeleton__card">
-                            <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
-                            <div class="links-skeleton__text">
-                                <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
-                                <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
-                                <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
-                            </div>
+                    </div>
+                    <div class="links-skeleton__card">
+                        <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
+                        <div class="links-skeleton__text">
+                            <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
+                            <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
+                            <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
                         </div>
-                        <div class="links-skeleton__card">
-                            <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
-                            <div class="links-skeleton__text">
-                                <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
-                                <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
-                                <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
-                            </div>
-                        </div>
-                        <div class="links-skeleton__card">
-                            <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
-                            <div class="links-skeleton__text">
-                                <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
-                                <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
-                                <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
-                            </div>
-                        </div>
-                        <div class="links-skeleton__card">
-                            <span class="links-skeleton__bone links-skeleton__bone--icon" aria-hidden="true"></span>
-                            <div class="links-skeleton__text">
-                                <span class="links-skeleton__bone links-skeleton__bone--title" aria-hidden="true"></span>
-                                <span class="links-skeleton__bone links-skeleton__bone--line" aria-hidden="true"></span>
-                                <span class="links-skeleton__bone links-skeleton__bone--chip" aria-hidden="true"></span>
-                            </div>
-                        </div>
+                    </div>
                     </div>
                 </nav>
-            </div>
-        </main>
+            </main>
+        </div>
 
-        <footer class="site-footer">
-            <p>&copy; 2026 Workflow Tech Engineering</p>
-        </footer>
+        <nav id="links-tabbar" class="links-tabbar" aria-label="Navegação principal" hidden></nav>
     </div>
     <script src="app.js" defer></script>
 </body>

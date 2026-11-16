@@ -20,6 +20,7 @@ function formValues(partial: Partial<LinkFormValues> = {}): LinkFormValues {
     description: "",
     image_url: "",
     note: "",
+    category: "",
     ...partial,
   };
 }
@@ -185,36 +186,84 @@ describe("createScheduleSheet", () => {
 });
 
 describe("createViewModal", () => {
-  it("shows Agendar above Editar when the link has no schedule", () => {
-    const onEdit = vi.fn();
-    const onSchedule = vi.fn();
-    const onMarkDone = vi.fn();
-    const modal = createViewModal({ onEdit, onSchedule, onMarkDone });
+  function callbacks() {
+    return {
+      onEdit: vi.fn(),
+      onSchedule: vi.fn(),
+      onMarkDone: vi.fn(),
+      onDelete: vi.fn(),
+    };
+  }
+
+  it("shows a hero image, a clean original-link anchor and an Agendar primary action", () => {
+    const cb = callbacks();
+    const modal = createViewModal(cb);
     document.body.appendChild(modal.element);
 
-    modal.open(row());
+    modal.open(row({ url: "https://www.example.com/a/very/long/path?x=1" }));
 
-    const actionButtons = [
-      ...modal.element.querySelectorAll(
-        ".links-admin-form__actions button"
-      ),
-    ].map((btn) => btn.textContent?.trim());
-    expect(actionButtons).toEqual(["Agendar", "Marcar como feita", "Editar"]);
+    const hero = modal.element.querySelector(".links-detail__hero img") as HTMLImageElement;
+    expect(hero.getAttribute("src")).toBe("/assets/img/categories/museu.jpg");
+    const original = modal.element.querySelector(
+      '[data-action="open-original"]'
+    ) as HTMLAnchorElement;
+    expect(original.textContent).toContain("Ver link original");
+    expect(original.href).toBe("https://www.example.com/a/very/long/path?x=1");
+    expect(modal.element.textContent).not.toContain("/a/very/long/path");
 
-    (
-      modal.element.querySelector(
-        ".links-admin-form__actions button"
-      ) as HTMLButtonElement
-    ).click();
-    expect(onSchedule).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "link-1" })
-    );
-    expect(onEdit).not.toHaveBeenCalled();
+    const primary = modal.element.querySelector(
+      ".links-detail__bar .links-detail__primary"
+    ) as HTMLButtonElement;
+    expect(primary.textContent?.trim()).toBe("Agendar");
+    primary.click();
+    expect(cb.onSchedule).toHaveBeenCalledWith(expect.objectContaining({ id: "link-1" }));
   });
 
-  it("shows Agenda label and opens schedule sheet callback when scheduled", () => {
-    const callbacks = { onEdit: vi.fn(), onSchedule: vi.fn(), onMarkDone: vi.fn() };
-    const modal = createViewModal(callbacks);
+  it("marks done from the bottom bar icon button", () => {
+    const cb = callbacks();
+    const modal = createViewModal(cb);
+    document.body.appendChild(modal.element);
+    modal.open(row());
+
+    const done = modal.element.querySelector(
+      '.links-detail__bar [aria-label="Marcar como feito"]'
+    ) as HTMLButtonElement;
+    expect(done).toBeTruthy();
+    expect(done.hidden).toBe(false);
+    done.click();
+    expect(cb.onMarkDone).toHaveBeenCalled();
+  });
+
+  it("hides mark done for completed items", () => {
+    const modal = createViewModal(callbacks());
+    document.body.appendChild(modal.element);
+    modal.open(row({ status: "done" }));
+    const done = modal.element.querySelector(
+      '.links-detail__bar [aria-label="Marcar como feito"]'
+    ) as HTMLButtonElement;
+    expect(done.hidden).toBe(true);
+  });
+
+  it("keeps Editar and Excluir inside the more-options menu", () => {
+    const cb = callbacks();
+    const modal = createViewModal(cb);
+    document.body.appendChild(modal.element);
+    modal.open(row());
+
+    const menu = modal.element.querySelector('[role="menu"]') as HTMLElement;
+    expect(menu.hidden).toBe(true);
+    (modal.element.querySelector('[aria-label="Mais opções"]') as HTMLButtonElement).click();
+    expect(menu.hidden).toBe(false);
+    const items = [...menu.querySelectorAll('[role="menuitem"]')].map((b) =>
+      b.textContent?.trim()
+    );
+    expect(items).toEqual(["Editar", "Excluir"]);
+    (menu.querySelectorAll('[role="menuitem"]')[1] as HTMLButtonElement).click();
+    expect(cb.onDelete).toHaveBeenCalled();
+  });
+
+  it("shows the schedule row and Agenda label when scheduled", () => {
+    const modal = createViewModal(callbacks());
     document.body.appendChild(modal.element);
 
     modal.open(
@@ -226,40 +275,134 @@ describe("createViewModal", () => {
 
     expect(modal.element.textContent).toContain("Agendado");
     expect(modal.element.textContent).toContain("3 ago 2026 · 09:00–17:00");
-    const actionButtons = [
-      ...modal.element.querySelectorAll(
-        ".links-admin-form__actions button"
-      ),
-    ].map((btn) => btn.textContent?.trim());
-    expect(actionButtons).toEqual(["Agenda", "Marcar como feita", "Editar"]);
+    expect(
+      modal.element.querySelector(".links-detail__primary")?.textContent?.trim()
+    ).toBe("Agenda");
     expect(modal.element.textContent).not.toContain("Baixar ICS");
-    expect(modal.element.textContent).not.toContain("Remover agendamento");
-
-    (
-      modal.element.querySelector(
-        ".links-admin-form__actions button"
-      ) as HTMLButtonElement
-    ).click();
-    expect(callbacks.onSchedule).toHaveBeenCalled();
   });
 });
 
 describe("renderAdminCard", () => {
+  function cardCallbacks() {
+    return {
+      onView: vi.fn(),
+      onEdit: vi.fn(),
+      onDelete: vi.fn(),
+      onMarkDone: vi.fn(),
+      onSchedule: vi.fn(),
+    };
+  }
+
   it("renders a schedule chip when start and end are present", () => {
     const card = renderAdminCard(
       row({
         scheduled_start: "2026-08-03T09:00:00-03:00",
         scheduled_end: "2026-08-03T17:00:00-03:00",
       }),
-      {
-        onView: vi.fn(),
-        onEdit: vi.fn(),
-        onDelete: vi.fn(),
-      }
+      cardCallbacks()
     );
 
-    const chip = card.querySelector(".link-card__schedule");
+    const chip = card.querySelector(".feed-card__schedule");
     expect(chip?.textContent).toBe("3 ago · 9–17");
+  });
+
+  it("is image-first with the category photo and a friendly title", () => {
+    const card = renderAdminCard(
+      row({ label: "google.com", url: "https://google.com/maps/place/Casa+Jorge+Amado/" }),
+      cardCallbacks()
+    );
+    const img = card.querySelector(".feed-card__media img") as HTMLImageElement;
+    expect(img.getAttribute("src")).toBe("/assets/img/categories/museu.jpg");
+    expect(card.querySelector(".feed-card__title")?.textContent).toBe("Casa Jorge Amado");
+  });
+
+  it("exposes Feito and Agendar on the card", () => {
+    const cb = cardCallbacks();
+    const card = renderAdminCard(row(), cb);
+    (card.querySelector('[data-action="done"]') as HTMLButtonElement).click();
+    (card.querySelector('[data-action="schedule"]') as HTMLButtonElement).click();
+    expect(cb.onMarkDone).toHaveBeenCalled();
+    expect(cb.onSchedule).toHaveBeenCalled();
+    expect(cb.onView).not.toHaveBeenCalled();
+  });
+
+  it("hides Feito for completed items", () => {
+    const card = renderAdminCard(row({ status: "done" }), cardCallbacks());
+    expect(card.querySelector('[data-action="done"]')).toBeNull();
+  });
+
+  it("opens the detail when the card body is clicked", () => {
+    const cb = cardCallbacks();
+    const card = renderAdminCard(row(), cb);
+    (card.querySelector(".feed-card__open") as HTMLButtonElement).click();
+    expect(cb.onView).toHaveBeenCalled();
+  });
+
+  it("keeps Excluir hidden until the more-options menu is opened", () => {
+    const cb = cardCallbacks();
+    const card = renderAdminCard(row(), cb);
+    document.body.appendChild(card);
+    const menu = card.querySelector('[role="menu"]') as HTMLElement;
+    expect(menu.hidden).toBe(true);
+
+    const more = card.querySelector('[aria-label="Mais opções"]') as HTMLButtonElement;
+    more.click();
+    expect(menu.hidden).toBe(false);
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+
+    const del = [...menu.querySelectorAll('[role="menuitem"]')].find(
+      (b) => b.textContent?.trim() === "Excluir"
+    ) as HTMLButtonElement;
+    del.click();
+    expect(cb.onDelete).toHaveBeenCalled();
+    expect(menu.hidden).toBe(true);
+  });
+});
+
+describe("toCreateInput category", () => {
+  it("uses the picked category when provided", () => {
+    const input = toCreateInput(formValues({ label: "Museu", category: "praia" }), 0);
+    expect(input.category).toBe("praia");
+  });
+
+  it("infers the category when none is picked", () => {
+    const input = toCreateInput(formValues({ label: "Museu do Mar" }), 0);
+    expect(input.category).toBe("museu");
+  });
+});
+
+describe("createLinkFormModal category chips", () => {
+  it("submits the tapped category", () => {
+    const onSubmit = vi.fn();
+    const modal = createLinkFormModal(onSubmit);
+    document.body.appendChild(modal.element);
+    modal.openCreate();
+
+    const auto = modal.element.querySelector('[data-category=""]') as HTMLButtonElement;
+    expect(auto.getAttribute("aria-pressed")).toBe("true");
+    const beach = modal.element.querySelector('[data-category="praia"]') as HTMLButtonElement;
+    beach.click();
+    expect(beach.getAttribute("aria-pressed")).toBe("true");
+    expect(auto.getAttribute("aria-pressed")).toBe("false");
+
+    (modal.element.querySelector("#links-form-url") as HTMLInputElement).value =
+      "https://example.com";
+    modal.element.querySelector("form")?.dispatchEvent(
+      new SubmitEvent("submit", { bubbles: true, cancelable: true })
+    );
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ category: "praia" }),
+      null
+    );
+  });
+
+  it("preselects the stored category when editing", () => {
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    modal.openEdit(row({ category: "bar" }));
+    expect(
+      modal.element.querySelector('[data-category="bar"]')?.getAttribute("aria-pressed")
+    ).toBe("true");
   });
 });
 

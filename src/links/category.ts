@@ -119,6 +119,6 @@ export function filterLinksByCategory<T extends CategoryFields>(
   return links.filter((link) => allowed.has(resolveCategory(link)));
 }
 
-function isCategory(value: string): value is Category {
+export function isCategory(value: string): value is Category {
   return (CATEGORY_OPTIONS as readonly string[]).includes(value);
 }
