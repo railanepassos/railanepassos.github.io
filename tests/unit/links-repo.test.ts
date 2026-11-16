@@ -304,6 +304,17 @@ describe("Phase 2 fields", () => {
     await expect(repo.updateLink("1", { source_url: "javascript:alert(1)" })).rejects.toThrow(/source_url/);
   });
 
+  it("rejects a non-https or oversized memory_url, accepts https or null", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(repo.updateLink("1", { memory_url: "http://example.com" })).rejects.toThrow(/memory_url/);
+    await expect(repo.createLink({ ...base, memory_url: "javascript:alert(1)" })).rejects.toThrow(/memory_url/);
+    await expect(
+      repo.updateLink("1", { memory_url: `https://x.com/${"a".repeat(2000)}` })
+    ).rejects.toThrow(/memory_url/);
+    await expect(repo.updateLink("1", { memory_url: "https://youtu.be/dQw4w9WgXcQ" })).resolves.toBeUndefined();
+    await expect(repo.updateLink("1", { memory_url: null })).resolves.toBeUndefined();
+  });
+
   it("rejects invalid pose_refs and accepts valid ones", async () => {
     const repo = createLinksRepo(makeFakeClient());
     await expect(
@@ -315,6 +326,23 @@ describe("Phase 2 fields", () => {
     await expect(
       repo.updateLink("1", { pose_refs: [{ url: "https://example.com/a", note: "n" }] })
     ).resolves.toBeUndefined();
+  });
+
+  it("rejects impressions and lessons beyond the DB limits, accepts valid ones", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(repo.updateLink("1", { impressions: "x".repeat(5001) })).rejects.toThrow(/impressions/);
+    await expect(
+      repo.updateLink("1", { lessons: Array.from({ length: 21 }, () => "x") })
+    ).rejects.toThrow(/lessons/);
+    await expect(repo.updateLink("1", { lessons: ["x".repeat(301)] })).rejects.toThrow(/lessons/);
+    await expect(repo.updateLink("1", { lessons: ["ok", "   "] })).rejects.toThrow(/lessons/);
+    await expect(
+      repo.createLink({ url: "https://example.com", label: "Museu", sort_order: 0, lessons: [""] })
+    ).rejects.toThrow(/lessons/);
+    await expect(
+      repo.updateLink("1", { impressions: "Gostei.\nCaro.", lessons: ["levar lanche"] })
+    ).resolves.toBeUndefined();
+    await expect(repo.updateLink("1", { impressions: null, lessons: null })).resolves.toBeUndefined();
   });
 
   it("rejects too many or over-long tags", async () => {
@@ -331,5 +359,41 @@ describe("Phase 2 fields", () => {
     await expect(repo.createLink({ ...base, people: many })).rejects.toThrow(/people/);
     await expect(repo.updateLink("1", { people: ["x".repeat(81)] })).rejects.toThrow(/people/);
     await expect(repo.updateLink("1", { people: ["Maria Clara"] })).resolves.toBeUndefined();
+  });
+});
+
+// ─── Phase 3 "Como foi" fields ───────────────────────────────────────────────
+
+describe("Phase 3 fields", () => {
+  const base = { url: "https://example.com", label: "Example", sort_order: 0 };
+
+  it("normalizes missing and invalid rating to null on read, keeps a valid one", async () => {
+    const client = makeFakeClient({
+      links: {
+        data: [
+          { id: "1", url: "https://example.com", label: "A" },
+          { id: "2", url: "https://example.com", label: "B", rating: 4, impressions: "ótimo" },
+          { id: "3", url: "https://example.com", label: "C", rating: 9 },
+        ],
+        error: null,
+      },
+    });
+    const [a, b, c] = await createLinksRepo(client).listLinks();
+    expect(a!.rating).toBeNull();
+    expect(a!.impressions).toBeNull();
+    expect(a!.lessons).toBeNull();
+    expect(a!.memory_url).toBeNull();
+    expect(b!.rating).toBe(4);
+    expect(b!.impressions).toBe("ótimo");
+    expect(c!.rating).toBeNull();
+  });
+
+  it("rejects ratings outside 1-5 (integers) and accepts null to clear", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(repo.createLink({ ...base, rating: 0 })).rejects.toThrow(/rating/);
+    await expect(repo.updateLink("1", { rating: 6 })).rejects.toThrow(/rating/);
+    await expect(repo.updateLink("1", { rating: 2.5 })).rejects.toThrow(/rating/);
+    await expect(repo.updateLink("1", { rating: 5 })).resolves.toBeUndefined();
+    await expect(repo.updateLink("1", { rating: null })).resolves.toBeUndefined();
   });
 });

@@ -18,6 +18,7 @@ import { categoryBackdropSrc } from "./card-theme";
 import { displayTitle, linkDomain } from "./feed";
 import { uiIcon, type IconName } from "./ui-icons";
 import { buildMapUrl } from "./map-url";
+import { parseMemoryLink } from "./memory-link";
 import {
   MAX_POSES,
   POSE_NOTE_MAX,
@@ -29,12 +30,20 @@ import {
   readPoseRefs,
   type PoseDraft,
 } from "./poses";
+import { readLessons } from "./lessons";
 import {
   MORE_TEXT_FIELDS,
   emptyMoreTextValues,
   type MoreTextKey,
   type MoreTextValues,
 } from "./more-fields";
+import {
+  formatRating,
+  formatVisitDate,
+  hasRating,
+  ratingLabel,
+  ratingOutOf,
+} from "./review";
 import { createChipInput } from "./chip-input";
 import { MAX_TAGS, MAX_TAG_LENGTH, dedupeTags, normalizeTag, tagKey } from "./tags";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH, dedupePeople, normalizePerson, personKey } from "./people";
@@ -52,7 +61,7 @@ import { MAX_PEOPLE, MAX_PERSON_LENGTH, dedupePeople, normalizePerson, personKey
  * to satisfy the page CSP (style-src 'self', script-src 'self').
  */
 
-type ScreenChrome = {
+export type ScreenChrome = {
   overlay: HTMLElement;
   dialog: HTMLElement;
   title: HTMLHeadingElement;
@@ -63,7 +72,7 @@ type ScreenChrome = {
  * Dialog shell. "screen" = full-screen page with a back chevron (login);
  * "sheet" = bottom sheet on mobile / centered panel on desktop with a close X.
  */
-function createScreenChrome(
+export function createScreenChrome(
   titleId: string,
   titleText: string,
   role: "dialog" | "alertdialog",
@@ -420,6 +429,8 @@ export type AdminCardCallbacks = {
   onDelete: (link: LinkRow) => void;
   onMarkDone: (link: LinkRow) => void;
   onSchedule: (link: LinkRow) => void;
+  /** Done places only: back to the wishlist (keeps the "Como foi"). */
+  onUnmarkDone?: (link: LinkRow) => void;
   /** Tap on a tag chip: filter the feed by that tag. */
   onTag?: (tag: string) => void;
   /** Tap on a person chip: filter the feed by that person. */
@@ -563,6 +574,16 @@ export function renderAdminCard(
     item.append(uiIcon(field.icon, 15), text);
     meta.appendChild(item);
   }
+  if (hasRating(link)) {
+    const rated = document.createElement("span");
+    rated.className = "feed-card__meta-item feed-card__meta-item--rating";
+    rated.setAttribute("role", "img");
+    rated.setAttribute("aria-label", ratingLabel(link.rating));
+    const text = document.createElement("span");
+    text.textContent = formatRating(link.rating);
+    rated.append(uiIcon("star", 15), text);
+    meta.appendChild(rated);
+  }
   body.append(heading, meta);
   for (const [kind, values, pick] of [
     ["tag", link.tags, cb.onTag],
@@ -613,13 +634,20 @@ export function renderAdminCard(
     actions.appendChild(share);
   }
 
-  const more = createMoreMenu(
-    [
-      { label: "Editar", icon: "edit", onSelect: () => cb.onEdit(link) },
-      { label: "Excluir", icon: "trash", danger: true, onSelect: () => cb.onDelete(link) },
-    ],
-    "feed-card__icon-btn"
-  );
+  const menuItems: MenuItem[] = [
+    { label: "Editar", icon: "edit", onSelect: () => cb.onEdit(link) },
+  ];
+  if (link.status === "done" && cb.onUnmarkDone) {
+    const unmark = cb.onUnmarkDone;
+    menuItems.push({ label: "Desmarcar feito", icon: "check", onSelect: () => unmark(link) });
+  }
+  menuItems.push({
+    label: "Excluir",
+    icon: "trash",
+    danger: true,
+    onSelect: () => cb.onDelete(link),
+  });
+  const more = createMoreMenu(menuItems, "feed-card__icon-btn");
   actions.appendChild(more.wrapper);
 
   open.addEventListener("click", () => cb.onView(link));
@@ -1732,6 +1760,10 @@ export type ViewModalCallbacks = {
   onSchedule: (link: LinkRow) => void;
   onMarkDone: (link: LinkRow) => void;
   onDelete: (link: LinkRow) => void;
+  /** Done places only: back to the wishlist (keeps the "Como foi"). */
+  onUnmarkDone?: (link: LinkRow) => void;
+  /** Done places only: open the "Como foi" sheet to edit it. */
+  onEditReview?: (link: LinkRow) => void;
   /** Tap on a tag chip: close the detail and filter the feed by that tag. */
   onTag?: (tag: string) => void;
   /** Tap on a person chip: close the detail and filter the feed by that person. */
@@ -1888,6 +1920,69 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   const memoryRow = infoRow("memory", "Memória");
   info.append(scheduleRow.row, noteRow.row, memoryRow.row);
 
+  // "Como foi" block (done places only, each row only when filled). Later
+  // Phase 3 rows (impressions, lessons, memory link) go right below these.
+  const visitRow = infoRow("calendar", "Visita");
+  visitRow.row.dataset.field = "completed_at";
+  const ratingRow = infoRow("star", "Avaliação");
+  ratingRow.row.dataset.field = "rating";
+  const wantAgainRow = infoRow("heart", "Voltaria?");
+  wantAgainRow.row.dataset.field = "want_again";
+  const impressionsRow = infoRow("note", "Impressões");
+  impressionsRow.row.dataset.field = "impressions";
+  impressionsRow.row.classList.add("links-detail__row--long", "links-detail__row--prose");
+  const lessonsRow = infoRow("check", "Lições aprendidas");
+  lessonsRow.row.dataset.field = "lessons";
+  lessonsRow.row.classList.add("links-detail__row--long");
+  const lessonsOl = document.createElement("ol");
+  lessonsOl.className = "links-detail__lessons";
+  lessonsRow.value.appendChild(lessonsOl);
+  // Memory link: YouTube thumbnail + "Assistir", or "Ver álbum". Plain image
+  // and new-tab link only (no iframe/embed).
+  const memoryThumb = document.createElement("img");
+  memoryThumb.className = "links-detail__memory-thumb";
+  memoryThumb.alt = "";
+  memoryThumb.loading = "lazy";
+  memoryThumb.referrerPolicy = "no-referrer";
+  memoryThumb.width = 480;
+  memoryThumb.height = 360;
+  memoryThumb.hidden = true;
+  memoryThumb.addEventListener("error", () => {
+    memoryThumb.hidden = true;
+  });
+  const memoryAction = document.createElement("a");
+  memoryAction.className = "links-detail__action links-detail__memory-action";
+  memoryAction.dataset.action = "open-memory";
+  memoryAction.rel = "noopener noreferrer";
+  memoryAction.target = "_blank";
+  const memoryActionText = document.createElement("span");
+  memoryAction.append(uiIcon("external", 16), memoryActionText);
+  const memoryWrap = document.createElement("div");
+  memoryWrap.className = "links-detail__row links-detail__row--action links-detail__memory";
+  memoryWrap.dataset.field = "memory_url";
+  memoryWrap.hidden = true;
+  memoryWrap.append(memoryThumb, memoryAction);
+  const reviewEdit = document.createElement("button");
+  reviewEdit.type = "button";
+  reviewEdit.className = "links-detail__action links-detail__review-edit";
+  reviewEdit.dataset.action = "edit-review";
+  const reviewEditText = document.createElement("span");
+  reviewEditText.textContent = "Editar Como foi";
+  reviewEdit.append(uiIcon("edit", 16), reviewEditText);
+  const reviewEditWrap = document.createElement("div");
+  reviewEditWrap.className = "links-detail__row links-detail__row--action";
+  reviewEditWrap.dataset.field = "review-edit";
+  reviewEditWrap.appendChild(reviewEdit);
+  info.append(
+    visitRow.row,
+    ratingRow.row,
+    wantAgainRow.row,
+    impressionsRow.row,
+    lessonsRow.row,
+    memoryWrap,
+    reviewEditWrap
+  );
+
   // Registry-driven rows (cost, city, address, ...), each hidden when empty.
   // The map button sits right under them and is only shown when there is
   // something to search for.
@@ -1962,7 +2057,15 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   const primaryText = document.createElement("span");
   primary.append(uiIcon("calendar", 20), primaryText);
 
-  bar.append(doneBtn, openLink, primary);
+  const unmarkBtn = iconOnlyButton(
+    "check",
+    "Desmarcar como feito",
+    "links-detail__bar-btn links-detail__bar-btn--on",
+    22
+  );
+  unmarkBtn.hidden = true;
+
+  bar.append(doneBtn, unmarkBtn, openLink, primary);
   dialog.append(hero, body, bar);
   overlay.appendChild(dialog);
 
@@ -2054,7 +2157,47 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     domainText.textContent = linkDomain(link.url);
     original.href = link.url;
     openLink.href = link.url;
-    doneBtn.hidden = link.status === "done";
+    const isDone = link.status === "done";
+    doneBtn.hidden = isDone;
+    unmarkBtn.hidden = !isDone || !cb.onUnmarkDone;
+
+    visitRow.row.hidden = !(isDone && link.completed_at && formatVisitDate(link.completed_at));
+    visitRow.value.textContent = isDone ? formatVisitDate(link.completed_at) : "";
+    const rated = hasRating(link);
+    ratingRow.row.hidden = !rated;
+    ratingRow.value.textContent = rated ? ratingOutOf(link.rating) : "";
+    const again = isDone && link.want_again;
+    wantAgainRow.row.hidden = !again;
+    wantAgainRow.value.textContent = again ? "Sim" : "";
+    const impressionsText = isDone ? (link.impressions ?? "").trim() : "";
+    impressionsRow.row.hidden = impressionsText === "";
+    impressionsRow.value.textContent = impressionsText;
+    const lessonItems = isDone ? readLessons(link.lessons) : [];
+    lessonsRow.row.hidden = lessonItems.length === 0;
+    lessonsOl.replaceChildren(
+      ...lessonItems.map((text) => {
+        const li = document.createElement("li");
+        li.textContent = text;
+        return li;
+      })
+    );
+    const memory = isDone ? parseMemoryLink(link.memory_url) : null;
+    memoryWrap.hidden = memory === null;
+    memoryThumb.hidden = true;
+    memoryThumb.removeAttribute("src");
+    if (memory?.kind === "youtube") {
+      memoryThumb.src = memory.thumbnailUrl;
+      memoryThumb.hidden = false;
+      memoryActionText.textContent = "Assistir";
+      memoryAction.href = memory.watchUrl;
+    } else if (memory?.kind === "album") {
+      memoryActionText.textContent = "Ver álbum";
+      memoryAction.href = memory.url;
+    } else {
+      memoryActionText.textContent = "";
+      memoryAction.removeAttribute("href");
+    }
+    reviewEditWrap.hidden = !isDone || !cb.onEditReview;
 
     const panel = isPanelMode();
     dialog.setAttribute("aria-modal", panel ? "false" : "true");
@@ -2074,6 +2217,12 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
 
   primary.addEventListener("click", () => act(cb.onSchedule));
   doneBtn.addEventListener("click", () => act(cb.onMarkDone));
+  unmarkBtn.addEventListener("click", () => {
+    if (cb.onUnmarkDone) act(cb.onUnmarkDone);
+  });
+  reviewEdit.addEventListener("click", () => {
+    if (cb.onEditReview) act(cb.onEditReview);
+  });
   backBtn.addEventListener("click", close);
   overlay.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {

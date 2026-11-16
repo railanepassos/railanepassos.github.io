@@ -902,3 +902,142 @@ describe("pose references", () => {
     expect(wrap.querySelectorAll("li")).toHaveLength(0);
   });
 });
+
+describe("Phase 3: Como foi on card and detail", () => {
+  const DONE = { status: "done" as const, completed_at: "2026-12-12T15:00:00Z" };
+
+  function cardCb() {
+    return {
+      onView: vi.fn(),
+      onEdit: vi.fn(),
+      onDelete: vi.fn(),
+      onMarkDone: vi.fn(),
+      onSchedule: vi.fn(),
+      onUnmarkDone: vi.fn(),
+    };
+  }
+
+  function viewCb() {
+    return {
+      onEdit: vi.fn(),
+      onSchedule: vi.fn(),
+      onMarkDone: vi.fn(),
+      onDelete: vi.fn(),
+      onUnmarkDone: vi.fn(),
+      onEditReview: vi.fn(),
+    };
+  }
+
+  it("card shows the rating of a done place with an accessible label", () => {
+    const card = renderAdminCard(row({ ...DONE, rating: 4 }), cardCb());
+    const item = card.querySelector(".feed-card__meta-item--rating")!;
+    expect(item.textContent).toContain("4/5");
+    expect(item.getAttribute("aria-label")).toBe("Nota 4 de 5");
+  });
+
+  it("card shows no rating for unrated, wishlist or legacy rows", () => {
+    for (const partial of [{ ...DONE }, { rating: 4 }, {}] as Partial<LinkRow>[]) {
+      const card = renderAdminCard(row(partial), cardCb());
+      expect(card.querySelector(".feed-card__meta-item--rating")).toBeNull();
+    }
+  });
+
+  it("card menu offers Desmarcar feito only for done places", () => {
+    const cb = cardCb();
+    const done = renderAdminCard(row(DONE), cb);
+    const items = Array.from(done.querySelectorAll<HTMLElement>("[role='menuitem']"));
+    const unmark = items.find((i) => i.textContent === "Desmarcar feito")!;
+    expect(unmark).toBeTruthy();
+    unmark.click();
+    expect(cb.onUnmarkDone).toHaveBeenCalledWith(expect.objectContaining({ id: "link-1" }));
+    const wish = renderAdminCard(row(), cardCb());
+    expect(wish.textContent).not.toContain("Desmarcar feito");
+  });
+
+  it("detail shows visit date, rating and Voltaria? only when present", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ ...DONE, rating: 5, want_again: true }));
+    const rows = (key: string) =>
+      modal.element.querySelector<HTMLElement>(`[data-field='${key}']`)!;
+    expect(rows("completed_at").hidden).toBe(false);
+    expect(rows("completed_at").textContent).toContain("12 de dezembro de 2026");
+    expect(rows("rating").hidden).toBe(false);
+    expect(rows("rating").textContent).toContain("5 de 5");
+    expect(rows("want_again").hidden).toBe(false);
+    expect(rows("want_again").textContent).toContain("Sim");
+
+    modal.open(row({ ...DONE }));
+    expect(rows("completed_at").hidden).toBe(false);
+    expect(rows("rating").hidden).toBe(true);
+    expect(rows("want_again").hidden).toBe(true);
+
+    modal.open(row({ rating: 5, want_again: true }));
+    for (const key of ["completed_at", "rating", "want_again", "review-edit"]) {
+      expect(rows(key).hidden).toBe(true);
+    }
+  });
+
+  it("detail shows the memory link: YouTube thumbnail + Assistir, or Ver álbum, only for done places", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    const field = () => modal.element.querySelector<HTMLElement>("[data-field='memory_url']")!;
+    const thumb = () => field().querySelector<HTMLImageElement>("img")!;
+    const action = () => field().querySelector<HTMLAnchorElement>("a[data-action='open-memory']")!;
+
+    modal.open(row({ ...DONE, memory_url: "https://youtu.be/dQw4w9WgXcQ" }));
+    expect(field().hidden).toBe(false);
+    expect(thumb().src).toBe("https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg");
+    expect(thumb().hidden).toBe(false);
+    expect(thumb().getAttribute("alt")).toBe("");
+    expect(action().textContent).toContain("Assistir");
+    expect(action().href).toBe("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    expect(action().target).toBe("_blank");
+    expect(action().rel).toBe("noopener noreferrer");
+    expect(field().querySelector("iframe")).toBeNull();
+
+    // A thumbnail that fails to load is hidden; the button stays.
+    thumb().dispatchEvent(new Event("error"));
+    expect(thumb().hidden).toBe(true);
+    expect(action().textContent).toContain("Assistir");
+
+    // Reopening resets the hidden thumbnail.
+    modal.open(row({ ...DONE, memory_url: "https://youtu.be/aaaaaaaaaaa" }));
+    expect(thumb().hidden).toBe(false);
+    expect(thumb().src).toContain("/aaaaaaaaaaa/");
+
+    modal.open(row({ ...DONE, memory_url: "https://photos.app.goo.gl/AbCd" }));
+    expect(field().hidden).toBe(false);
+    expect(thumb().hidden).toBe(true);
+    expect(action().textContent).toContain("Ver álbum");
+    expect(action().href).toBe("https://photos.app.goo.gl/AbCd");
+    expect(action().rel).toBe("noopener noreferrer");
+
+    modal.open(row({ ...DONE, memory_url: null }));
+    expect(field().hidden).toBe(true);
+    modal.open(row({ ...DONE, memory_url: "http://insecure.example/x" }));
+    expect(field().hidden).toBe(true);
+    modal.open(row({ memory_url: "https://photos.app.goo.gl/AbCd" }));
+    expect(field().hidden).toBe(true);
+  });
+
+  it("detail edit-Como-foi action calls back with the link; unmark swaps with mark done", () => {
+    const cb = viewCb();
+    const modal = createViewModal(cb);
+    document.body.appendChild(modal.element);
+    modal.open(row({ ...DONE, rating: 2 }));
+    modal.element.querySelector<HTMLElement>("[data-action='edit-review']")!.click();
+    expect(cb.onEditReview).toHaveBeenCalledWith(expect.objectContaining({ id: "link-1" }));
+
+    modal.open(row({ ...DONE }));
+    const unmark = modal.element.querySelector<HTMLButtonElement>(
+      ".links-detail__bar [aria-label='Desmarcar como feito']"
+    )!;
+    expect(unmark.hidden).toBe(false);
+    unmark.click();
+    expect(cb.onUnmarkDone).toHaveBeenCalledWith(expect.objectContaining({ id: "link-1" }));
+
+    modal.open(row());
+    expect(unmark.hidden).toBe(true);
+  });
+});

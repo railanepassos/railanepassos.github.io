@@ -3,6 +3,7 @@ import { isHttpsUrl, isOptionalHttpsUrl } from "./validate";
 import { MORE_TEXT_FIELDS } from "./more-fields";
 import { poseDraftsFromRefs, poseRefsError, readPoseRefs, type PoseRef } from "./poses";
 import { MAX_TAGS, MAX_TAG_LENGTH } from "./tags";
+import { normalizeRating, reviewColumnsError, type ReviewColumns } from "./review";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH } from "./people";
 
 export type LinkStatus = "wishlist" | "done";
@@ -36,7 +37,7 @@ export type LinkRow = {
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
-};
+} & ReviewColumns;
 
 export type CreateLinkInput = {
   url: string;
@@ -63,7 +64,7 @@ export type CreateLinkInput = {
   pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
-};
+} & ReviewColumns;
 
 export type UpdateLinkPatch = {
   url?: string;
@@ -90,7 +91,7 @@ export type UpdateLinkPatch = {
   pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
-};
+} & ReviewColumns;
 
 export function normalizeLinkRow(
   row: Partial<LinkRow> & Pick<LinkRow, "id" | "url" | "label">
@@ -121,6 +122,10 @@ export function normalizeLinkRow(
     pose_refs: row.pose_refs == null ? null : readPoseRefs(row.pose_refs),
     tags: row.tags ?? null,
     people: row.people ?? null,
+    rating: normalizeRating(row.rating),
+    impressions: row.impressions ?? null,
+    lessons: row.lessons ?? null,
+    memory_url: row.memory_url ?? null,
     created_by: row.created_by,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -143,7 +148,7 @@ function validateLinkFields(fields: {
   pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
-}): void {
+} & ReviewColumns): void {
   if (fields.url !== undefined) {
     if (!isHttpsUrl(fields.url)) {
       throw new Error("url must be a valid https URL");
@@ -209,6 +214,9 @@ function validateLinkFields(fields: {
     }
   }
 
+  const reviewProblem = reviewColumnsError(fields);
+  if (reviewProblem) throw new Error(reviewProblem);
+
   if (!isOptionalHttpsUrl(fields.source_url)) {
     throw new Error("source_url must be a valid https URL");
   }
@@ -258,6 +266,10 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         pose_refs: input.pose_refs,
         tags: input.tags,
         people: input.people,
+        rating: input.rating,
+        impressions: input.impressions,
+        lessons: input.lessons,
+        memory_url: input.memory_url,
       });
 
       const trimmedLabel = input.label.trim();
@@ -292,6 +304,10 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         pose_refs: patch.pose_refs,
         tags: patch.tags,
         people: patch.people,
+        rating: patch.rating,
+        impressions: patch.impressions,
+        lessons: patch.lessons,
+        memory_url: patch.memory_url,
       });
 
       const sanitized =

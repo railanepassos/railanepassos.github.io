@@ -36,6 +36,7 @@ const ICONS = {
   clock: [["circle", 12, 12, 9], ["path", "M12 7v5l3 2"]],
   sparkle: [["path", "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"]],
   memory: [["path", "M4 5h16v11H8l-4 4z"]],
+  star: [["path", "m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"]],
 } satisfies Record<string, Shape[]>;
 
 export type IconName = keyof typeof ICONS;

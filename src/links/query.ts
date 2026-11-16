@@ -18,6 +18,8 @@
  *   custo<50           cost strictly below 50. The cost is free text; the first
  *                      number found is used ("R$ 1.200,50" -> 1200.5). A link
  *                      with no number in its cost never matches this filter.
+ *   nota>=4            rated 4 or more (N from 1 to 5). Unrated places never
+ *                      match; an invalid N (`nota>=9`, `nota>=x`) is ignored.
  *   palavra            free text over title, description, note, category,
  *                      city, address, cost, dossier, itinerary, tags and
  *                      people; "frase exata" in quotes matches the phrase.
@@ -30,9 +32,10 @@ import { displayTitle } from "./feed";
 import type { LinkRow } from "./links-repo";
 import { hasAllTags, normalizeTag, tagKey } from "./tags";
 import { fold } from "./keyed-list";
+import { meetsMinRating } from "./ranking";
 import { hasAllPeople, normalizePerson, personKey } from "./people";
 
-export type FilterKind = "tag" | "person" | "city" | "cost";
+export type FilterKind = "tag" | "person" | "city" | "cost" | "rating";
 
 /** An active structured filter, with the span of its token in the typed text. */
 export type FilterChip = {
@@ -53,6 +56,8 @@ export type ParsedQuery = {
   people: string[];
   city?: string;
   costMax?: number;
+  /** Minimum rating (1-5) from `nota>=N`. */
+  minRating?: number;
   chips: FilterChip[];
 };
 
@@ -128,6 +133,12 @@ export function parseQuery(text: string): ParsedQuery {
       } else {
         query.terms.push(fold(raw));
       }
+    } else if (/^nota>=/i.test(raw)) {
+      const rest = raw.slice("nota>=".length);
+      if (!/^[1-5]$/.test(rest)) continue;
+      const n = Number(rest);
+      query.minRating = query.minRating === undefined ? n : Math.max(query.minRating, n);
+      chip("rating", `nota ≥ ${n}`, String(n));
     } else if (raw.startsWith('"')) {
       const { value } = unquote(raw);
       const phrase = fold(value).trim();
@@ -154,6 +165,8 @@ function haystack(link: LinkRow): string {
       link.cost_text ?? "",
       link.dossier ?? "",
       link.itinerary ?? "",
+      link.impressions ?? "",
+      ...(link.lessons ?? []),
       ...(link.tags ?? []),
       ...(link.people ?? []),
     ].join(" ")
@@ -167,6 +180,9 @@ export function matches(link: LinkRow, query: ParsedQuery): boolean {
   if (query.costMax !== undefined) {
     const cost = costNumber(link.cost_text);
     if (cost === null || cost >= query.costMax) return false;
+  }
+  if (query.minRating !== undefined) {
+    if (link.status !== "done" || !meetsMinRating(link, query.minRating)) return false;
   }
   if (query.terms.length === 0) return true;
   const text = haystack(link);
@@ -204,4 +220,12 @@ export function toggleFilter(text: string, kind: "tag" | "person", name: string)
     return next;
   }
   return tidy(`${text} ${kind === "tag" ? `#${normalizeTag(name)}` : personToken(name)}`);
+}
+
+/** Replaces (or removes, with null) the `nota>=N` token of the typed text. */
+export function setMinRating(text: string, min: number | null): string {
+  let next = text;
+  const existing = parseQuery(next).chips.filter((c) => c.kind === "rating");
+  for (const chip of [...existing].reverse()) next = removeChip(next, chip);
+  return min === null ? next : tidy(`${next} nota>=${min}`);
 }

@@ -197,6 +197,15 @@ describe("matches", () => {
     expect(m("naoexiste", l)).toBe(false);
   });
 
+  it("searches impressions and lessons as free text", () => {
+    const l = row({ impressions: "Fila enorme, mas valeu a pena", lessons: ["levar lanche", "chegar antes das 9h"] });
+    expect(m("fila", l)).toBe(true);
+    expect(m("lanche", l)).toBe(true);
+    expect(m("antes 9h", l)).toBe(true);
+    expect(m("naoexiste", l)).toBe(false);
+    expect(m("lanche", row({ impressions: null, lessons: null }))).toBe(false);
+  });
+
   it("filters by cidade: as an accent-insensitive substring", () => {
     expect(m("cidade:salvador")).toBe(true);
     expect(m("cidade:salv")).toBe(true);
