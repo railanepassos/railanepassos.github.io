@@ -38,8 +38,6 @@ type ReviewControl = {
   set: (values: ReviewValues) => void;
   /** Writes the control's current value into `draft`. */
   read: (draft: ReviewValues) => void;
-  /** Element that takes focus when the sheet opens (optional). */
-  focusTarget?: () => HTMLElement | null;
 };
 
 export type ReviewSheetOpenOpts = {
@@ -150,7 +148,6 @@ function createRatingControl(): ReviewControl {
     read: (draft) => {
       draft.rating = value;
     },
-    focusTarget: () => stars.find((s) => s.tabIndex === 0) ?? null,
   };
 }
 
@@ -243,8 +240,13 @@ function createLessonsControl(): ReviewControl {
   addBtn.append(uiIcon("plus", 18), document.createTextNode("Adicionar lição"));
   fieldset.append(legend, list, addBtn);
 
+  function focusInput(index: number): void {
+    list.querySelector<HTMLInputElement>(`#links-review-lesson-${index}`)?.focus();
+  }
+
   function render(focus?: string): void {
     list.replaceChildren();
+    const movable = lessons.length > 1;
     lessons.forEach((text, i) => {
       const n = i + 1;
       const item = document.createElement("li");
@@ -256,34 +258,48 @@ function createLessonsControl(): ReviewControl {
       input.id = `links-review-lesson-${i}`;
       input.maxLength = LESSON_MAX;
       input.autocomplete = "off";
+      input.setAttribute("enterkeyhint", "next");
       input.setAttribute("aria-label", `Lição ${n}`);
       input.value = text;
       input.addEventListener("input", () => {
         lessons[i] = input.value;
       });
+      input.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" || e.isComposing) return;
+        // Enter never submits the sheet: it moves on to a fresh lesson below.
+        e.preventDefault();
+        if (lessons.length >= MAX_LESSONS) return;
+        if (i === lessons.length - 1 && lessons[i]!.trim() === "") return;
+        lessons.splice(i + 1, 0, "");
+        render();
+        focusInput(i + 1);
+      });
 
       const tools = document.createElement("div");
       tools.className = "links-poses__tools";
-      const up = lessonToolButton("↑", `Subir lição ${n}`);
-      up.disabled = i === 0;
-      up.dataset.focusKey = `up-${i}`;
-      up.addEventListener("click", () => {
-        lessons = moveItem(lessons, i, i - 1);
-        render(`up-${i - 1}`);
-      });
-      const down = lessonToolButton("↓", `Descer lição ${n}`);
-      down.disabled = i === lessons.length - 1;
-      down.dataset.focusKey = `down-${i}`;
-      down.addEventListener("click", () => {
-        lessons = moveItem(lessons, i, i + 1);
-        render(`down-${i + 1}`);
-      });
+      if (movable) {
+        const up = lessonToolButton("↑", `Subir lição ${n}`);
+        up.disabled = i === 0;
+        up.dataset.focusKey = `up-${i}`;
+        up.addEventListener("click", () => {
+          lessons = moveItem(lessons, i, i - 1);
+          render(`up-${i - 1}`);
+        });
+        const down = lessonToolButton("↓", `Descer lição ${n}`);
+        down.disabled = i === lessons.length - 1;
+        down.dataset.focusKey = `down-${i}`;
+        down.addEventListener("click", () => {
+          lessons = moveItem(lessons, i, i + 1);
+          render(`down-${i + 1}`);
+        });
+        tools.append(up, down);
+      }
       const remove = lessonToolButton("×", `Remover lição ${n}`);
       remove.addEventListener("click", () => {
         lessons = lessons.filter((_, j) => j !== i);
         render("add");
       });
-      tools.append(up, down, remove);
+      tools.append(remove);
 
       item.append(input, tools);
       list.appendChild(item);
@@ -301,7 +317,7 @@ function createLessonsControl(): ReviewControl {
     if (lessons.length >= MAX_LESSONS) return;
     lessons.push("");
     render();
-    list.querySelector<HTMLInputElement>(`#links-review-lesson-${lessons.length - 1}`)?.focus();
+    focusInput(lessons.length - 1);
   });
 
   return {
@@ -333,6 +349,7 @@ function createMemoryUrlControl(): ReviewControl {
   input.type = "url";
   input.placeholder = "https://";
   input.autocomplete = "off";
+  input.setAttribute("enterkeyhint", "done");
   input.dataset.field = "memory_url";
 
   const hint = document.createElement("p");
@@ -390,6 +407,7 @@ export function createReviewSheet(): ReviewSheetHandle {
     "dialog"
   );
   dialog.classList.add("links-admin-modal__dialog--review");
+  dialog.tabIndex = -1;
   overlay.classList.add("links-review-sheet");
 
   const placeName = document.createElement("p");
@@ -456,6 +474,12 @@ export function createReviewSheet(): ReviewSheetHandle {
     cb?.();
   }
 
+  function resetScroll(): void {
+    overlay.scrollTop = 0;
+    dialog.scrollTop = 0;
+    form.scrollTop = 0;
+  }
+
   function open(opts: ReviewSheetOpenOpts): void {
     if (overlay.hidden) previouslyFocused = document.activeElement as HTMLElement | null;
     onSaveCb = opts.onSave;
@@ -466,7 +490,13 @@ export function createReviewSheet(): ReviewSheetHandle {
     for (const control of controls) control.set(opts.initial);
     overlay.hidden = false;
     syncBodyScreenLock();
-    controls.map((c) => c.focusTarget?.() ?? null).find(Boolean)?.focus({ preventScroll: true });
+    resetScroll();
+    // Focus the dialog (not a field): no keyboard pops up and nothing scrolls into view.
+    dialog.focus({ preventScroll: true });
+    // Layout may settle after unhiding; make sure the top is what the user sees.
+    requestAnimationFrame(() => {
+      if (!overlay.hidden) resetScroll();
+    });
   }
 
   form.addEventListener("submit", (e) => {
