@@ -29,6 +29,10 @@ jobs:
           node-version: "20"
           cache: npm
       - run: npm ci
+      - name: Verify asset cache-bust stamps match the committed files
+        run: |
+          node scripts/stamp-assets.mjs
+          git diff --exit-code p/a8f3k2/index.html || { echo "::error file=p/a8f3k2/index.html::Asset ?v= stamps are stale. Run npm run build and commit p/a8f3k2/index.html"; exit 1; }
       - name: Build app.js
         env:
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
