@@ -76,6 +76,43 @@ describe("createDeckScreen category art", () => {
     );
   });
 
+  it("uses SVG icons (no text glyphs) on the control buttons", () => {
+    const deck = createDeckScreen({
+      onWant: vi.fn(),
+      onSkip: vi.fn(),
+      onMarkDone: vi.fn(),
+      onWantAgain: vi.fn(),
+      onClose: vi.fn(),
+    });
+    document.body.appendChild(deck.element);
+    deck.open([row()], "wishlist");
+
+    const icons = [...deck.element.querySelectorAll(".links-deck-screen__btn-icon")];
+    expect(icons).toHaveLength(3);
+    for (const icon of icons) {
+      expect(icon.querySelector("svg")).toBeTruthy();
+      expect(icon.textContent).toBe("");
+    }
+  });
+
+  it("shows the friendly title when the label is the bare domain", () => {
+    const deck = createDeckScreen({
+      onWant: vi.fn(),
+      onSkip: vi.fn(),
+      onMarkDone: vi.fn(),
+      onWantAgain: vi.fn(),
+      onClose: vi.fn(),
+    });
+    document.body.appendChild(deck.element);
+    deck.open(
+      [row({ label: "google.com", url: "https://www.google.com/maps/place/Praia+do+Exemplo/" })],
+      "wishlist"
+    );
+    expect(deck.element.querySelector(".links-deck-screen__name")?.textContent).toBe(
+      "Praia do Exemplo"
+    );
+  });
+
   it("uses the same Voltar chrome as Detalhes", () => {
     const onClose = vi.fn();
     const deck = createDeckScreen({

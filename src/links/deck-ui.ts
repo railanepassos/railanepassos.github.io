@@ -7,6 +7,8 @@ import {
 import { categoryBackdropSrc, categoryCardClass } from "./card-theme";
 import { linksForDeck, skipFront, type DeckTab } from "./deck-queue";
 import { syncBodyScreenLock } from "./screen-lock";
+import { displayTitle } from "./feed";
+import { uiIcon } from "./ui-icons";
 import {
   prefersDeckMotion,
   waitForMotion,
@@ -57,7 +59,9 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
   closeBtn.className = "links-admin-screen__back";
-  closeBtn.textContent = "Voltar";
+  const closeText = document.createElement("span");
+  closeText.textContent = "Voltar";
+  closeBtn.append(uiIcon("back", 22), closeText);
 
   const title = document.createElement("h2");
   title.id = "links-deck-title";
@@ -145,7 +149,7 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
   skipBtn.className = "links-deck-screen__btn links-deck-screen__btn--skip";
   const skipIcon = document.createElement("span");
   skipIcon.className = "links-deck-screen__btn-icon";
-  skipIcon.textContent = "✕";
+  skipIcon.appendChild(uiIcon("close", 26));
   const skipCaption = document.createElement("span");
   skipCaption.className = "links-deck-screen__btn-caption";
   skipCaption.textContent = "Agora não";
@@ -157,7 +161,7 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
   doneBtn.className = "links-deck-screen__btn links-deck-screen__btn--done";
   const doneIcon = document.createElement("span");
   doneIcon.className = "links-deck-screen__btn-icon";
-  doneIcon.textContent = "✓";
+  doneIcon.appendChild(uiIcon("check", 26));
   const doneCaption = document.createElement("span");
   doneCaption.className = "links-deck-screen__btn-caption";
   doneCaption.textContent = "Já fiz";
@@ -169,7 +173,7 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
   wantBtn.className = "links-deck-screen__btn links-deck-screen__btn--want";
   const wantIcon = document.createElement("span");
   wantIcon.className = "links-deck-screen__btn-icon";
-  wantIcon.textContent = "♥";
+  wantIcon.appendChild(uiIcon("heart", 26));
   const wantCaption = document.createElement("span");
   wantCaption.className = "links-deck-screen__btn-caption";
   wantCaption.textContent = "Quero";
@@ -316,7 +320,7 @@ export function createDeckScreen(handlers: DeckHandlers): DeckHandle {
 
     const name = document.createElement("h3");
     name.className = "links-deck-screen__name";
-    name.textContent = link.label;
+    name.textContent = displayTitle(link);
 
     const blurb = document.createElement("p");
     blurb.className = "links-deck-screen__blurb";
