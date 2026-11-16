@@ -55,14 +55,14 @@ test.describe("source post link", () => {
     await sheet.locator("details.links-admin-form__more").getByText("Mais detalhes").click();
 
     const source = sheet.getByLabel("Link do post original");
-    await source.fill("http://example.com/post/1");
-    await expect(sheet.getByText("precisa ser uma URL https válida")).toBeVisible();
+    await source.fill("not a url");
+    await expect(sheet.getByText("inválido")).toBeVisible();
     await sheet.getByRole("button", { name: "Salvar" }).click();
     await page.waitForTimeout(200);
     expect(writes.created).toBeNull();
 
     await source.fill("https://example.com/post/1");
-    await expect(sheet.getByText("precisa ser uma URL https válida")).toBeHidden();
+    await expect(sheet.getByText("inválido")).toBeHidden();
     await sheet.getByRole("button", { name: "Salvar" }).click();
     await expect.poll(() => writes.created).not.toBeNull();
     expect(writes.created).toMatchObject({

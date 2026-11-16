@@ -13,6 +13,7 @@ import {
 import { LESSON_MAX, MAX_LESSONS } from "./lessons";
 import { moveItem } from "./poses";
 import { resetPageZoom } from "./viewport-zoom";
+import { normalizeUrlInput, normalizeUrlOnBlur } from "./validate";
 
 /**
  * "Como foi" bottom sheet: opened after marking a place as done (skippable) and
@@ -371,6 +372,7 @@ function createMemoryUrlControl(): ReviewControl {
     else input.setAttribute("aria-invalid", "true");
   }
   input.addEventListener("input", validate);
+  normalizeUrlOnBlur(input);
 
   field.append(label, input, hint, error);
   return {
@@ -380,7 +382,7 @@ function createMemoryUrlControl(): ReviewControl {
       validate();
     },
     read: (draft) => {
-      draft.memory_url = input.value;
+      draft.memory_url = normalizeUrlInput(input.value);
     },
   };
 }
@@ -426,7 +428,7 @@ export function createReviewSheet(): ReviewSheetHandle {
   error.hidden = true;
 
   const actions = document.createElement("div");
-  actions.className = "links-admin-form__actions links-admin-form__actions--sticky";
+  actions.className = "links-admin-form__actions links-admin-form__actions--flow";
 
   const saveBtn = document.createElement("button");
   saveBtn.type = "submit";

@@ -1,6 +1,6 @@
 import type { LinkRow } from "./links-repo";
 import { lessonsError, normalizeLessons, readLessons, storedLessonsError } from "./lessons";
-import { httpsUrlError, isOptionalHttpsUrl } from "./validate";
+import { httpsUrlError, isOptionalHttpsUrl, normalizeUrlInput } from "./validate";
 
 /**
  * "Como foi" (Phase 3): what the visit was like. Pure helpers shared by the
@@ -102,7 +102,7 @@ export type ReviewPatch = {
 
 export function reviewToPatch(values: ReviewValues): ReviewPatch {
   const impressions = values.impressions.trim();
-  const memoryUrl = values.memory_url.trim();
+  const memoryUrl = normalizeUrlInput(values.memory_url);
   return {
     rating: values.rating,
     want_again: values.want_again,
