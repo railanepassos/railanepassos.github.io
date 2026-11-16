@@ -41,9 +41,8 @@ import {
   formatRating,
   formatVisitDate,
   hasRating,
-  isValidRating,
   ratingLabel,
-  RATING_MAX,
+  ratingOutOf,
 } from "./review";
 import { createChipInput } from "./chip-input";
 import { MAX_TAGS, MAX_TAG_LENGTH, dedupeTags, normalizeTag, tagKey } from "./tags";
@@ -575,7 +574,7 @@ export function renderAdminCard(
     item.append(uiIcon(field.icon, 15), text);
     meta.appendChild(item);
   }
-  if (hasRating(link) && isValidRating(link.rating)) {
+  if (hasRating(link)) {
     const rated = document.createElement("span");
     rated.className = "feed-card__meta-item feed-card__meta-item--rating";
     rated.setAttribute("role", "img");
@@ -1952,7 +1951,7 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     memoryThumb.hidden = true;
   });
   const memoryAction = document.createElement("a");
-  memoryAction.className = "links-detail__map links-detail__memory-action";
+  memoryAction.className = "links-detail__action links-detail__memory-action";
   memoryAction.dataset.action = "open-memory";
   memoryAction.rel = "noopener noreferrer";
   memoryAction.target = "_blank";
@@ -1965,7 +1964,7 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   memoryWrap.append(memoryThumb, memoryAction);
   const reviewEdit = document.createElement("button");
   reviewEdit.type = "button";
-  reviewEdit.className = "links-detail__map links-detail__review-edit";
+  reviewEdit.className = "links-detail__action links-detail__review-edit";
   reviewEdit.dataset.action = "edit-review";
   const reviewEditText = document.createElement("span");
   reviewEditText.textContent = "Editar Como foi";
@@ -2164,9 +2163,9 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
 
     visitRow.row.hidden = !(isDone && link.completed_at && formatVisitDate(link.completed_at));
     visitRow.value.textContent = isDone ? formatVisitDate(link.completed_at) : "";
-    const rated = hasRating(link) && isValidRating(link.rating);
+    const rated = hasRating(link);
     ratingRow.row.hidden = !rated;
-    ratingRow.value.textContent = rated ? `${link.rating} de ${RATING_MAX}` : "";
+    ratingRow.value.textContent = rated ? ratingOutOf(link.rating) : "";
     const again = isDone && link.want_again;
     wantAgainRow.row.hidden = !again;
     wantAgainRow.value.textContent = again ? "Sim" : "";

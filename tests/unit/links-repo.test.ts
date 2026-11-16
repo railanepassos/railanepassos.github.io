@@ -335,6 +335,10 @@ describe("Phase 2 fields", () => {
       repo.updateLink("1", { lessons: Array.from({ length: 21 }, () => "x") })
     ).rejects.toThrow(/lessons/);
     await expect(repo.updateLink("1", { lessons: ["x".repeat(301)] })).rejects.toThrow(/lessons/);
+    await expect(repo.updateLink("1", { lessons: ["ok", "   "] })).rejects.toThrow(/lessons/);
+    await expect(
+      repo.createLink({ url: "https://example.com", label: "Museu", sort_order: 0, lessons: [""] })
+    ).rejects.toThrow(/lessons/);
     await expect(
       repo.updateLink("1", { impressions: "Gostei.\nCaro.", lessons: ["levar lanche"] })
     ).resolves.toBeUndefined();

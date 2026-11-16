@@ -27,6 +27,18 @@ export function lessonsError(drafts: readonly string[]): string | null {
   return null;
 }
 
+/**
+ * Strict check for items about to be stored: blank rows are rejected (the DB
+ * requires char_length >= 1). Drafts from the sheet use `lessonsError`, which
+ * tolerates blank rows because they are dropped on save.
+ */
+export function storedLessonsError(items: readonly string[]): string | null {
+  for (let i = 0; i < items.length; i++) {
+    if (items[i]!.trim() === "") return `Lição ${i + 1}: não pode ficar em branco.`;
+  }
+  return lessonsError(items);
+}
+
 /** Defensive read of the stored array: only non-blank strings survive. */
 export function readLessons(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];

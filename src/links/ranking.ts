@@ -9,8 +9,6 @@ import { isValidRating } from "./review";
  */
 
 export type DoneFilters = {
-  /** Keep only places rated at least this (unrated never pass). */
-  minRating?: number;
   /** Keep only places marked "Voltaria". */
   wantAgain?: boolean;
 };
@@ -42,12 +40,7 @@ export function rankDone(links: readonly LinkRow[]): LinkRow[] {
 
 export function filterDone(links: readonly LinkRow[], filters: DoneFilters): LinkRow[] {
   return links.filter((link) => {
-    if (filters.minRating !== undefined && !meetsMinRating(link, filters.minRating)) return false;
     if (filters.wantAgain && !link.want_again) return false;
     return true;
   });
-}
-
-export function rankedDone(links: readonly LinkRow[], filters: DoneFilters = {}): LinkRow[] {
-  return rankDone(filterDone(links, filters));
 }

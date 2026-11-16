@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterDone, meetsMinRating, rankDone, rankedDone } from "../../src/links/ranking";
+import { filterDone, meetsMinRating, rankDone } from "../../src/links/ranking";
 import type { LinkRow } from "../../src/links/links-repo";
 
 function done(id: string, rating: number | null, completed: string | null, want = false): LinkRow {
@@ -60,15 +60,8 @@ describe("filters", () => {
     expect(meetsMinRating(done("a", null, null), 1)).toBe(false);
   });
 
-  it("filters by minimum rating and by voltaria", () => {
-    expect(ids(filterDone(rows, { minRating: 3 }))).toEqual(["a", "b"]);
+  it("filters by voltaria", () => {
     expect(ids(filterDone(rows, { wantAgain: true }))).toEqual(["a", "c"]);
-    expect(ids(filterDone(rows, { minRating: 4, wantAgain: true }))).toEqual(["a"]);
     expect(ids(filterDone(rows, {}))).toEqual(["a", "b", "c"]);
-  });
-
-  it("rankedDone filters then ranks", () => {
-    expect(ids(rankedDone(rows, { wantAgain: true }))).toEqual(["a", "c"]);
-    expect(ids(rankedDone([rows[2]!, rows[1]!, rows[0]!], { minRating: 3 }))).toEqual(["a", "b"]);
   });
 });

@@ -3,6 +3,7 @@ import {
   LESSON_MAX,
   MAX_LESSONS,
   lessonsError,
+  storedLessonsError,
   normalizeLessons,
   readLessons,
 } from "../../src/links/lessons";
@@ -39,6 +40,19 @@ describe("lessonsError", () => {
 
   it("counts the trimmed length", () => {
     expect(lessonsError([` ${"x".repeat(300)} `])).toBeNull();
+  });
+});
+
+describe("storedLessonsError", () => {
+  it("rejects blank or whitespace-only items (the DB requires char_length >= 1)", () => {
+    expect(storedLessonsError(["ok", ""])).toMatch(/Lição 2/);
+    expect(storedLessonsError(["   "])).toMatch(/Lição 1/);
+  });
+
+  it("applies the same limits as the drafts check", () => {
+    expect(storedLessonsError(["levar lanche", "chegar cedo"])).toBeNull();
+    expect(storedLessonsError(Array.from({ length: 21 }, () => "x"))).toMatch(/20/);
+    expect(storedLessonsError(["x".repeat(301)])).toMatch(/300/);
   });
 });
 

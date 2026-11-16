@@ -63,6 +63,12 @@ describe("nota>=N token", () => {
     expect(matches({ ...place, rating: 3 }, parseQuery("#praia nota>=4"))).toBe(false);
   });
 
+  it("only matches places that are done: a wishlist item keeping an old rating does not", () => {
+    const q = parseQuery("nota>=4");
+    expect(matches(row({ status: "wishlist", rating: 5 }), q)).toBe(false);
+    expect(matches(row({ status: "done", rating: 5 }), q)).toBe(true);
+  });
+
   it("is case-insensitive and the strictest of several wins", () => {
     expect(parseQuery("NOTA>=2 nota>=4").minRating).toBe(4);
   });

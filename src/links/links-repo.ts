@@ -3,8 +3,7 @@ import { isHttpsUrl, isOptionalHttpsUrl } from "./validate";
 import { MORE_TEXT_FIELDS } from "./more-fields";
 import { poseDraftsFromRefs, poseRefsError, readPoseRefs, type PoseRef } from "./poses";
 import { MAX_TAGS, MAX_TAG_LENGTH } from "./tags";
-import { lessonsError } from "./lessons";
-import { REVIEW_LIMITS, isValidRating, normalizeRating } from "./review";
+import { normalizeRating, reviewColumnsError, type ReviewColumns } from "./review";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH } from "./people";
 
 export type LinkStatus = "wishlist" | "done";
@@ -35,14 +34,10 @@ export type LinkRow = {
   pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
-  rating?: number | null;
-  impressions?: string | null;
-  lessons?: string[] | null;
-  memory_url?: string | null;
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
-};
+} & ReviewColumns;
 
 export type CreateLinkInput = {
   url: string;
@@ -69,11 +64,7 @@ export type CreateLinkInput = {
   pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
-  rating?: number | null;
-  impressions?: string | null;
-  lessons?: string[] | null;
-  memory_url?: string | null;
-};
+} & ReviewColumns;
 
 export type UpdateLinkPatch = {
   url?: string;
@@ -100,11 +91,7 @@ export type UpdateLinkPatch = {
   pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
-  rating?: number | null;
-  impressions?: string | null;
-  lessons?: string[] | null;
-  memory_url?: string | null;
-};
+} & ReviewColumns;
 
 export function normalizeLinkRow(
   row: Partial<LinkRow> & Pick<LinkRow, "id" | "url" | "label">
@@ -161,11 +148,7 @@ function validateLinkFields(fields: {
   pose_refs?: PoseRef[] | null;
   tags?: string[] | null;
   people?: string[] | null;
-  rating?: number | null;
-  impressions?: string | null;
-  lessons?: string[] | null;
-  memory_url?: string | null;
-}): void {
+} & ReviewColumns): void {
   if (fields.url !== undefined) {
     if (!isHttpsUrl(fields.url)) {
       throw new Error("url must be a valid https URL");
@@ -231,25 +214,8 @@ function validateLinkFields(fields: {
     }
   }
 
-  if (fields.rating != null && !isValidRating(fields.rating)) {
-    throw new Error("rating must be an integer from 1 to 5");
-  }
-
-  if (fields.impressions != null && fields.impressions.length > REVIEW_LIMITS.impressionsMax) {
-    throw new Error(`impressions must not exceed ${REVIEW_LIMITS.impressionsMax} characters`);
-  }
-
-  if (fields.lessons != null) {
-    const problem = lessonsError(fields.lessons);
-    if (problem) throw new Error(`lessons invalid: ${problem}`);
-  }
-
-  if (!isOptionalHttpsUrl(fields.memory_url)) {
-    throw new Error("memory_url must be a valid https URL");
-  }
-  if (fields.memory_url != null && fields.memory_url.length > REVIEW_LIMITS.memoryUrlMax) {
-    throw new Error(`memory_url must not exceed ${REVIEW_LIMITS.memoryUrlMax} characters`);
-  }
+  const reviewProblem = reviewColumnsError(fields);
+  if (reviewProblem) throw new Error(reviewProblem);
 
   if (!isOptionalHttpsUrl(fields.source_url)) {
     throw new Error("source_url must be a valid https URL");

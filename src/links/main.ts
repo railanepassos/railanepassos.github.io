@@ -688,15 +688,11 @@ function bootDynamic(
     setShellVisible(true);
     const parsed = parseQuery(query);
     let sectionLinks = linksForSection(links, section).filter((l) => matches(l, parsed));
+    let doneToolbar: HTMLElement | null = null;
     if (section === "done") {
       sectionLinks = filterDone(sectionLinks, { wantAgain: doneWantAgain });
       if (doneRanking) sectionLinks = rankDone(sectionLinks);
-    }
-    const visible = filterLinksByCategory(sectionLinks, categoryFilter);
-    renderChrome(sectionLinks, visible.length);
-    const selected = viewModal.currentId();
-    if (section === "done") {
-      els.list.appendChild(
+      doneToolbar =
         renderDoneToolbar(
           { ranking: doneRanking, wantAgain: doneWantAgain, minRating: parsed.minRating },
           {
@@ -710,9 +706,12 @@ function bootDynamic(
             },
             onMinRating: (min) => setQuery(setMinRating(query, min)),
           }
-        )
-      );
+        );
     }
+    const visible = filterLinksByCategory(sectionLinks, categoryFilter);
+    renderChrome(sectionLinks, visible.length);
+    const selected = viewModal.currentId();
+    if (doneToolbar) els.list.appendChild(doneToolbar);
     const filterBar = renderFilterBar();
     if (filterBar) els.list.appendChild(filterBar);
     if (visible.length === 0) {

@@ -181,7 +181,9 @@ export function matches(link: LinkRow, query: ParsedQuery): boolean {
     const cost = costNumber(link.cost_text);
     if (cost === null || cost >= query.costMax) return false;
   }
-  if (query.minRating !== undefined && !meetsMinRating(link, query.minRating)) return false;
+  if (query.minRating !== undefined) {
+    if (link.status !== "done" || !meetsMinRating(link, query.minRating)) return false;
+  }
   if (query.terms.length === 0) return true;
   const text = haystack(link);
   return query.terms.every((t) => text.includes(t));

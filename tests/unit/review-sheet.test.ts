@@ -246,4 +246,40 @@ describe("createReviewSheet", () => {
     expect(err.hidden).toBe(true);
     expect(input.hasAttribute("aria-invalid")).toBe(false);
   });
+
+  describe("keyboard keeps the active field visible", () => {
+    function stubScroll() {
+      const spy = vi.fn();
+      (Element.prototype as unknown as { scrollIntoView: unknown }).scrollIntoView = spy;
+      return spy;
+    }
+
+    it("scrolls a focused text input or textarea to the center", () => {
+      const { sheet } = setup();
+      const spy = stubScroll();
+      const input = sheet.element.querySelector<HTMLInputElement>("input[type='url']")!;
+      input.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      const area = sheet.element.querySelector<HTMLTextAreaElement>("textarea")!;
+      area.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(spy).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
+    });
+
+    it("does not scroll for non-text targets", () => {
+      const { sheet, button } = setup();
+      const spy = stubScroll();
+      button("Salvar").dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it("uses instant scrolling when reduced motion is preferred", () => {
+      (window.matchMedia as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ matches: true });
+      const { sheet } = setup();
+      const spy = stubScroll();
+      sheet.element
+        .querySelector<HTMLTextAreaElement>("textarea")!
+        .dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      expect(spy).toHaveBeenCalledWith({ block: "center", behavior: "auto" });
+    });
+  });
 });

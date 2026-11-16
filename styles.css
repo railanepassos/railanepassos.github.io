@@ -1763,7 +1763,8 @@ body.links-screen-open {
   background: var(--app-line);
 }
 
-.links-detail__map {
+.links-detail__map,
+.links-detail__action {
   display: inline-flex;
   align-items: center;
   gap: 6px;

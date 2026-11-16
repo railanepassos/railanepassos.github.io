@@ -23,6 +23,15 @@ import { moveItem } from "./poses";
  * handling is shared and needs no change.
  */
 
+const TEXT_INPUT_TYPES = new Set(["text", "url", "search", "email", "tel"]);
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 type ReviewControl = {
   element: HTMLElement;
   /** Fills the control from the values the sheet was opened with. */
@@ -473,6 +482,15 @@ export function createReviewSheet(): ReviewSheetHandle {
     for (const control of controls) control.read(draft);
     setError("");
     void Promise.resolve(onSaveCb(draft)).catch(() => undefined);
+  });
+  form.addEventListener("focusin", (e) => {
+    const el = e.target;
+    const isText =
+      el instanceof HTMLTextAreaElement ||
+      (el instanceof HTMLInputElement && TEXT_INPUT_TYPES.has(el.type));
+    if (!isText || typeof el.scrollIntoView !== "function") return;
+    // Let the on-screen keyboard settle, then keep the field above it.
+    el.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
   });
   skipBtn.addEventListener("click", dismiss);
   backBtn.addEventListener("click", dismiss);
