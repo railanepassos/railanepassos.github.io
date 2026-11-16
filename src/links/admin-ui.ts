@@ -1,26 +1,22 @@
 import type { LinkRow, CreateLinkInput, UpdateLinkPatch } from "./links-repo";
-import { resolveIconSrc, inferIconPreset } from "./icons";
+import { inferIconPreset } from "./icons";
 import {
   CATEGORY_OPTIONS,
   inferCategory,
+  isCategory,
   resolveCategory,
   categoryLabel,
   type Category,
 } from "./category";
 import { deriveLabelFromUrl, isHttpsUrl } from "./validate";
 import { composeEditorEmail, EDITOR_EMAIL_DOMAIN } from "./editor-email";
-import {
-  ACTIONS_WIDTH_PX,
-  isTapGesture,
-  shouldAbortForScroll,
-  shouldStartSwipe,
-  snapSwipeOffset,
-} from "./swipe";
 import { buildSpinLabels } from "./pick-random";
 import { setScreenBusy } from "./skeleton";
 import { formatScheduleChip, formatScheduleLabel } from "./schedule";
-import { syncBodyScreenLock } from "./screen-lock";
-import { categoryBackdropSrc, categoryCardClass } from "./card-theme";
+import { isPanelMode, syncBodyScreenLock } from "./screen-lock";
+import { categoryBackdropSrc } from "./card-theme";
+import { displayTitle, linkDomain } from "./feed";
+import { uiIcon, type IconName } from "./ui-icons";
 
 /**
  * DOM building blocks for the authenticated admin experience:
@@ -42,14 +38,18 @@ type ScreenChrome = {
   backBtn: HTMLButtonElement;
 };
 
-/** Full-screen shell with Voltar header (modal on wide desktop via CSS). */
+/**
+ * Dialog shell. "screen" = full-screen page with a back chevron (login);
+ * "sheet" = bottom sheet on mobile / centered panel on desktop with a close X.
+ */
 function createScreenChrome(
   titleId: string,
   titleText: string,
-  role: "dialog" | "alertdialog"
+  role: "dialog" | "alertdialog",
+  variant: "screen" | "sheet" = "sheet"
 ): ScreenChrome {
   const overlay = document.createElement("div");
-  overlay.className = "links-admin-modal";
+  overlay.className = `links-admin-modal links-admin-modal--${variant}`;
   overlay.hidden = true;
 
   const dialog = document.createElement("div");
@@ -64,18 +64,143 @@ function createScreenChrome(
   const backBtn = document.createElement("button");
   backBtn.type = "button";
   backBtn.className = "links-admin-screen__back";
-  backBtn.textContent = "Voltar";
 
   const title = document.createElement("h2");
   title.className = "links-admin-modal__title links-admin-screen__title";
   title.id = titleId;
   title.textContent = titleText;
 
-  header.append(backBtn, title);
+  if (variant === "sheet") {
+    const grabber = document.createElement("span");
+    grabber.className = "links-admin-modal__grabber";
+    grabber.setAttribute("aria-hidden", "true");
+    dialog.appendChild(grabber);
+    backBtn.classList.add("links-admin-screen__back--close");
+    backBtn.setAttribute("aria-label", "Fechar");
+    backBtn.appendChild(uiIcon("close", 22));
+    header.append(title, backBtn);
+  } else {
+    const text = document.createElement("span");
+    text.textContent = "Voltar";
+    backBtn.append(uiIcon("back", 22), text);
+    header.append(backBtn, title);
+  }
   dialog.appendChild(header);
   overlay.appendChild(dialog);
 
   return { overlay, dialog, title, backBtn };
+}
+
+/** Icon-only button (aria-label required) built from the shared icon set. */
+function iconOnlyButton(
+  icon: IconName,
+  ariaLabel: string,
+  className: string,
+  size = 20
+): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = className;
+  btn.setAttribute("aria-label", ariaLabel);
+  btn.title = ariaLabel;
+  btn.appendChild(uiIcon(icon, size));
+  return btn;
+}
+
+// ---------------------------------------------------------------------------
+// "More options" popover menu (Editar / Excluir live here only).
+// ---------------------------------------------------------------------------
+
+export type MenuItem = {
+  label: string;
+  icon: IconName;
+  danger?: boolean;
+  onSelect: () => void;
+};
+
+let closeOpenMenu: (() => void) | null = null;
+
+function createMoreMenu(
+  items: MenuItem[],
+  buttonClass: string
+): { wrapper: HTMLElement; button: HTMLButtonElement; close: () => void } {
+  const wrapper = document.createElement("div");
+  wrapper.className = "links-menu";
+
+  const button = iconOnlyButton("more", "Mais opções", buttonClass, 22);
+  button.setAttribute("aria-haspopup", "menu");
+  button.setAttribute("aria-expanded", "false");
+
+  const menu = document.createElement("div");
+  menu.className = "links-menu__list";
+  menu.setAttribute("role", "menu");
+  menu.hidden = true;
+
+  for (const item of items) {
+    const entry = document.createElement("button");
+    entry.type = "button";
+    entry.className = "links-menu__item";
+    if (item.danger) entry.classList.add("links-menu__item--danger");
+    entry.setAttribute("role", "menuitem");
+    const text = document.createElement("span");
+    text.textContent = item.label;
+    entry.append(uiIcon(item.icon, 18), text);
+    entry.addEventListener("click", (e) => {
+      e.stopPropagation();
+      close();
+      item.onSelect();
+    });
+    menu.appendChild(entry);
+  }
+
+  function onOutside(e: Event): void {
+    if (!wrapper.contains(e.target as Node)) close();
+  }
+
+  function close(): void {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    button.setAttribute("aria-expanded", "false");
+    document.removeEventListener("pointerdown", onOutside, true);
+    if (closeOpenMenu === close) closeOpenMenu = null;
+  }
+
+  function open(): void {
+    closeOpenMenu?.();
+    menu.hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    document.addEventListener("pointerdown", onOutside, true);
+    closeOpenMenu = close;
+    (menu.querySelector("button") as HTMLButtonElement | null)?.focus();
+  }
+
+  button.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menu.hidden) open();
+    else close();
+  });
+  wrapper.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !menu.hidden) {
+      e.stopPropagation();
+      close();
+      button.focus();
+    }
+  });
+
+  wrapper.append(button, menu);
+  return { wrapper, button, close };
+}
+
+function shareLink(link: LinkRow): void {
+  const nav = navigator as Navigator & {
+    share?: (data: { title?: string; url?: string }) => Promise<void>;
+  };
+  if (typeof nav.share !== "function") return;
+  void nav.share({ title: displayTitle(link), url: link.url }).catch(() => undefined);
+}
+
+function canShare(): boolean {
+  return typeof (navigator as Navigator & { share?: unknown }).share === "function";
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +213,8 @@ export type LinkFormValues = {
   description: string;
   image_url: string;
   note: string;
+  /** Picked category; "" = infer from text (Automática). */
+  category: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -116,14 +243,15 @@ export type LoginModalHandle = {
 };
 
 export function createLoginModal(
-  onSubmit: (email: string, password: string) => void
+  onSubmit: (email: string, password: string, remember: boolean) => void
 ): LoginModalHandle {
   let previouslyFocused: HTMLElement | null = null;
 
   const { overlay, dialog, backBtn } = createScreenChrome(
     "links-login-title",
     "Entrar na lista",
-    "dialog"
+    "dialog",
+    "screen"
   );
 
   const intro = document.createElement("p");
@@ -161,6 +289,21 @@ export function createLoginModal(
   passwordField.input.autocomplete = "current-password";
   passwordField.input.required = true;
 
+  const rememberRow = document.createElement("label");
+  rememberRow.className = "links-admin-form__checkbox-field";
+  rememberRow.htmlFor = "links-login-remember";
+
+  const rememberInput = document.createElement("input");
+  rememberInput.type = "checkbox";
+  rememberInput.id = "links-login-remember";
+  rememberInput.className = "links-admin-form__checkbox";
+  rememberInput.defaultChecked = true;
+
+  const rememberText = document.createElement("span");
+  rememberText.textContent = "Manter conectado";
+
+  rememberRow.append(rememberInput, rememberText);
+
   const error = document.createElement("p");
   error.className = "links-admin-form__error";
   error.setAttribute("role", "alert");
@@ -175,7 +318,7 @@ export function createLoginModal(
   submitBtn.textContent = "Entrar";
 
   actions.append(submitBtn);
-  form.append(emailField.wrapper, passwordField.wrapper, error, actions);
+  form.append(emailField.wrapper, passwordField.wrapper, rememberRow, error, actions);
   dialog.append(intro, form);
 
   function close(): void {
@@ -207,7 +350,7 @@ export function createLoginModal(
       error.textContent = "Informe o usuário do e-mail.";
       return;
     }
-    onSubmit(email, passwordField.input.value);
+    onSubmit(email, passwordField.input.value, rememberInput.checked);
   });
 
   backBtn.addEventListener("click", close);
@@ -235,560 +378,157 @@ export function createLoginModal(
 }
 
 // ---------------------------------------------------------------------------
-// Toolbar (authenticated): icon actions — add / filter / sign out.
-// ---------------------------------------------------------------------------
-
-function strokeIcon(pathD: string | string[]): SVGSVGElement {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("width", "22");
-  svg.setAttribute("height", "22");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", "2");
-  svg.setAttribute("stroke-linecap", "round");
-  svg.setAttribute("stroke-linejoin", "round");
-  svg.setAttribute("aria-hidden", "true");
-  const parts = Array.isArray(pathD) ? pathD : [pathD];
-  for (const d of parts) {
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", d);
-    svg.appendChild(path);
-  }
-  return svg;
-}
-
-/** Plus — “nova experiência” (padrão Instagram / apps de lista). */
-function iconPlus(): SVGSVGElement {
-  return strokeIcon("M12 5v14M5 12h14");
-}
-
-/** Funil — filtrar. */
-function iconFilter(): SVGSVGElement {
-  return strokeIcon("M22 3H2l8 9.46V19l4 2v-8.54L22 3z");
-}
-
-/** Sair / logout. */
-function iconLogout(): SVGSVGElement {
-  return strokeIcon([
-    "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4",
-    "M16 17l5-5-5-5",
-    "M21 12H9",
-  ]);
-}
-
-/** Dados / shuffle — sorteio. */
-function iconShuffle(): SVGSVGElement {
-  return strokeIcon([
-    "M16 3h5v5",
-    "M4 20L21 3",
-    "M21 16v5h-5",
-    "M15 15l6 6",
-    "M4 4l5 5",
-  ]);
-}
-
-/** Cards / layers — Deck. */
-function iconDeck(): SVGSVGElement {
-  return strokeIcon([
-    "M2 7h16",
-    "M4 12h16",
-    "M6 17h14",
-  ]);
-}
-
-export function createToolbar(
-  onNew: () => void,
-  onSignOut: () => void,
-  onFilter: () => void,
-  onDraw: () => void,
-  onDeck: () => void,
-  activeCategories: readonly Category[] = []
-): HTMLElement {
-  const toolbar = document.createElement("div");
-  toolbar.className = "links-admin-toolbar";
-
-  const row = document.createElement("div");
-  row.className = "links-admin-toolbar__row";
-
-  const newBtn = document.createElement("button");
-  newBtn.type = "button";
-  newBtn.className =
-    "links-admin-button links-admin-button--primary links-admin-button--icon";
-  newBtn.setAttribute("aria-label", "Nova experiência");
-  newBtn.title = "Nova experiência";
-  newBtn.appendChild(iconPlus());
-  newBtn.addEventListener("click", onNew);
-
-  const filterBtn = document.createElement("button");
-  filterBtn.type = "button";
-  filterBtn.className =
-    "links-admin-button links-admin-button--ghost links-admin-button--icon links-admin-button--filter";
-  const filterLabel =
-    activeCategories.length > 0
-      ? `Filtrar por categoria (${activeCategories.length}): ${activeCategories
-          .map((c) => categoryLabel(c))
-          .join(", ")}`
-      : "Filtrar por categoria";
-  filterBtn.setAttribute("aria-label", filterLabel);
-  filterBtn.title = filterLabel;
-  if (activeCategories.length > 0) {
-    filterBtn.classList.add("links-admin-button--filter-active");
-  }
-  filterBtn.appendChild(iconFilter());
-  filterBtn.addEventListener("click", onFilter);
-
-  const drawBtn = document.createElement("button");
-  drawBtn.type = "button";
-  drawBtn.className =
-    "links-admin-button links-admin-button--ghost links-admin-button--icon";
-  drawBtn.setAttribute("aria-label", "Sortear experiência");
-  drawBtn.title = "Sortear experiência";
-  drawBtn.appendChild(iconShuffle());
-  drawBtn.addEventListener("click", onDraw);
-
-  const deckBtn = document.createElement("button");
-  deckBtn.type = "button";
-  deckBtn.className =
-    "links-admin-button links-admin-button--ghost links-admin-button--icon";
-  deckBtn.setAttribute("aria-label", "Abrir Deck");
-  deckBtn.title = "Deck";
-  deckBtn.appendChild(iconDeck());
-  deckBtn.addEventListener("click", onDeck);
-
-  const signOutBtn = document.createElement("button");
-  signOutBtn.type = "button";
-  signOutBtn.className =
-    "links-admin-button links-admin-button--ghost links-admin-button--icon";
-  signOutBtn.setAttribute("aria-label", "Sair");
-  signOutBtn.title = "Sair";
-  signOutBtn.appendChild(iconLogout());
-  signOutBtn.addEventListener("click", onSignOut);
-
-  row.append(newBtn, filterBtn, drawBtn, deckBtn, signOutBtn);
-
-  const tip = document.createElement("p");
-  tip.className = "links-admin-tip";
-  tip.textContent =
-    "Toque para ver · Deslize → editar · ← excluir · Filtrar · Sortear · Deck";
-
-  toolbar.append(row, tip);
-  return toolbar;
-}
-
-// ---------------------------------------------------------------------------
-// Admin card: tap to view, swipe → edit / ← delete.
+// Feed card: image first, short title, meta row, actions on the card.
+// Destructive actions live only in the ⋯ menu.
 // ---------------------------------------------------------------------------
 
 export type AdminCardCallbacks = {
   onView: (link: LinkRow) => void;
   onEdit: (link: LinkRow) => void;
   onDelete: (link: LinkRow) => void;
+  onMarkDone: (link: LinkRow) => void;
+  onSchedule: (link: LinkRow) => void;
 };
 
-let openSwipeContent: HTMLElement | null = null;
-let openSwipeOffset = 0;
+export type AdminCardOptions = {
+  selected?: boolean;
+};
 
-function setSwipeOffset(content: HTMLElement, offset: number): void {
-  content.style.transform = offset === 0 ? "" : `translateX(${offset}px)`;
-  content.classList.toggle("swipe-row__content--open", offset !== 0);
-}
-
-function closeOpenSwipe(): void {
-  if (!openSwipeContent) return;
-  setSwipeOffset(openSwipeContent, 0);
-  openSwipeContent = null;
-  openSwipeOffset = 0;
+function cardActionButton(
+  icon: IconName,
+  text: string,
+  action: string
+): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "feed-card__action";
+  btn.dataset.action = action;
+  const label = document.createElement("span");
+  label.className = "feed-card__action-text";
+  label.textContent = text;
+  btn.append(uiIcon(icon, 21), label);
+  return btn;
 }
 
 export function renderAdminCard(
   link: LinkRow,
-  cb: AdminCardCallbacks
+  cb: AdminCardCallbacks,
+  opts: AdminCardOptions = {}
 ): HTMLElement {
-  const row = document.createElement("div");
-  row.className = "swipe-row";
-  row.dataset.id = link.id;
-
-  const editActions = document.createElement("div");
-  editActions.className = "swipe-row__actions swipe-row__actions--edit";
-  editActions.setAttribute("aria-hidden", "true");
-
-  const editBtn = document.createElement("button");
-  editBtn.type = "button";
-  editBtn.className = "swipe-row__action swipe-row__action--edit";
-  editBtn.textContent = "Editar";
-  editBtn.setAttribute("aria-label", "Editar experiência");
-  editBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    closeOpenSwipe();
-    cb.onEdit(link);
-  });
-  editActions.append(editBtn);
-
-  const deleteActions = document.createElement("div");
-  deleteActions.className = "swipe-row__actions swipe-row__actions--delete";
-  deleteActions.setAttribute("aria-hidden", "true");
-
-  const deleteBtn = document.createElement("button");
-  deleteBtn.type = "button";
-  deleteBtn.className = "swipe-row__action swipe-row__action--delete";
-  deleteBtn.textContent = "Excluir";
-  deleteBtn.setAttribute("aria-label", "Excluir experiência");
-  deleteBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    closeOpenSwipe();
-    cb.onDelete(link);
-  });
-  deleteActions.append(deleteBtn);
-
-  const content = document.createElement("div");
-  content.className = "swipe-row__content link-card link-card--admin";
-  content.setAttribute("role", "button");
-  content.tabIndex = 0;
-  content.setAttribute("aria-label", `Ver ${link.label}`);
-
   const category = resolveCategory(link);
-  content.classList.add("link-card--themed", categoryCardClass(category));
+  const title = displayTitle(link);
 
-  const backdropSrc = categoryBackdropSrc(category, link.image_url);
-  if (backdropSrc) {
-    const bg = document.createElement("img");
-    bg.className = "link-card__backdrop";
-    bg.src = backdropSrc;
-    bg.alt = "";
-    bg.setAttribute("aria-hidden", "true");
-    content.appendChild(bg);
+  const card = document.createElement("article");
+  card.className = "feed-card";
+  card.dataset.id = link.id;
+  if (opts.selected) card.classList.add("feed-card--selected");
+  if (link.status === "done") card.classList.add("feed-card--done");
+
+  const media = document.createElement("div");
+  media.className = "feed-card__media";
+  const src = categoryBackdropSrc(category, link.image_url);
+  if (src) {
+    const img = document.createElement("img");
+    img.src = src;
+    img.alt = "";
+    img.loading = "lazy";
+    img.decoding = "async";
+    media.appendChild(img);
   }
+  const badge = document.createElement("span");
+  badge.className = "feed-card__badge";
+  badge.textContent = categoryLabel(category);
+  media.appendChild(badge);
 
-  const scrim = document.createElement("span");
-  scrim.className = "link-card__scrim";
-  scrim.setAttribute("aria-hidden", "true");
-  content.appendChild(scrim);
+  const body = document.createElement("div");
+  body.className = "feed-card__body";
 
-  const img = document.createElement("img");
-  img.className = "link-card__icon";
-  img.src = resolveIconSrc(link);
-  img.alt = "";
-  img.width = 24;
-  img.height = 24;
-  content.appendChild(img);
+  const heading = document.createElement("h3");
+  heading.className = "feed-card__heading";
+  const open = document.createElement("button");
+  open.type = "button";
+  open.className = "feed-card__open";
+  const titleEl = document.createElement("span");
+  titleEl.className = "feed-card__title";
+  titleEl.textContent = title;
+  open.appendChild(titleEl);
+  heading.appendChild(open);
 
-  const textEl = document.createElement("span");
-  textEl.className = "link-card__text";
-
-  const label = document.createElement("span");
-  label.className = "link-card__label";
-  label.textContent = link.label;
-  textEl.appendChild(label);
-
-  const cat = document.createElement("span");
-  cat.className = "link-card__category";
-  cat.textContent = categoryLabel(resolveCategory(link));
-  textEl.appendChild(cat);
-
+  const meta = document.createElement("p");
+  meta.className = "feed-card__meta";
+  const domain = linkDomain(link.url);
+  if (domain) {
+    const where = document.createElement("span");
+    where.className = "feed-card__meta-item";
+    const text = document.createElement("span");
+    text.textContent = domain;
+    where.append(uiIcon("link", 15), text);
+    meta.appendChild(where);
+  }
   if (link.scheduled_start && link.scheduled_end) {
-    const schedule = document.createElement("span");
-    schedule.className = "link-card__schedule";
-    schedule.textContent = formatScheduleChip(
-      link.scheduled_start,
-      link.scheduled_end
-    );
-    textEl.appendChild(schedule);
+    const when = document.createElement("span");
+    when.className = "feed-card__meta-item feed-card__meta-item--schedule";
+    const text = document.createElement("span");
+    text.className = "feed-card__schedule";
+    text.textContent = formatScheduleChip(link.scheduled_start, link.scheduled_end);
+    when.append(uiIcon("calendar", 15), text);
+    meta.appendChild(when);
   }
-
-  if (link.description && link.description.length > 0) {
-    const desc = document.createElement("span");
-    desc.className = "link-card__desc";
-    desc.textContent = link.description;
-    textEl.appendChild(desc);
-  }
-  content.appendChild(textEl);
-
-  const keyActions = document.createElement("div");
-  keyActions.className = "link-card__actions";
-
-  const deleteKeyBtn = iconButton("Excluir", "Excluir experiência");
-  deleteKeyBtn.classList.add("link-card__action--delete");
-  deleteKeyBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    cb.onDelete(link);
-  });
-
-  keyActions.append(deleteKeyBtn);
-  content.appendChild(keyActions);
-
-  content.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter" || ev.key === " ") {
-      ev.preventDefault();
-      closeOpenSwipe();
-      cb.onView(link);
-    }
-  });
-
-  wireSwipe(content, link, cb);
-
-  row.append(editActions, deleteActions, content);
-  return row;
-}
-
-function wireSwipe(
-  content: HTMLElement,
-  link: LinkRow,
-  cb: AdminCardCallbacks
-): void {
-  let pointerId: number | null = null;
-  let startX = 0;
-  let startY = 0;
-  let baseOffset = 0;
-  let offset = 0;
-  let mode: "undecided" | "swipe" | "dead" = "undecided";
-  let lastX = 0;
-  let lastT = 0;
-  let velocityX = 0;
-  let movedPx = 0;
-  let suppressClick = false;
-
-  function beginSwipe(ev: PointerEvent, dx: number): void {
-    mode = "swipe";
-    suppressClick = true;
-    content.style.touchAction = "none";
-    try {
-      content.setPointerCapture(ev.pointerId);
-    } catch {
-      /* ignore */
-    }
-    if (openSwipeContent && openSwipeContent !== content) {
-      closeOpenSwipe();
-      baseOffset = 0;
-    }
-    offset = Math.min(
-      ACTIONS_WIDTH_PX,
-      Math.max(-ACTIONS_WIDTH_PX, baseOffset + dx)
-    );
-    setSwipeOffset(content, offset);
-  }
-
-  content.addEventListener("pointerdown", (ev) => {
-    if (ev.button !== 0) return;
-    if ((ev.target as HTMLElement).closest(".link-card__actions")) return;
-
-    pointerId = ev.pointerId;
-    startX = ev.clientX;
-    startY = ev.clientY;
-    lastX = startX;
-    lastT = performance.now();
-    velocityX = 0;
-    movedPx = 0;
-    mode = "undecided";
-    suppressClick = false;
-    baseOffset = openSwipeContent === content ? openSwipeOffset : 0;
-    offset = baseOffset;
-    content.classList.add("swipe-row__content--dragging");
-    window.getSelection()?.removeAllRanges();
-  });
-
-  const onPointerMove = (ev: PointerEvent): void => {
-    if (pointerId !== ev.pointerId) return;
-    const dx = ev.clientX - startX;
-    const dy = ev.clientY - startY;
-    movedPx = Math.hypot(dx, dy);
-    const now = performance.now();
-    const dt = Math.max(1, now - lastT);
-    velocityX = (ev.clientX - lastX) / dt;
-    lastX = ev.clientX;
-    lastT = now;
-
-    if (mode === "undecided") {
-      if (shouldStartSwipe(dx, dy)) {
-        beginSwipe(ev, dx);
-        ev.preventDefault();
-        return;
-      }
-      if (shouldAbortForScroll(dx, dy)) {
-        mode = "dead";
-        suppressClick = true;
-        content.classList.remove("swipe-row__content--dragging");
-        pointerId = null;
-        return;
-      }
-    }
-
-    if (mode === "swipe") {
-      offset = Math.min(
-        ACTIONS_WIDTH_PX,
-        Math.max(-ACTIONS_WIDTH_PX, baseOffset + dx)
-      );
-      setSwipeOffset(content, offset);
-      ev.preventDefault();
-    }
-  };
-
-  content.addEventListener("pointermove", onPointerMove, { passive: false });
-
-  function finish(ev: PointerEvent): void {
-    if (pointerId !== ev.pointerId) return;
-    content.classList.remove("swipe-row__content--dragging");
-    try {
-      content.releasePointerCapture(ev.pointerId);
-    } catch {
-      /* ignore */
-    }
-    pointerId = null;
-
-    if (mode === "swipe") {
-      const snapped = snapSwipeOffset(offset, ACTIONS_WIDTH_PX, velocityX);
-      setSwipeOffset(content, snapped);
-      if (snapped !== 0) {
-        openSwipeContent = content;
-        openSwipeOffset = snapped;
-      } else {
-        openSwipeContent = null;
-        openSwipeOffset = 0;
-      }
-      content.style.touchAction = "";
-    } else if (mode === "undecided" && isTapGesture(movedPx)) {
-      if (openSwipeContent === content) {
-        closeOpenSwipe();
-      } else {
-        closeOpenSwipe();
-        cb.onView(link);
-      }
-    }
-    mode = "undecided";
-    content.style.touchAction = "";
-  }
-
-  content.addEventListener("pointerup", finish);
-  content.addEventListener("pointercancel", (ev) => {
-    suppressClick = true;
-    finish(ev);
-  });
-
-  content.addEventListener("click", (ev) => {
-    if (suppressClick) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      suppressClick = false;
-    }
-  });
-
-  content.addEventListener("contextmenu", (ev) => {
-    if (mode === "swipe") ev.preventDefault();
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Category filter sheet (mobile-first)
-// ---------------------------------------------------------------------------
-
-export type CategoryFilterHandle = {
-  element: HTMLElement;
-  open: (current: readonly Category[]) => void;
-  close: () => void;
-};
-
-export function createCategoryFilterSheet(
-  onApply: (categories: Category[]) => void
-): CategoryFilterHandle {
-  const overlay = document.createElement("div");
-  overlay.className = "links-filter-sheet";
-  overlay.hidden = true;
-
-  const backdrop = document.createElement("button");
-  backdrop.type = "button";
-  backdrop.className = "links-filter-sheet__backdrop";
-  backdrop.setAttribute("aria-label", "Fechar filtro");
-
-  const panel = document.createElement("div");
-  panel.className = "links-filter-sheet__panel";
-  panel.setAttribute("role", "dialog");
-  panel.setAttribute("aria-modal", "true");
-  panel.setAttribute("aria-labelledby", "links-filter-title");
-
-  const title = document.createElement("h2");
-  title.className = "links-filter-sheet__title";
-  title.id = "links-filter-title";
-  title.textContent = "Filtrar por categoria";
-
-  const hint = document.createElement("p");
-  hint.className = "links-filter-sheet__hint";
-  hint.textContent = "Selecione uma ou mais. Vazio = todas.";
-
-  const list = document.createElement("div");
-  list.className = "links-filter-sheet__list";
+  body.append(heading, meta);
 
   const actions = document.createElement("div");
-  actions.className = "links-filter-sheet__actions";
+  actions.className = "feed-card__actions";
 
-  const clearBtn = document.createElement("button");
-  clearBtn.type = "button";
-  clearBtn.className = "links-admin-button links-admin-button--ghost";
-  clearBtn.textContent = "Limpar";
-
-  const applyBtn = document.createElement("button");
-  applyBtn.type = "button";
-  applyBtn.className =
-    "links-admin-button links-admin-button--primary links-admin-button--block";
-  applyBtn.textContent = "Aplicar";
-
-  actions.append(clearBtn, applyBtn);
-
-  let draft = new Set<Category>();
-
-  function renderOptions(): void {
-    list.replaceChildren();
-    for (const value of CATEGORY_OPTIONS) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "links-filter-sheet__option";
-      btn.setAttribute("aria-pressed", draft.has(value) ? "true" : "false");
-      if (draft.has(value)) {
-        btn.classList.add("links-filter-sheet__option--active");
-      }
-      btn.textContent = categoryLabel(value);
-      btn.addEventListener("click", () => {
-        if (draft.has(value)) draft.delete(value);
-        else draft.add(value);
-        renderOptions();
-      });
-      list.appendChild(btn);
-    }
-  }
-
-  function close(): void {
-    overlay.hidden = true;
-    syncBodyScreenLock();
-  }
-
-  function open(current: readonly Category[]): void {
-    draft = new Set(current);
-    renderOptions();
-    overlay.hidden = false;
-    syncBodyScreenLock();
-  }
-
-  clearBtn.addEventListener("click", () => {
-    draft = new Set();
-    renderOptions();
-  });
-
-  applyBtn.addEventListener("click", () => {
-    const selected = CATEGORY_OPTIONS.filter((c) => draft.has(c));
-    close();
-    onApply(selected);
-  });
-
-  panel.append(title, hint, list, actions);
-  overlay.append(backdrop, panel);
-  backdrop.addEventListener("click", close);
-  overlay.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
+  if (link.status !== "done") {
+    const doneBtn = cardActionButton("check", "Feito", "done");
+    doneBtn.setAttribute("aria-label", `Marcar ${title} como feito`);
+    doneBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      close();
-    }
+      cb.onMarkDone(link);
+    });
+    actions.appendChild(doneBtn);
+  }
+
+  const scheduleBtn = cardActionButton("calendar", "Agendar", "schedule");
+  scheduleBtn.setAttribute("aria-label", `Agendar ${title}`);
+  scheduleBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    cb.onSchedule(link);
+  });
+  actions.appendChild(scheduleBtn);
+
+  const spacer = document.createElement("span");
+  spacer.className = "feed-card__spacer";
+  actions.appendChild(spacer);
+
+  if (canShare()) {
+    const share = iconOnlyButton("share", "Compartilhar", "feed-card__icon-btn", 21);
+    share.addEventListener("click", (e) => {
+      e.stopPropagation();
+      shareLink(link);
+    });
+    actions.appendChild(share);
+  }
+
+  const more = createMoreMenu(
+    [
+      { label: "Editar", icon: "edit", onSelect: () => cb.onEdit(link) },
+      { label: "Excluir", icon: "trash", danger: true, onSelect: () => cb.onDelete(link) },
+    ],
+    "feed-card__icon-btn"
+  );
+  actions.appendChild(more.wrapper);
+
+  open.addEventListener("click", () => cb.onView(link));
+  // Whole image/body area opens the detail too (mouse/touch convenience).
+  media.addEventListener("click", () => cb.onView(link));
+  body.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest(".feed-card__open")) return;
+    cb.onView(link);
   });
 
-  return { element: overlay, open, close };
+  card.append(media, body, actions);
+  return card;
 }
 
 // ---------------------------------------------------------------------------
@@ -1130,6 +870,52 @@ export function createLinkFormModal(
   labelField.input.maxLength = 200;
   const updateLabelCounter = attachCharCounter(labelField.wrapper, labelField.input, 200);
 
+  // Preview row: thumbnail (photo or category stock image) beside the name.
+  const preview = document.createElement("div");
+  preview.className = "links-admin-form__preview";
+  const previewImg = document.createElement("img");
+  previewImg.className = "links-admin-form__preview-img";
+  previewImg.alt = "";
+  labelField.wrapper.classList.add("links-admin-form__field--grow");
+  preview.append(previewImg, labelField.wrapper);
+
+  // Category: one-tap chips. "" = Automática (inferred on save).
+  let pickedCategory = "";
+  const categoryField = document.createElement("div");
+  categoryField.className = "links-admin-form__field";
+  const categoryLabelEl = document.createElement("span");
+  categoryLabelEl.className = "links-admin-form__label";
+  categoryLabelEl.id = "links-form-category-label";
+  categoryLabelEl.textContent = "Categoria";
+  const categoryChips = document.createElement("div");
+  categoryChips.className = "links-chips links-chips--wrap";
+  categoryChips.setAttribute("role", "group");
+  categoryChips.setAttribute("aria-labelledby", "links-form-category-label");
+  const chipButtons: HTMLButtonElement[] = [];
+  for (const value of ["", ...CATEGORY_OPTIONS]) {
+    const chipBtn = document.createElement("button");
+    chipBtn.type = "button";
+    chipBtn.className = "links-chip";
+    chipBtn.dataset.category = value;
+    chipBtn.textContent = value === "" ? "Automática" : categoryLabel(value);
+    chipBtn.addEventListener("click", () => {
+      pickedCategory = value;
+      syncCategoryChips();
+      syncPreview();
+    });
+    chipButtons.push(chipBtn);
+    categoryChips.appendChild(chipBtn);
+  }
+  categoryField.append(categoryLabelEl, categoryChips);
+
+  function syncCategoryChips(): void {
+    for (const btn of chipButtons) {
+      const on = btn.dataset.category === pickedCategory;
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.classList.toggle("links-chip--active", on);
+    }
+  }
+
   const descField = labelledTextarea(
     "links-form-desc",
     "Nota da lista (opcional) — por que salvar, região, época…"
@@ -1153,6 +939,24 @@ export function createLinkFormModal(
   memoryField.input.maxLength = 500;
   const updateMemoryCounter = attachCharCounter(memoryField.wrapper, memoryField.input, 500);
 
+  function syncPreview(): void {
+    const category = isCategory(pickedCategory)
+      ? pickedCategory
+      : inferCategory({
+          label: labelField.input.value,
+          description: descField.input.value,
+          url: urlField.input.value,
+        });
+    const image = imageField.input.value.trim();
+    const src = categoryBackdropSrc(category, image);
+    if (src) previewImg.src = src;
+    else previewImg.removeAttribute("src");
+  }
+  for (const input of [urlField.input, labelField.input, imageField.input]) {
+    input.addEventListener("input", syncPreview);
+  }
+  descField.input.addEventListener("input", syncPreview);
+
   const error = document.createElement("p");
   error.className = "links-admin-form__error";
   error.setAttribute("role", "alert");
@@ -1165,6 +969,7 @@ export function createLinkFormModal(
     } else {
       clearError();
     }
+    syncPreview();
   });
 
   const actions = document.createElement("div");
@@ -1178,7 +983,8 @@ export function createLinkFormModal(
   actions.append(submitBtn);
   form.append(
     urlField.wrapper,
-    labelField.wrapper,
+    preview,
+    categoryField,
     descField.wrapper,
     imageField.wrapper,
     memoryField.wrapper,
@@ -1219,6 +1025,9 @@ export function createLinkFormModal(
     if (prefill?.url) {
       urlField.input.value = prefill.url;
     }
+    pickedCategory = "";
+    syncCategoryChips();
+    syncPreview();
     descField.syncHeight();
     updateLabelCounter();
     updateDescCounter();
@@ -1234,6 +1043,9 @@ export function createLinkFormModal(
     descField.input.value = link.description ?? "";
     imageField.input.value = link.image_url ?? "";
     memoryField.input.value = link.note ?? "";
+    pickedCategory = link.category && isCategory(link.category) ? link.category : "";
+    syncCategoryChips();
+    syncPreview();
     descField.syncHeight();
     updateLabelCounter();
     updateDescCounter();
@@ -1250,6 +1062,7 @@ export function createLinkFormModal(
         description: descField.input.value.trim(),
         image_url: imageField.input.value.trim(),
         note: memoryField.input.value.trim(),
+        category: pickedCategory,
       },
       editingId
     );
@@ -1565,172 +1378,234 @@ export function createScheduleSheet(): ScheduleSheetHandle {
 }
 
 // ---------------------------------------------------------------------------
-// View experience (read-only) → Editar opens the form.
+// Detail view: hero image, chips, info rows, sticky action bar.
+// Full screen on mobile; right side panel on wide desktop (CSS + screen-lock).
 // ---------------------------------------------------------------------------
 
 export type ViewModalCallbacks = {
   onEdit: (link: LinkRow) => void;
   onSchedule: (link: LinkRow) => void;
   onMarkDone: (link: LinkRow) => void;
+  onDelete: (link: LinkRow) => void;
+  /** Fired with the open link id, or null when the detail closes. */
+  onOpenChange?: (id: string | null) => void;
 };
 
 export type ViewModalHandle = {
   element: HTMLElement;
   open: (link: LinkRow) => void;
   close: () => void;
+  currentId: () => string | null;
 };
+
+function infoRow(icon: IconName, term: string): { row: HTMLElement; value: HTMLElement } {
+  const row = document.createElement("div");
+  row.className = "links-detail__row";
+  const dt = document.createElement("dt");
+  dt.className = "links-detail__term";
+  dt.textContent = term;
+  const dd = document.createElement("dd");
+  dd.className = "links-detail__value";
+  const text = document.createElement("div");
+  text.append(dt, dd);
+  row.append(uiIcon(icon, 20), text);
+  return { row, value: dd };
+}
 
 export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   let current: LinkRow | null = null;
+  let previouslyFocused: HTMLElement | null = null;
 
-  const { overlay, dialog, title, backBtn } = createScreenChrome(
-    "links-view-title",
-    "Experiência",
-    "dialog"
+  const overlay = document.createElement("div");
+  overlay.className = "links-admin-modal links-detail";
+  overlay.hidden = true;
+
+  const dialog = document.createElement("div");
+  dialog.className = "links-admin-modal__dialog links-detail__dialog";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-labelledby", "links-view-title");
+
+  const hero = document.createElement("div");
+  hero.className = "links-detail__hero";
+  const heroImg = document.createElement("img");
+  heroImg.alt = "";
+  hero.appendChild(heroImg);
+
+  const heroBar = document.createElement("div");
+  heroBar.className = "links-detail__hero-bar";
+  const backBtn = iconOnlyButton("back", "Voltar", "links-detail__float-btn", 22);
+  const heroSpacer = document.createElement("span");
+  heroSpacer.className = "links-detail__spacer";
+  heroBar.append(backBtn, heroSpacer);
+  if (canShare()) {
+    const share = iconOnlyButton("share", "Compartilhar", "links-detail__float-btn");
+    share.addEventListener("click", () => {
+      if (current) shareLink(current);
+    });
+    heroBar.appendChild(share);
+  }
+  const more = createMoreMenu(
+    [
+      {
+        label: "Editar",
+        icon: "edit",
+        onSelect: () => {
+          if (!current) return;
+          const link = current;
+          close();
+          cb.onEdit(link);
+        },
+      },
+      {
+        label: "Excluir",
+        icon: "trash",
+        danger: true,
+        onSelect: () => {
+          if (!current) return;
+          const link = current;
+          close();
+          cb.onDelete(link);
+        },
+      },
+    ],
+    "links-detail__float-btn"
   );
+  heroBar.appendChild(more.wrapper);
+  hero.appendChild(heroBar);
 
   const body = document.createElement("div");
-  body.className = "links-admin-view links-admin-modal__body";
+  body.className = "links-detail__body";
 
-  const nameLabel = document.createElement("p");
-  nameLabel.className = "links-admin-view__label";
-  nameLabel.textContent = "Nome";
+  const chips = document.createElement("div");
+  chips.className = "links-detail__chips";
 
-  const nameValue = document.createElement("p");
-  nameValue.className = "links-admin-view__value";
+  const title = document.createElement("h2");
+  title.className = "links-detail__title";
+  title.id = "links-view-title";
 
-  const categoryLabelEl = document.createElement("p");
-  categoryLabelEl.className = "links-admin-view__label";
-  categoryLabelEl.textContent = "Categoria";
+  const info = document.createElement("dl");
+  info.className = "links-detail__info";
 
-  const categoryValue = document.createElement("p");
-  categoryValue.className = "links-admin-view__value";
+  const linkRow = infoRow("link", "Link");
+  const domainText = document.createElement("span");
+  domainText.className = "links-detail__domain";
+  const original = document.createElement("a");
+  original.className = "links-detail__original";
+  original.dataset.action = "open-original";
+  original.rel = "noopener noreferrer";
+  original.target = "_blank";
+  const originalText = document.createElement("span");
+  originalText.textContent = "Ver link original";
+  original.append(originalText, uiIcon("external", 16));
+  linkRow.value.append(domainText, original);
 
-  const noteBlock = document.createElement("div");
-  noteBlock.className = "links-admin-view__block";
+  const scheduleRow = infoRow("calendar", "Agendado");
+  const noteRow = infoRow("note", "Nota");
+  const memoryRow = infoRow("memory", "Memória");
+  info.append(scheduleRow.row, noteRow.row, memoryRow.row, linkRow.row);
 
-  const noteLabel = document.createElement("p");
-  noteLabel.className = "links-admin-view__label";
-  noteLabel.textContent = "Nota";
+  body.append(chips, title, info);
 
-  const noteValue = document.createElement("p");
-  noteValue.className = "links-admin-view__value";
+  const bar = document.createElement("div");
+  bar.className = "links-detail__bar";
 
-  noteBlock.append(noteLabel, noteValue);
+  const doneBtn = iconOnlyButton("check", "Marcar como feito", "links-detail__bar-btn", 22);
+  const openLink = document.createElement("a");
+  openLink.className = "links-detail__bar-btn";
+  openLink.rel = "noopener noreferrer";
+  openLink.target = "_blank";
+  openLink.setAttribute("aria-label", "Abrir link original");
+  openLink.title = "Abrir link original";
+  openLink.appendChild(uiIcon("external", 22));
 
-  const linkLabel = document.createElement("p");
-  linkLabel.className = "links-admin-view__label";
-  linkLabel.textContent = "Link";
+  const primary = document.createElement("button");
+  primary.type = "button";
+  primary.className = "links-detail__primary";
+  const primaryText = document.createElement("span");
+  primary.append(uiIcon("calendar", 20), primaryText);
 
-  const linkAnchor = document.createElement("a");
-  linkAnchor.className = "links-admin-view__link";
-  linkAnchor.rel = "noopener noreferrer";
-  linkAnchor.target = "_blank";
+  bar.append(doneBtn, openLink, primary);
+  dialog.append(hero, body, bar);
+  overlay.appendChild(dialog);
 
-  const scheduleBlock = document.createElement("div");
-  scheduleBlock.className = "links-admin-view__block";
-
-  const scheduleLabel = document.createElement("p");
-  scheduleLabel.className = "links-admin-view__label";
-  scheduleLabel.textContent = "Agendado";
-
-  const scheduleValue = document.createElement("p");
-  scheduleValue.className = "links-admin-view__value";
-
-  scheduleBlock.append(scheduleLabel, scheduleValue);
-
-  body.append(
-    nameLabel,
-    nameValue,
-    categoryLabelEl,
-    categoryValue,
-    scheduleBlock,
-    noteBlock,
-    linkLabel,
-    linkAnchor
-  );
-
-  const actions = document.createElement("div");
-  actions.className =
-    "links-admin-form__actions links-admin-form__actions--sticky";
-
-  const scheduleBtn = document.createElement("button");
-  scheduleBtn.type = "button";
-  scheduleBtn.className =
-    "links-admin-button links-admin-button--primary links-admin-button--block";
-  scheduleBtn.textContent = "Agendar";
-
-  const markDoneBtn = document.createElement("button");
-  markDoneBtn.type = "button";
-  markDoneBtn.className =
-    "links-admin-button links-admin-button--ghost links-admin-button--block";
-  markDoneBtn.textContent = "Marcar como feita";
-
-  const editBtn = document.createElement("button");
-  editBtn.type = "button";
-  editBtn.className =
-    "links-admin-button links-admin-button--ghost links-admin-button--block";
-  editBtn.textContent = "Editar";
-
-  actions.append(scheduleBtn, markDoneBtn, editBtn);
-  dialog.append(body, actions);
+  function chip(text: string, modifier: string): HTMLElement {
+    const el = document.createElement("span");
+    el.className = `links-detail__chip links-detail__chip--${modifier}`;
+    el.textContent = text;
+    return el;
+  }
 
   function close(): void {
+    if (overlay.hidden) return;
+    more.close();
     overlay.hidden = true;
     current = null;
     syncBodyScreenLock();
+    cb.onOpenChange?.(null);
+    if (previouslyFocused && previouslyFocused.isConnected) {
+      previouslyFocused.focus();
+    }
+    previouslyFocused = null;
   }
 
   function open(link: LinkRow): void {
+    if (overlay.hidden) {
+      previouslyFocused = document.activeElement as HTMLElement | null;
+    }
     current = link;
-    title.textContent = link.label || "Experiência";
-    nameValue.textContent = link.label;
-    categoryValue.textContent = categoryLabel(resolveCategory(link));
+    const category = resolveCategory(link);
+    const src = categoryBackdropSrc(category, link.image_url);
+    if (src) heroImg.src = src;
+    else heroImg.removeAttribute("src");
+
+    chips.replaceChildren(chip(categoryLabel(category), "category"));
     const hasSchedule = Boolean(link.scheduled_start && link.scheduled_end);
+    if (hasSchedule) chips.appendChild(chip("Agendado", "schedule"));
+    if (link.status === "done") chips.appendChild(chip("Feito", "done"));
+
+    title.textContent = displayTitle(link);
+
     if (hasSchedule && link.scheduled_start && link.scheduled_end) {
-      scheduleBlock.hidden = false;
-      scheduleValue.textContent = formatScheduleLabel(
+      scheduleRow.row.hidden = false;
+      scheduleRow.value.textContent = formatScheduleLabel(
         link.scheduled_start,
         link.scheduled_end
       );
-      scheduleBtn.textContent = "Agenda";
+      primaryText.textContent = "Reagendar";
     } else {
-      scheduleBlock.hidden = true;
-      scheduleValue.textContent = "";
-      scheduleBtn.textContent = "Agendar";
+      scheduleRow.row.hidden = true;
+      scheduleRow.value.textContent = "";
+      primaryText.textContent = "Agendar";
     }
-    if (link.description && link.description.length > 0) {
-      noteBlock.hidden = false;
-      noteValue.textContent = link.description;
-    } else {
-      noteBlock.hidden = true;
-      noteValue.textContent = "";
-    }
-    markDoneBtn.hidden = link.status === "done";
-    linkAnchor.href = link.url;
-    linkAnchor.textContent = link.url;
+    noteRow.row.hidden = !link.description;
+    noteRow.value.textContent = link.description ?? "";
+    memoryRow.row.hidden = !link.note;
+    memoryRow.value.textContent = link.note ?? "";
+
+    domainText.textContent = linkDomain(link.url);
+    original.href = link.url;
+    openLink.href = link.url;
+    doneBtn.hidden = link.status === "done";
+
+    const panel = isPanelMode();
+    dialog.setAttribute("aria-modal", panel ? "false" : "true");
     overlay.hidden = false;
+    dialog.scrollTop = 0;
     syncBodyScreenLock();
+    cb.onOpenChange?.(link.id);
+    backBtn.focus({ preventScroll: true });
   }
 
-  editBtn.addEventListener("click", () => {
+  function act(fn: (link: LinkRow) => void): void {
     if (!current) return;
     const link = current;
     close();
-    cb.onEdit(link);
-  });
-  scheduleBtn.addEventListener("click", () => {
-    if (!current) return;
-    const link = current;
-    close();
-    cb.onSchedule(link);
-  });
-  markDoneBtn.addEventListener("click", () => {
-    if (!current) return;
-    const link = current;
-    close();
-    cb.onMarkDone(link);
-  });
+    fn(link);
+  }
+
+  primary.addEventListener("click", () => act(cb.onSchedule));
+  doneBtn.addEventListener("click", () => act(cb.onMarkDone));
   backBtn.addEventListener("click", close);
   overlay.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
@@ -1739,7 +1614,12 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     }
   });
 
-  return { element: overlay, open, close };
+  return {
+    element: overlay,
+    open,
+    close,
+    currentId: () => current?.id ?? null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1755,7 +1635,7 @@ export function toCreateInput(values: LinkFormValues, sortOrder: number): Create
     description: resolved.description.length > 0 ? resolved.description : null,
     icon_preset: inferIconPreset(resolved.url),
     icon_url: null,
-    category: inferCategory(resolved),
+    category: pickCategory(resolved),
     sort_order: sortOrder,
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
@@ -1771,10 +1651,17 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
     description: resolved.description.length > 0 ? resolved.description : null,
     icon_preset: inferIconPreset(resolved.url),
     icon_url: null,
-    category: inferCategory(resolved),
+    category: pickCategory(resolved),
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
   };
+}
+
+/** Explicit chip choice wins; otherwise infer from the text fields. */
+function pickCategory(values: LinkFormValues): Category {
+  return values.category && isCategory(values.category)
+    ? values.category
+    : inferCategory(values);
 }
 
 /** Blank Nome falls back to the URL's hostname so quick-add can skip typing one. */
@@ -1896,7 +1783,9 @@ function attachPasteButton(
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "links-admin-button links-admin-button--ghost links-admin-form__paste-btn";
-  btn.textContent = "Colar";
+  const pasteText = document.createElement("span");
+  pasteText.textContent = "Colar";
+  btn.append(uiIcon("clipboard", 18), pasteText);
   btn.setAttribute("data-action", "paste-url");
   row.append(btn);
 
@@ -1914,14 +1803,4 @@ function attachPasteButton(
       }
     })();
   });
-}
-
-function iconButton(text: string, ariaLabel: string): HTMLButtonElement {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "link-card__action";
-  btn.textContent = text;
-  btn.setAttribute("aria-label", ariaLabel);
-  btn.title = ariaLabel;
-  return btn;
 }

@@ -19,6 +19,15 @@ export default defineConfig({
         ...(useSystemChrome ? { channel: "chrome" as const } : {}),
       },
     },
+    {
+      // Phone layout (390px, touch) rendered by the same Chromium engine.
+      name: "mobile-chromium",
+      use: {
+        ...devices["Pixel 7"],
+        viewport: { width: 390, height: 844 },
+        ...(useSystemChrome ? { channel: "chrome" as const } : {}),
+      },
+    },
   ],
   webServer: {
     // Built-in static server — no `npx -y serve` download per run.

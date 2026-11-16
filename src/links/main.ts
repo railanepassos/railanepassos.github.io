@@ -2,17 +2,16 @@
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseConfig, isSupabaseConfigured, isBrowserSafeAnonKey } from "./config";
 import { createAuth, type Auth } from "./auth";
+import { createAuthStorage, setRememberMe } from "./session-storage";
 import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
 import { renderGuestGate } from "./render";
 import { renderLinksSkeleton, renderToolbarSkeleton } from "./skeleton";
 import {
   createLoginButton,
   createLoginModal,
-  createToolbar,
   createLinkFormModal,
   createDeleteConfirmSheet,
   createViewModal,
-  createCategoryFilterSheet,
   createDrawResultSheet,
   createScheduleSheet,
   renderAdminCard,
@@ -23,13 +22,29 @@ import {
   type LinkFormValues,
   type DeleteSheetHandle,
   type ViewModalHandle,
-  type CategoryFilterHandle,
   type DrawSheetHandle,
   type ScheduleSheetHandle,
 } from "./admin-ui";
 import { filterLinksByCategory, type Category } from "./category";
 import { pickRandomItem } from "./pick-random";
 import { sortLinksForDisplay, visibleListLinks } from "./sort-links";
+import {
+  categoryCounts,
+  linksForSection,
+  searchLinks,
+  sectionCounts,
+  toggleCategory,
+  type Section,
+} from "./feed";
+import {
+  SECTION_TITLES,
+  createAppBarActions,
+  renderChips,
+  renderSideNav,
+  renderTabBar,
+  type ShellHandlers,
+  type ShellState,
+} from "./app-shell";
 import { buildIcs, downloadIcs } from "./ics";
 import { createDeckScreen, type DeckHandle } from "./deck-ui";
 import { nextPriority } from "./deck-queue";
@@ -61,13 +76,26 @@ const GENERIC_ERROR = "Algo deu errado. Tente novamente.";
 type Els = {
   adminRoot: HTMLElement;
   list: HTMLElement;
+  appBar: HTMLElement | null;
+  sideNav: HTMLElement | null;
+  chips: HTMLElement | null;
+  heading: HTMLElement | null;
+  tabBar: HTMLElement | null;
 };
 
 function getEls(): Els | null {
   const adminRoot = document.getElementById("links-admin-root");
   const list = document.getElementById("links-list");
   if (!adminRoot || !list) return null;
-  return { adminRoot, list };
+  return {
+    adminRoot,
+    list,
+    appBar: document.getElementById("links-appbar"),
+    sideNav: document.getElementById("links-sidenav"),
+    chips: document.getElementById("links-chips"),
+    heading: document.getElementById("links-heading"),
+    tabBar: document.getElementById("links-tabbar"),
+  };
 }
 
 function renderLoading(els: Els): void {
@@ -119,14 +147,17 @@ function bootDynamic(
   let authenticated = false;
   let notice = warning ?? null;
   let categoryFilter: Category[] = [];
+  let section: Section = "feed";
+  let query = "";
   let pendingSharedUrl: string | null = pickSharedUrl(
     new URLSearchParams(location.search)
   );
 
   // --- modals (created once, appended to <body>) ---
-  const loginModal: LoginModalHandle = createLoginModal(async (email, password) => {
+  const loginModal: LoginModalHandle = createLoginModal(async (email, password, remember) => {
     loginModal.setBusy(true);
     try {
+      setRememberMe(remember);
       await auth.signIn(email, password);
       loginModal.close();
     } catch (err) {
@@ -158,11 +189,41 @@ function bootDynamic(
     onEdit: (l) => formModal.openEdit(l),
     onSchedule: (l) => openSchedule(l),
     onMarkDone: (l) => void markDone(l),
+    onDelete: (l) => void deleteLink(l),
+    onOpenChange: () => syncSelectedCard(),
   });
-  const filterSheet: CategoryFilterHandle = createCategoryFilterSheet((cats) => {
-    categoryFilter = cats;
-    render();
-  });
+
+  const shellHandlers: ShellHandlers = {
+    onSection: (next) => {
+      section = next;
+      renderList();
+      window.scrollTo({ top: 0 });
+    },
+    onToggleCategory: (c) => {
+      categoryFilter = toggleCategory(categoryFilter, c);
+      renderList();
+    },
+    onClearCategories: () => {
+      categoryFilter = [];
+      renderList();
+    },
+    onQuery: (q) => {
+      query = q;
+      renderList();
+    },
+    onAdd: () => formModal.openCreate(),
+    onDeck: () => deckScreen.open(links, "wishlist"),
+    onDraw: () => runDraw(),
+    onSignOut: () => {
+      void (async () => {
+        try {
+          await auth.signOut();
+        } catch (err) {
+          renderMessage(els.list, messageOf(err, "Não foi possível sair. Tente novamente."));
+        }
+      })();
+    },
+  };
 
   const drawSheet: DrawSheetHandle = createDrawResultSheet({
     onView: (l) => viewModal.open(l),
@@ -183,7 +244,6 @@ function bootDynamic(
     deleteSheet.element,
     viewModal.element,
     scheduleSheet.element,
-    filterSheet.element,
     drawSheet.element,
     deckScreen.element
   );
@@ -441,57 +501,95 @@ function bootDynamic(
   }
 
   // --- rendering ---
+  function setShellVisible(visible: boolean): void {
+    document.body.classList.toggle("links-authed", visible);
+    for (const el of [els.sideNav, els.chips, els.heading, els.tabBar]) {
+      if (el) el.hidden = !visible;
+    }
+  }
+
   function renderAdminRoot(): void {
     els.adminRoot.replaceChildren();
     if (authenticated) {
-      els.adminRoot.appendChild(
-        createToolbar(
-          () => formModal.openCreate(),
-          async () => {
-            try {
-              await auth.signOut();
-            } catch (err) {
-              renderMessage(els.list, messageOf(err, "Não foi possível sair. Tente novamente."));
-            }
-          },
-          () => filterSheet.open(categoryFilter),
-          () => runDraw(),
-          () => deckScreen.open(links, "wishlist"),
-          categoryFilter
-        )
-      );
+      els.adminRoot.appendChild(createAppBarActions(shellHandlers, els.appBar));
     } else {
+      query = "";
+      els.appBar?.classList.remove("links-appbar--searching");
       els.adminRoot.appendChild(createLoginButton(() => loginModal.open()));
     }
+  }
+
+  function syncSelectedCard(): void {
+    const selected = viewModal.currentId();
+    for (const card of els.list.querySelectorAll<HTMLElement>(".feed-card")) {
+      card.classList.toggle("feed-card--selected", card.dataset.id === selected);
+    }
+  }
+
+  function renderChrome(sectionLinks: LinkRow[], visibleCount: number): void {
+    const state: ShellState = {
+      section,
+      categories: categoryFilter,
+      sectionCounts: sectionCounts(links),
+      categoryCounts: categoryCounts(sectionLinks),
+    };
+    if (els.chips) renderChips(els.chips, state, shellHandlers);
+    if (els.sideNav) renderSideNav(els.sideNav, state, shellHandlers);
+    if (els.tabBar) renderTabBar(els.tabBar, state, shellHandlers);
+    if (els.heading) {
+      els.heading.replaceChildren();
+      const h = document.createElement("h2");
+      h.className = "links-app__heading-title";
+      h.textContent = SECTION_TITLES[section];
+      const count = document.createElement("span");
+      count.className = "links-app__heading-count";
+      count.textContent = `${visibleCount} ${visibleCount === 1 ? "lugar" : "lugares"}`;
+      els.heading.append(h, count);
+    }
+  }
+
+  function emptyText(): string {
+    if (query.trim().length > 0) return "Nada encontrado para essa busca.";
+    if (categoryFilter.length > 0) return "Nenhuma experiência nas categorias selecionadas.";
+    if (section === "agenda") return "Nada agendado ainda. Use Agendar em um card.";
+    if (section === "done") return "Nenhuma experiência marcada como feita ainda.";
+    return "Nenhuma experiência ainda.";
   }
 
   function renderList(): void {
     els.list.replaceChildren();
     if (!authenticated) {
+      setShellVisible(false);
       renderGuestGate(els.list);
       if (notice) {
         renderMessage(els.list, notice);
       }
       return;
     }
-    const listLinks = visibleListLinks(links);
-    const visible = filterLinksByCategory(listLinks, categoryFilter);
+    setShellVisible(true);
+    const sectionLinks = searchLinks(linksForSection(links, section), query);
+    const visible = filterLinksByCategory(sectionLinks, categoryFilter);
+    renderChrome(sectionLinks, visible.length);
+    const selected = viewModal.currentId();
     if (visible.length === 0) {
       const empty = document.createElement("p");
       empty.className = "links-status";
-      empty.textContent =
-        categoryFilter.length > 0
-          ? "Nenhuma experiência nas categorias selecionadas."
-          : "Nenhuma experiência ainda.";
+      empty.textContent = emptyText();
       els.list.appendChild(empty);
     } else {
       visible.forEach((link) => {
         els.list.appendChild(
-          renderAdminCard(link, {
-            onView: (l) => viewModal.open(l),
-            onEdit: (l) => formModal.openEdit(l),
-            onDelete: (l) => void deleteLink(l),
-          })
+          renderAdminCard(
+            link,
+            {
+              onView: (l) => viewModal.open(l),
+              onEdit: (l) => formModal.openEdit(l),
+              onDelete: (l) => void deleteLink(l),
+              onMarkDone: (l) => void markDone(l),
+              onSchedule: (l) => openSchedule(l),
+            },
+            { selected: link.id === selected }
+          )
         );
       });
     }
@@ -596,7 +694,9 @@ async function boot(): Promise<void> {
     return;
   }
 
-  const client = createClient(config.url, config.anonKey);
+  const client = createClient(config.url, config.anonKey, {
+    auth: { storage: createAuthStorage() },
+  });
   const auth = createAuth(client);
   const repo = createLinksRepo(client);
 

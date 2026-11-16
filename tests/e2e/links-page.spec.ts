@@ -37,6 +37,7 @@ test.describe("Links admin page — smoke", () => {
 
     // Guests never see .link-card; gate copy or empty/error status is fine.
     await expect(list.locator(".link-card")).toHaveCount(0);
+    await expect(list.locator(".feed-card")).toHaveCount(0);
     await expect(list.locator(".links-status").first()).toBeVisible();
   });
 
