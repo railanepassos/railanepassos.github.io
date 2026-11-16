@@ -1,5 +1,15 @@
 name: Supabase keepalive
 
+# Prevents the free-tier Supabase project from auto-pausing.
+#
+# Two failure modes this workflow guards against (both observed in 2026):
+# 1. Supabase pauses projects with no *database* activity. Pinging only
+#    /auth/v1/health kept succeeding while the project still paused, so the
+#    ping must run a real Postgres query through PostgREST.
+# 2. GitHub disables scheduled workflows in public repos after 60 days without
+#    repository activity. Re-enabling the workflow through the API on every run
+#    resets that timer without creating commits.
+
 on:
   schedule:
     # Segunda e quinta, 12:00 UTC (~09:00 BRT). Máx ~3,5 dias entre pings.
@@ -15,8 +25,9 @@ concurrency:
 
 jobs:
   ping:
-    name: Ping Supabase health
+    name: Ping Supabase database
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Verify secrets
         env:
@@ -35,13 +46,46 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           set -euo pipefail
-          http_code=$(curl -sS -o /tmp/supabase-health.json -w "%{http_code}" \
+          http_code=$(curl -sS --retry 3 --retry-delay 10 -o /tmp/supabase-health.json -w "%{http_code}" \
             "${SUPABASE_URL}/auth/v1/health" \
             -H "apikey: ${SUPABASE_ANON_KEY}" \
-            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}") || http_code=000
           if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
-            echo "::error::Supabase health check failed (HTTP ${http_code})"
-            cat /tmp/supabase-health.json || true
+            echo "::error::Supabase auth health check failed (HTTP ${http_code}). The project may be paused: resume it in the Supabase dashboard."
+            cat /tmp/supabase-health.json 2>/dev/null || true
             exit 1
           fi
-          echo "Supabase is awake (HTTP ${http_code})"
+          echo "Supabase auth is up (HTTP ${http_code})"
+
+      - name: Query Postgres via PostgREST (counts as database activity)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          # RLS returns an empty list to the anon role; the query still runs in Postgres.
+          http_code=$(curl -sS --retry 3 --retry-delay 10 -o /tmp/supabase-db.json -w "%{http_code}" \
+            "${SUPABASE_URL}/rest/v1/links?select=id&limit=1" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}") || http_code=000
+          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+            echo "::error::Supabase database query failed (HTTP ${http_code})."
+            cat /tmp/supabase-db.json 2>/dev/null || true
+            exit 1
+          fi
+          echo "Supabase database answered (HTTP ${http_code})"
+
+  stay-enabled:
+    name: Reset GitHub 60-day inactivity timer
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Re-enable this workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/supabase-keepalive.yml/enable"
+          echo "Workflow re-enabled; inactivity timer reset."
