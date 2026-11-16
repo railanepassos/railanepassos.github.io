@@ -141,6 +141,34 @@ describe("createReviewSheet", () => {
     expect(sheet.element.querySelector("[role='alert']")!.textContent).toBe("Falhou");
   });
 
+  describe("opening", () => {
+    it("resets the scroll containers and focuses the dialog, not a field", () => {
+      const { sheet } = setup();
+      const form = sheet.element.querySelector<HTMLElement>("form")!;
+      const dialog = sheet.element.querySelector<HTMLElement>("[role='dialog']")!;
+      form.scrollTop = 300;
+      dialog.scrollTop = 300;
+      sheet.close();
+      sheet.open({
+        label: "Outro",
+        initial: { rating: null, want_again: false, impressions: "", lessons: ["x"], memory_url: "" },
+        onSave: vi.fn(),
+      });
+      expect(form.scrollTop).toBe(0);
+      expect(dialog.scrollTop).toBe(0);
+      expect(document.activeElement).toBe(dialog);
+      expect(dialog.getAttribute("tabindex")).toBe("-1");
+    });
+
+    it("does not scroll a field into view on open", () => {
+      const spy = vi.fn();
+      (Element.prototype as unknown as { scrollIntoView: unknown }).scrollIntoView = spy;
+      setup({ rating: null, want_again: false, lessons: ["a"] });
+      expect(spy).not.toHaveBeenCalled();
+      delete (Element.prototype as unknown as { scrollIntoView?: unknown }).scrollIntoView;
+    });
+  });
+
   describe("impressions and lessons", () => {
     type S = { element: HTMLElement };
     const impressionsBox = (sheet: S) => sheet.element.querySelector<HTMLTextAreaElement>("textarea")!;
@@ -195,6 +223,69 @@ describe("createReviewSheet", () => {
         lessons: Array.from({ length: 20 }, (_, i) => `l${i}`),
       });
       expect(tool(sheet, "Adicionar lição").disabled).toBe(true);
+    });
+
+    const enter = (input: HTMLInputElement) => {
+      const ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+      input.dispatchEvent(ev);
+      return ev;
+    };
+
+    it("lesson inputs use the Next key hint on the iOS keyboard", () => {
+      const { sheet } = setup({ rating: null, want_again: false, lessons: ["a"] });
+      expect(lessonInputs(sheet)[0]!.getAttribute("enterkeyhint")).toBe("next");
+    });
+
+    it("Enter adds an empty lesson below the current one and focuses it, without submitting", () => {
+      const { sheet, onSave } = setup({ rating: null, want_again: false, lessons: ["a", "c"] });
+      const first = lessonInputs(sheet)[0]!;
+      const ev = enter(first);
+      expect(ev.defaultPrevented).toBe(true);
+      expect(lessonInputs(sheet).map((i) => i.value)).toEqual(["a", "", "c"]);
+      expect(document.activeElement).toBe(lessonInputs(sheet)[1]);
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it("Enter on an empty last lesson does nothing", () => {
+      const { sheet, onSave } = setup({ rating: null, want_again: false, lessons: ["a"] });
+      enter(lessonInputs(sheet)[0]!);
+      expect(lessonInputs(sheet)).toHaveLength(2);
+      const ev = enter(lessonInputs(sheet)[1]!);
+      expect(ev.defaultPrevented).toBe(true);
+      expect(lessonInputs(sheet)).toHaveLength(2);
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it("Enter stops adding at 20 lessons", () => {
+      const { sheet } = setup({
+        rating: null,
+        want_again: false,
+        lessons: Array.from({ length: 20 }, (_, i) => `l${i}`),
+      });
+      enter(lessonInputs(sheet)[19]!);
+      expect(lessonInputs(sheet)).toHaveLength(20);
+    });
+
+    it("hides move buttons for a single lesson, keeps Remover", () => {
+      const { sheet } = setup({ rating: null, want_again: false, lessons: ["a"] });
+      expect(tool(sheet, "Subir lição 1")).toBeNull();
+      expect(tool(sheet, "Descer lição 1")).toBeNull();
+      expect(tool(sheet, "Remover lição 1")).not.toBeNull();
+    });
+
+    it("disables Subir on the first and Descer on the last lesson only", () => {
+      const { sheet } = setup({ rating: null, want_again: false, lessons: ["a", "b", "c"] });
+      expect(tool(sheet, "Subir lição 1").disabled).toBe(true);
+      expect(tool(sheet, "Subir lição 2").disabled).toBe(false);
+      expect(tool(sheet, "Descer lição 2").disabled).toBe(false);
+      expect(tool(sheet, "Descer lição 3").disabled).toBe(true);
+    });
+
+    it("drops blank lessons added with Enter on save", () => {
+      const { sheet, onSave, button } = setup({ rating: null, want_again: false, lessons: ["a"] });
+      enter(lessonInputs(sheet)[0]!);
+      button("Salvar").click();
+      expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ lessons: ["a", ""] }));
     });
 
     it("reopening resets the controls to the new initial values", () => {

@@ -124,6 +124,48 @@ test.describe("impressions and lessons", () => {
     expect(writes.patched).toBeNull();
   });
 
+  test("Enter adds a lesson below and focuses it; move buttons only appear with 2+ lessons", async ({
+    page,
+  }) => {
+    const writes = await openAuthedWith(page, [DONE, ...LINK_ROWS]);
+    await openDetail(page, "Lugar Feito");
+    await page.locator(".links-detail").getByRole("button", { name: "Editar Como foi" }).click();
+    const sheet = page.getByRole("dialog", { name: "Como foi" });
+    const inputs = sheet.locator(".links-lessons__text");
+    await sheet.getByRole("button", { name: "Adicionar lição" }).click();
+    await expect(inputs).toHaveCount(1);
+    await expect(inputs.first()).toHaveAttribute("enterkeyhint", "next");
+    await expect(sheet.getByRole("button", { name: "Subir lição 1" })).toHaveCount(0);
+    await expect(sheet.getByRole("button", { name: "Descer lição 1" })).toHaveCount(0);
+    await expect(sheet.getByRole("button", { name: "Remover lição 1" })).toBeVisible();
+
+    await inputs.first().fill("levar lanche");
+    await inputs.first().press("Enter");
+    await expect(inputs).toHaveCount(2);
+    await expect(inputs.nth(1)).toBeFocused();
+    // Enter on the empty last row does nothing.
+    await inputs.nth(1).press("Enter");
+    await expect(inputs).toHaveCount(2);
+    await expect(sheet).toBeVisible();
+
+    await expect(sheet.getByRole("button", { name: "Subir lição 1" })).toBeDisabled();
+    await expect(sheet.getByRole("button", { name: "Descer lição 1" })).toBeEnabled();
+    await expect(sheet.getByRole("button", { name: "Subir lição 2" })).toBeEnabled();
+    await expect(sheet.getByRole("button", { name: "Descer lição 2" })).toBeDisabled();
+    for (const name of ["Subir lição 1", "Descer lição 2", "Remover lição 1"]) {
+      const box = await sheet.getByRole("button", { name }).boundingBox();
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+    }
+
+    await inputs.nth(1).fill("chegar cedo");
+    await inputs.nth(1).press("Enter");
+    await inputs.nth(2).press("Enter");
+    await sheet.getByRole("button", { name: "Salvar" }).click();
+    await expect.poll(() => writes.patched).not.toBeNull();
+    expect(writes.patched).toMatchObject({ lessons: ["levar lanche", "chegar cedo"] });
+  });
+
   test("free-text search finds a place by a word from its lessons or impressions", async ({
     page,
   }) => {
