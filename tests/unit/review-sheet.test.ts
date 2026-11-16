@@ -374,3 +374,16 @@ describe("createReviewSheet", () => {
     });
   });
 });
+
+describe("Como foi sheet resets iOS page zoom", () => {
+  it("caps the viewport scale when it opens and when it closes", () => {
+    document.head.innerHTML = '<meta name="viewport" content="width=device-width, initial-scale=1">';
+    const sheet = createReviewSheet();
+    document.body.append(sheet.element);
+    const content = () => document.querySelector('meta[name="viewport"]')!.getAttribute("content");
+    sheet.open({ label: "Lugar", mode: "edit", initial: { rating: null, want_again: false, impressions: "", lessons: [], memory_url: "" }, onSave: () => {} } as never);
+    expect(content()).toContain("maximum-scale=1");
+    sheet.close();
+    expect(content()).toContain("maximum-scale=1");
+  });
+});

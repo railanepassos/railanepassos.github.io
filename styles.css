@@ -25,6 +25,11 @@
   box-sizing: border-box;
 }
 
+html {
+  /* No double-tap zoom on iOS (taps on buttons were zooming the page); pinch-zoom still works. */
+  touch-action: manipulation;
+}
+
 body {
   margin: 0;
   font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
@@ -2465,6 +2470,11 @@ body.page-links-admin {
 .page-links-admin :focus-visible {
   outline: 2px solid var(--app-accent);
   outline-offset: 2px;
+}
+
+/* Dialogs take focus programmatically (tabindex=-1) on open; no ring around the whole sheet. */
+.page-links-admin [tabindex="-1"]:focus {
+  outline: none;
 }
 
 /* --- App bar ------------------------------------------------------------ */
