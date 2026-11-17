@@ -6,6 +6,7 @@ import { createAuthStorage, setRememberMe } from "./session-storage";
 import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
 import { renderGuestGate } from "./render";
 import { collectTags } from "./tags";
+import { collectLessons } from "./lesson-suggestions";
 import { collectPeople } from "./people";
 import { matches, parseQuery, removeChip, setMinRating, toggleFilter } from "./query";
 import { renderDoneToolbar } from "./done-toolbar";
@@ -53,6 +54,8 @@ import {
 import { buildIcs, downloadIcs } from "./ics";
 import { createReviewSheet, type ReviewSheetHandle } from "./review-sheet";
 import { UNMARK_DONE_PATCH, reviewError, reviewFromLink, reviewToPatch } from "./review";
+import { createPlanSheet, type PlanSheetHandle } from "./plan-sheet";
+import { planError, planFromLink, planToPatch } from "./plan";
 import { createDeckScreen, type DeckHandle } from "./deck-ui";
 import { nextPriority } from "./deck-queue";
 import { pickSharedUrl } from "./share-target";
@@ -78,6 +81,7 @@ import {
  * the login affordance and never show experience cards to guests.
  */
 
+const PLAN_SAVE_ERROR = "Não foi possível salvar o plano. Tente de novo.";
 const GENERIC_ERROR = "Algo deu errado. Tente novamente.";
 
 type Els = {
@@ -207,12 +211,23 @@ function bootDynamic(
   const deleteSheet: DeleteSheetHandle = createDeleteConfirmSheet();
   const scheduleSheet: ScheduleSheetHandle = createScheduleSheet();
   const reviewSheet: ReviewSheetHandle = createReviewSheet();
+  const planSheet: PlanSheetHandle = createPlanSheet({
+    getPeopleSuggestions: () => collectPeople(links),
+    getLessonCandidates: () => collectLessons(links),
+  });
   const viewModal: ViewModalHandle = createViewModal({
     onEdit: (l) => formModal.openEdit(l),
     onSchedule: (l) => openSchedule(l),
     onMarkDone: (l) => void markDone(l),
     onUnmarkDone: (l) => void unmarkDone(l),
     onEditReview: (l) => openReview(l, "edit"),
+    onEditPlan: (l) => openPlan(l),
+    onSavePlanItems: async (l, items) => {
+      await repo.updateLink(l.id, { plan_items: items });
+      links = links.map((row) => (row.id === l.id ? { ...row, plan_items: items } : row));
+      renderList();
+      deckScreen.refresh(links);
+    },
     onDelete: (l) => void deleteLink(l),
     onTag: (tag) => toggleTagFilter(tag),
     onPerson: (person) => togglePeopleFilter(person),
@@ -268,6 +283,7 @@ function bootDynamic(
     viewModal.element,
     scheduleSheet.element,
     reviewSheet.element,
+    planSheet.element,
     drawSheet.element,
     deckScreen.element
   );
@@ -395,6 +411,40 @@ function bootDynamic(
           reviewSheet.setError(messageOf(err, GENERIC_ERROR));
         } finally {
           reviewSheet.setBusy(false);
+        }
+      },
+    });
+  }
+
+  /** "Plano do passeio" sheet, opened from the detail; the detail comes back when it closes. */
+  function openPlan(link: LinkRow): void {
+    const reopenDetail = (): void => {
+      const current = findLink(link.id);
+      if (current) viewModal.open(current);
+    };
+    planSheet.open({
+      label: displayTitle(link),
+      initial: planFromLink(link),
+      onSkip: reopenDetail,
+      onSave: async (values) => {
+        const problem = planError(values.items);
+        if (problem) {
+          planSheet.setError(problem);
+          return;
+        }
+        planSheet.setBusy(true);
+        try {
+          const patch = planToPatch(values);
+          await repo.updateLink(link.id, patch);
+          links = sortLinks(links.map((row) => (row.id === link.id ? { ...row, ...patch } : row)));
+          renderList();
+          deckScreen.refresh(links);
+          planSheet.close();
+          reopenDetail();
+        } catch {
+          planSheet.setError(PLAN_SAVE_ERROR);
+        } finally {
+          planSheet.setBusy(false);
         }
       },
     });

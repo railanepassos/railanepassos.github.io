@@ -169,6 +169,7 @@ function haystack(link: LinkRow): string {
       ...(link.lessons ?? []),
       ...(link.tags ?? []),
       ...(link.people ?? []),
+      ...(link.plan_items ?? []).map((item) => item.text),
     ].join(" ")
   );
 }

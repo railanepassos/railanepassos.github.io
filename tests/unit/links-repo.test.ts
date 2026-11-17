@@ -397,3 +397,57 @@ describe("Phase 3 fields", () => {
     await expect(repo.updateLink("1", { rating: null })).resolves.toBeUndefined();
   });
 });
+
+// ─── Phase 4 plan_items ──────────────────────────────────────────────────────
+
+describe("Phase 4 plan_items", () => {
+  it("reads plan_items defensively (null when absent, malformed items dropped)", async () => {
+    const client = makeFakeClient({
+      links: {
+        data: [
+          { id: "1", url: "https://example.com", label: "A" },
+          {
+            id: "2",
+            url: "https://example.com",
+            label: "B",
+            plan_items: [
+              { text: "Ingressos", list: "checklist", who: "Alana", done: true },
+              { text: "", list: "checklist", done: false },
+            ],
+          },
+        ],
+        error: null,
+      },
+    });
+    const [a, b] = await createLinksRepo(client).listLinks();
+    expect(a!.plan_items).toBeNull();
+    expect(b!.plan_items).toEqual([{ text: "Ingressos", list: "checklist", who: "Alana", done: true }]);
+  });
+
+  it("rejects an invalid plan and accepts a valid one or null", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(
+      repo.updateLink("1", { plan_items: [{ text: "  ", list: "checklist", done: false }] })
+    ).rejects.toThrow(/plan_items/);
+    await expect(
+      repo.updateLink("1", {
+        plan_items: Array.from({ length: 61 }, () => ({ text: "a", list: "compras" as const, done: false })),
+      })
+    ).rejects.toThrow(/plan_items/);
+    await expect(
+      repo.createLink({
+        url: "https://example.com",
+        label: "Museu",
+        sort_order: 0,
+        plan_items: [{ text: "x".repeat(201), list: "checklist", done: false }],
+      })
+    ).rejects.toThrow(/plan_items/);
+    await expect(
+      repo.updateLink("1", {
+        people: ["Alana"],
+        plan_items: [{ text: "Ingressos", list: "checklist", who: "Alana", done: false }],
+      })
+    ).resolves.toBeUndefined();
+    await expect(repo.updateLink("1", { plan_items: null })).resolves.toBeUndefined();
+  });
+});

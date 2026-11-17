@@ -1707,6 +1707,33 @@ body.links-screen-open {
   cursor: pointer;
 }
 
+.links-plan-suggestions__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.links-plan-suggestions__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--navy);
+  font: inherit;
+  font-size: 1rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.links-plan-suggestions__chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .links-poses__tool:disabled,
 .links-poses__add:disabled {
   opacity: 0.4;
@@ -1766,8 +1793,91 @@ body.links-screen-open {
   overflow-wrap: anywhere;
 }
 
+/* Trip plan (read-only here): one block per list, progress in the heading. */
+.links-detail__plan-list + .links-detail__plan-list {
+  margin-top: 14px;
+}
+
+.links-detail__plan-list[hidden] {
+  display: none;
+}
+
+.links-detail__plan-title {
+  margin: 0 0 6px;
+  color: var(--app-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.links-detail__plan-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.links-detail__plan-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  overflow-wrap: anywhere;
+}
+
+.links-detail__plan-item--done .links-detail__plan-text {
+  text-decoration: line-through;
+  color: var(--app-muted);
+}
+
+.links-detail__plan-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  min-width: 44px;
+  cursor: pointer;
+}
+
+.links-detail__plan-check input {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  accent-color: var(--app-accent);
+}
+
+.links-detail__plan-error {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--green-light);
+  color: var(--green-dark);
+  font-size: 14px;
+}
+
+.links-detail__plan-error[hidden] {
+  display: none;
+}
+
+.links-detail__plan-who,
+.links-detail__plan-state {
+  color: var(--app-muted);
+  font-size: 13px;
+}
+
 .links-detail__row--action {
   padding-left: 32px;
+}
+
+.links-detail__plan-action {
+  margin-top: 12px;
+}
+
+.links-detail__plan-who-line {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .links-detail__memory {
@@ -4013,4 +4123,12 @@ input,
 textarea,
 select {
   font-size: max(16px, 1em);
+}
+
+/* Owner select of a plan item: full width, comfortable touch target. */
+.links-plan__who {
+  width: 100%;
+  /* 48px leaves room for sub-pixel rounding on scaled mobile viewports. */
+  min-height: 48px;
+  flex-shrink: 0;
 }

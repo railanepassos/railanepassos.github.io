@@ -1,4 +1,5 @@
 import type { LinkRow, CreateLinkInput, UpdateLinkPatch } from "./links-repo";
+import { toolButton } from "./tool-button";
 import { inferIconPreset } from "./icons";
 import {
   CATEGORY_OPTIONS,
@@ -38,6 +39,15 @@ import {
   type PoseDraft,
 } from "./poses";
 import { readLessons } from "./lessons";
+import {
+  PLAN_LISTS,
+  planByPerson,
+  planProgress,
+  readPlanItems,
+  togglePlanItem,
+  type PlanItem,
+} from "./plan";
+import { buildPlanMessage, hasPlanToShare, whatsappUrl } from "./plan-message";
 import {
   MORE_TEXT_FIELDS,
   emptyMoreTextValues,
@@ -1222,19 +1232,19 @@ export function createLinkFormModal(
 
       const tools = document.createElement("div");
       tools.className = "links-poses__tools";
-      const up = poseToolButton("↑", `Subir pose ${n}`);
+      const up = toolButton("↑", `Subir pose ${n}`);
       up.disabled = i === 0;
       up.addEventListener("click", () => {
         poses = moveItem(poses, i, i - 1);
         renderPoses(`up-${i - 1}`);
       });
-      const down = poseToolButton("↓", `Descer pose ${n}`);
+      const down = toolButton("↓", `Descer pose ${n}`);
       down.disabled = i === poses.length - 1;
       down.addEventListener("click", () => {
         poses = moveItem(poses, i, i + 1);
         renderPoses(`down-${i + 1}`);
       });
-      const remove = poseToolButton("×", `Remover pose ${n}`);
+      const remove = toolButton("×", `Remover pose ${n}`);
       remove.addEventListener("click", () => {
         poses = poses.filter((_, j) => j !== i);
         renderPoses("add");
@@ -1775,6 +1785,13 @@ export type ViewModalCallbacks = {
   onUnmarkDone?: (link: LinkRow) => void;
   /** Done places only: open the "Como foi" sheet to edit it. */
   onEditReview?: (link: LinkRow) => void;
+  /** Any place: open the "Plano do passeio" sheet to edit the plan. */
+  onEditPlan?: (link: LinkRow) => void;
+  /**
+   * Tick/untick a plan item: persist `items` (the whole plan_items array).
+   * Rejects when the save fails; the detail then rolls the tick back.
+   */
+  onSavePlanItems?: (link: LinkRow, items: PlanItem[]) => Promise<void>;
   /** Tap on a tag chip: close the detail and filter the feed by that tag. */
   onTag?: (tag: string) => void;
   /** Tap on a person chip: close the detail and filter the feed by that person. */
@@ -1814,15 +1831,8 @@ function renderPoseItem(ref: { url?: string; note?: string }, index: number): HT
   return li;
 }
 
-function poseToolButton(glyph: string, ariaLabel: string): HTMLButtonElement {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "links-poses__tool";
-  btn.setAttribute("aria-label", ariaLabel);
-  btn.title = ariaLabel;
-  btn.textContent = glyph;
-  return btn;
-}
+const PLAN_SAVE_ERROR = "Não foi possível salvar o plano. Tente de novo.";
+const PLAN_SHARE_ERROR = "Não foi possível compartilhar o plano. Tente de novo.";
 
 function infoRow(icon: IconName, term: string): { row: HTMLElement; value: HTMLElement } {
   const row = document.createElement("div");
@@ -2039,6 +2049,75 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   sourceWrap.appendChild(sourceLink);
   info.append(mapWrap, sourceWrap);
 
+  // Trip plan (Phase 4), read-only here: one block per list with its progress.
+  // The participants are the "Pessoas" row above. Hidden when there are no items.
+  const planRow = infoRow("clipboard", "Plano do passeio");
+  planRow.row.dataset.field = "plan";
+  planRow.row.classList.add("links-detail__row--long");
+  const planPeople = document.createElement("div");
+  planPeople.className = "links-detail__plan-list";
+  planPeople.dataset.planPeople = "";
+  const planPeopleTitle = document.createElement("p");
+  planPeopleTitle.className = "links-detail__plan-title";
+  planPeopleTitle.textContent = "Quem vai";
+  const planPeopleText = document.createElement("p");
+  planPeopleText.className = "links-detail__plan-who-line";
+  planPeople.append(planPeopleTitle, planPeopleText);
+  planRow.value.appendChild(planPeople);
+  const planLists = PLAN_LISTS.map(({ key, title }) => {
+    const block = document.createElement("div");
+    block.className = "links-detail__plan-list";
+    block.dataset.planList = key;
+    const heading = document.createElement("p");
+    heading.className = "links-detail__plan-title";
+    const ul = document.createElement("ul");
+    ul.className = "links-detail__plan-items";
+    block.append(heading, ul);
+    planRow.value.appendChild(block);
+    return { key, title, block, heading, ul };
+  });
+  const planError = document.createElement("p");
+  planError.className = "links-detail__plan-error";
+  planError.setAttribute("role", "alert");
+  planError.hidden = true;
+  planRow.value.appendChild(planError);
+  // "Quem faz o quê": the same items grouped by owner (hidden when nobody owns any).
+  const planWho = document.createElement("div");
+  planWho.className = "links-detail__plan-list links-detail__plan-who-summary";
+  planWho.dataset.planSummary = "who";
+  const planWhoTitle = document.createElement("p");
+  planWhoTitle.className = "links-detail__plan-title";
+  planWhoTitle.textContent = "Quem faz o quê";
+  const planWhoUl = document.createElement("ul");
+  planWhoUl.className = "links-detail__plan-items";
+  planWho.append(planWhoTitle, planWhoUl);
+  planRow.value.appendChild(planWho);
+  const planEdit = document.createElement("button");
+  planEdit.type = "button";
+  planEdit.className = "links-detail__action links-detail__plan-edit";
+  planEdit.dataset.action = "edit-plan";
+  const planEditText = document.createElement("span");
+  planEditText.textContent = "Editar plano";
+  planEdit.append(uiIcon("edit", 16), planEditText);
+  const planEditWrap = document.createElement("div");
+  planEditWrap.className = "links-detail__plan-action";
+  planEditWrap.dataset.field = "plan-edit";
+  planEditWrap.appendChild(planEdit);
+  const planShare = document.createElement("button");
+  planShare.type = "button";
+  planShare.className = "links-detail__action links-detail__plan-share";
+  planShare.dataset.action = "share-plan";
+  const planShareText = document.createElement("span");
+  planShareText.textContent = "Enviar no WhatsApp";
+  planShare.append(uiIcon("share", 16), planShareText);
+  planShare.addEventListener("click", () => void sharePlan());
+  const planShareWrap = document.createElement("div");
+  planShareWrap.className = "links-detail__plan-action";
+  planShareWrap.dataset.field = "plan-share";
+  planShareWrap.appendChild(planShare);
+  planRow.value.append(planEditWrap, planShareWrap);
+  info.append(planRow.row);
+
   // Photo poses: ordered list, each with an optional new-tab link and note.
   const posesRow = infoRow("clipboard", "Referências de pose");
   posesRow.row.dataset.field = "pose_refs";
@@ -2165,6 +2244,20 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     posesRow.row.hidden = poseRefs.length === 0;
     posesOl.replaceChildren(...poseRefs.map(renderPoseItem));
 
+    planError.hidden = true;
+    renderPlan();
+    // Inside the Plano section when it shows; a bare place (empty section) keeps
+    // "Editar plano" as a standalone action row so a plan can still be started.
+    const standalone = planRow.row.hidden;
+    (standalone ? info : planRow.value).append(planEditWrap, planShareWrap);
+    for (const wrap of [planEditWrap, planShareWrap]) {
+      wrap.classList.toggle("links-detail__row", standalone);
+      wrap.classList.toggle("links-detail__row--action", standalone);
+      wrap.classList.toggle("links-detail__plan-action", !standalone);
+    }
+    planEditWrap.hidden = !cb.onEditPlan;
+    planShareWrap.hidden = !hasPlanToShare(link);
+
     domainText.textContent = linkDomain(link.url);
     original.href = link.url;
     openLink.href = link.url;
@@ -2219,6 +2312,141 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     backBtn.focus({ preventScroll: true });
   }
 
+  /**
+   * Share the plan as text. wa.me only when native share is unavailable: after an
+   * awaited share() rejection the click's user activation is gone, so window.open
+   * would be popup-blocked; show a message instead.
+   */
+  async function sharePlan(): Promise<void> {
+    if (!current) return;
+    const text = buildPlanMessage(current);
+    const canNativeShare =
+      typeof navigator.share === "function" && navigator.canShare?.({ text }) !== false;
+    if (!canNativeShare) {
+      window.open(whatsappUrl(text), "_blank", "noopener");
+      return;
+    }
+    planError.hidden = true;
+    try {
+      await navigator.share({ text });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      planError.textContent = PLAN_SHARE_ERROR;
+      planError.hidden = false;
+    }
+  }
+
+  /** Plan section of the open link: one checkbox per item, progress per list. */
+  function renderPlan(): void {
+    if (!current) return;
+    const planItems = readPlanItems(current.plan_items);
+    const people = current.people ?? [];
+    planRow.row.hidden = planItems.length === 0 && people.length === 0;
+    planPeople.hidden = people.length === 0;
+    planPeopleText.textContent = people.join(", ");
+    for (const list of planLists) {
+      const entries = planItems
+        .map((item, index) => ({ item, index }))
+        .filter((e) => e.item.list === list.key);
+      list.block.hidden = entries.length === 0;
+      list.heading.textContent = `${list.title} · ${planProgress(planItems, list.key).label}`;
+      list.ul.replaceChildren(
+        ...entries.map(({ item, index }) => {
+          const li = document.createElement("li");
+          li.className = "links-detail__plan-item";
+          if (item.done) li.classList.add("links-detail__plan-item--done");
+          const label = document.createElement("label");
+          label.className = "links-detail__plan-check";
+          const box = document.createElement("input");
+          box.type = "checkbox";
+          box.checked = item.done;
+          box.disabled = !cb.onSavePlanItems;
+          box.addEventListener("change", () => void tickPlanItem(index, box.checked));
+          const text = document.createElement("span");
+          text.className = "links-detail__plan-text";
+          text.textContent = item.text;
+          label.append(box, text);
+          li.appendChild(label);
+          if (item.who) {
+            const who = document.createElement("span");
+            who.className = "links-detail__plan-who";
+            who.textContent = item.who;
+            li.appendChild(who);
+          }
+          return li;
+        })
+      );
+    }
+    const byPerson = planByPerson(planItems);
+    planWho.hidden = byPerson.length === 0;
+    planWhoUl.replaceChildren(
+      ...byPerson.map((group) => {
+        const li = document.createElement("li");
+        li.className = "links-detail__plan-item";
+        li.dataset.person = group.who;
+        const name = document.createElement("span");
+        name.className = "links-detail__plan-text";
+        name.textContent = group.who;
+        const what = document.createElement("span");
+        what.className = "links-detail__plan-who";
+        what.textContent = `${group.items.map((i) => i.text).join(", ")} · ${group.done} de ${group.items.length}`;
+        li.append(name, what);
+        return li;
+      })
+    );
+  }
+
+  /**
+   * Per place: `confirmed` is what the server last accepted, `local` what the UI
+   * shows, `chain` serializes the saves so they never overlap or land out of order.
+   */
+  type PlanSync = { confirmed: PlanItem[]; local: PlanItem[]; chain: Promise<void>; pending: number };
+  const planSync = new Map<string, PlanSync>();
+
+  function syncFor(link: LinkRow): PlanSync {
+    let state = planSync.get(link.id);
+    if (!state) {
+      state = { confirmed: [], local: [], chain: Promise.resolve(), pending: 0 };
+      planSync.set(link.id, state);
+    }
+    if (state.pending === 0) {
+      state.confirmed = readPlanItems(link.plan_items);
+      state.local = state.confirmed;
+    }
+    return state;
+  }
+
+  /** Optimistic: show the tick, queue the save of the latest state, roll back to the confirmed one on failure. */
+  function tickPlanItem(index: number, done: boolean): void {
+    const link = current;
+    const save = cb.onSavePlanItems;
+    if (!link || !save) return;
+    const state = syncFor(link);
+    const next = togglePlanItem(readPlanItems(link.plan_items), index, done);
+    state.local = next;
+    planError.hidden = true;
+    current = { ...link, plan_items: next };
+    renderPlan();
+    state.pending++;
+    state.chain = state.chain.then(async () => {
+      const sending = state.local;
+      try {
+        await save(link, sending);
+        state.confirmed = sending;
+      } catch {
+        state.local = state.confirmed;
+        if (current?.id === link.id) {
+          current = { ...current, plan_items: state.confirmed };
+          planError.textContent = PLAN_SAVE_ERROR;
+          planError.hidden = false;
+          renderPlan();
+        }
+      } finally {
+        state.pending--;
+      }
+    });
+  }
+
   function act(fn: (link: LinkRow) => void): void {
     if (!current) return;
     const link = current;
@@ -2233,6 +2461,14 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   });
   reviewEdit.addEventListener("click", () => {
     if (cb.onEditReview) act(cb.onEditReview);
+  });
+  planEdit.addEventListener("click", () => {
+    const edit = cb.onEditPlan;
+    if (!edit || !current) return;
+    const state = planSync.get(current.id);
+    // Pending tick saves land (or roll back) first, so the sheet starts from the settled plan.
+    if (state && state.pending > 0) void state.chain.then(() => act(edit));
+    else act(edit);
   });
   backBtn.addEventListener("click", close);
   overlay.addEventListener("keydown", (e) => {

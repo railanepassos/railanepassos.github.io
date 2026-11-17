@@ -1041,3 +1041,230 @@ describe("Phase 3: Como foi on card and detail", () => {
     expect(unmark.hidden).toBe(true);
   });
 });
+
+describe("detail: Plano do passeio", () => {
+  const cb = () => ({
+    onEdit: vi.fn(),
+    onSchedule: vi.fn(),
+    onMarkDone: vi.fn(),
+    onDelete: vi.fn(),
+    onEditPlan: vi.fn(),
+  });
+  const plan = [
+    { text: "Comprar ingressos", list: "checklist" as const, who: "Alana", done: true },
+    { text: "Protetor solar", list: "checklist" as const, done: false },
+    { text: "Pão", list: "compras" as const, done: false },
+  ];
+
+  it("shows both lists with progress and the person in charge; no save callback: disabled boxes", () => {
+    const modal = createViewModal(cb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    expect(section.hidden).toBe(false);
+    const checklist = section.querySelector<HTMLElement>("[data-plan-list='checklist']")!;
+    expect(checklist.textContent).toContain("Checklist");
+    expect(checklist.textContent).toContain("1 de 2");
+    expect(checklist.textContent).toContain("Comprar ingressos");
+    expect(checklist.textContent).toContain("Alana");
+    const compras = section.querySelector<HTMLElement>("[data-plan-list='compras']")!;
+    expect(compras.textContent).toContain("Lanches e compras");
+    expect(compras.textContent).toContain("0 de 1");
+    const boxes = section.querySelectorAll<HTMLInputElement>("input[type='checkbox']");
+    expect(boxes).toHaveLength(3);
+    expect([...boxes].every((b) => b.disabled)).toBe(true);
+  });
+
+  it("shows participants inside the section, which appears with participants only", () => {
+    const modal = createViewModal(cb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ people: ["Alana", "Bia"] }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    expect(section.hidden).toBe(false);
+    expect(section.querySelector("[data-plan-people]")!.textContent).toContain("Alana, Bia");
+    expect(section.querySelector<HTMLElement>("[data-plan-list='checklist']")!.hidden).toBe(true);
+  });
+
+  it("keeps Editar plano and Enviar no WhatsApp inside the section", () => {
+    const modal = createViewModal(cb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    expect(section.querySelector("[data-action='edit-plan']")).not.toBeNull();
+    expect(section.querySelector("[data-action='share-plan']")).not.toBeNull();
+  });
+
+  it("serializes tick saves and always sends the latest state", async () => {
+    const resolvers: Array<() => void> = [];
+    const save = vi.fn(() => new Promise<void>((resolve) => resolvers.push(resolve)));
+    const modal = createViewModal({ ...cb(), onSavePlanItems: save });
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    const tick = (i: number) => {
+      const box = section.querySelectorAll<HTMLInputElement>("input[type='checkbox']")[i]!;
+      box.checked = !box.checked;
+      box.dispatchEvent(new Event("change"));
+    };
+    tick(1);
+    tick(2);
+    await Promise.resolve();
+    expect(save).toHaveBeenCalledTimes(1);
+    resolvers[0]!();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(save).toHaveBeenCalledTimes(2);
+    const calls = save.mock.calls as unknown as Array<[unknown, Array<{ done: boolean }>]>;
+    expect(calls[1]![1].map((i) => i.done)).toEqual([true, true, true]);
+  });
+
+  it("rolls back to the last confirmed state when an earlier tick fails", async () => {
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("plan_items invalid: x"))
+      .mockResolvedValue(undefined);
+    const modal = createViewModal({ ...cb(), onSavePlanItems: save });
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    const tick = (i: number) => {
+      const box = section.querySelectorAll<HTMLInputElement>("input[type='checkbox']")[i]!;
+      box.checked = !box.checked;
+      box.dispatchEvent(new Event("change"));
+    };
+    tick(1);
+    tick(2);
+    await new Promise((r) => setTimeout(r, 0));
+    const boxes = [...section.querySelectorAll<HTMLInputElement>("input[type='checkbox']")];
+    const last = (save.mock.calls.at(-1) as unknown as [unknown, Array<{ done: boolean }>])[1];
+    expect(boxes.map((b) => b.checked)).toEqual(last.map((i) => i.done));
+    expect(boxes.map((b) => b.checked)).toEqual([true, false, false]);
+  });
+
+  it("waits for pending tick saves before opening the plan sheet", async () => {
+    let resolve!: () => void;
+    const save = vi.fn(() => new Promise<void>((r) => (resolve = r)));
+    const callbacks = { ...cb(), onSavePlanItems: save };
+    const modal = createViewModal(callbacks);
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const box = modal.element.querySelectorAll<HTMLInputElement>("[data-field='plan'] input[type='checkbox']")[1]!;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    modal.element.querySelector<HTMLButtonElement>("[data-action='edit-plan']")!.click();
+    await Promise.resolve();
+    expect(callbacks.onEditPlan).not.toHaveBeenCalled();
+    resolve();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(callbacks.onEditPlan).toHaveBeenCalledTimes(1);
+    const opened = callbacks.onEditPlan.mock.calls[0]![0] as { plan_items: Array<{ done: boolean }> };
+    expect(opened.plan_items[1]!.done).toBe(true);
+  });
+
+  it("does not fall back to wa.me after a failed native share; shows a message", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: () => Promise.reject(new Error("boom")),
+    });
+    const modal = createViewModal(cb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    modal.element.querySelector<HTMLButtonElement>("[data-action='share-plan']")!.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(open).not.toHaveBeenCalled();
+    const alert = modal.element.querySelector<HTMLElement>("[data-field='plan'] [role='alert']")!;
+    expect(alert.hidden).toBe(false);
+    expect(alert.textContent).toBe("Não foi possível compartilhar o plano. Tente de novo.");
+    Object.defineProperty(navigator, "share", { configurable: true, value: undefined });
+    open.mockRestore();
+  });
+
+  it("ticking saves the whole plan optimistically and updates the progress", async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const modal = createViewModal({ ...cb(), onSavePlanItems: save });
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    const box = section.querySelectorAll<HTMLInputElement>("input[type='checkbox']")[1]!;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    await Promise.resolve();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0]![1]).toEqual([
+      plan[0],
+      { ...plan[1], done: true },
+      plan[2],
+    ]);
+    expect(section.querySelector("[data-plan-list='checklist']")!.textContent).toContain("2 de 2");
+  });
+
+  it("rolls the tick back and shows an error when the save fails", async () => {
+    const save = vi.fn().mockRejectedValue(new Error("Sem conexão."));
+    const modal = createViewModal({ ...cb(), onSavePlanItems: save });
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    const box = section.querySelectorAll<HTMLInputElement>("input[type='checkbox']")[1]!;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    const after = section.querySelectorAll<HTMLInputElement>("input[type='checkbox']")[1]!;
+    expect(after.checked).toBe(false);
+    expect(section.querySelector("[data-plan-list='checklist']")!.textContent).toContain("1 de 2");
+    const alert = section.querySelector<HTMLElement>("[role='alert']")!;
+    expect(alert.hidden).toBe(false);
+    expect(alert.textContent).toBe("Não foi possível salvar o plano. Tente de novo.");
+  });
+
+  it("hides the section (and an empty list) when there is nothing to show", () => {
+    const modal = createViewModal(cb());
+    document.body.appendChild(modal.element);
+    modal.open(row());
+    expect(modal.element.querySelector<HTMLElement>("[data-field='plan']")!.hidden).toBe(true);
+    modal.open(row({ plan_items: [plan[2]!] }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    expect(section.hidden).toBe(false);
+    expect(section.querySelector<HTMLElement>("[data-plan-list='checklist']")!.hidden).toBe(true);
+    expect(section.querySelector<HTMLElement>("[data-plan-list='compras']")!.hidden).toBe(false);
+  });
+
+  it("ignores malformed stored items and renders text safely", () => {
+    const modal = createViewModal(cb());
+    document.body.appendChild(modal.element);
+    modal.open(
+      row({
+        plan_items: [
+          { text: "<img src=x onerror=alert(1)>", list: "checklist", done: false },
+          { text: "", list: "checklist", done: false },
+        ] as never,
+      })
+    );
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    expect(section.querySelectorAll("img")).toHaveLength(0);
+    expect(section.textContent).toContain("<img src=x onerror=alert(1)>");
+    expect(section.textContent).toContain("0 de 1");
+  });
+
+  it("offers Editar plano on any place and closes the detail before calling back", () => {
+    const callbacks = cb();
+    const modal = createViewModal(callbacks);
+    document.body.appendChild(modal.element);
+    const link = row();
+    modal.open(link);
+    const btn = modal.element.querySelector<HTMLButtonElement>("[data-action='edit-plan']")!;
+    expect(btn.textContent).toContain("Editar plano");
+    expect(btn.closest<HTMLElement>("[data-field='plan-edit']")!.hidden).toBe(false);
+    btn.click();
+    expect(modal.element.hidden).toBe(true);
+    expect(callbacks.onEditPlan).toHaveBeenCalledWith(link);
+  });
+
+  it("hides Editar plano when no handler is wired", () => {
+    const { onEditPlan, ...withoutPlan } = cb();
+    void onEditPlan;
+    const modal = createViewModal(withoutPlan);
+    document.body.appendChild(modal.element);
+    modal.open(row());
+    expect(modal.element.querySelector<HTMLElement>("[data-field='plan-edit']")!.hidden).toBe(true);
+  });
+});

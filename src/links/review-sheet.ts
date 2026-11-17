@@ -1,4 +1,5 @@
 import { createScreenChrome } from "./admin-ui";
+import { toolButton } from "./tool-button";
 import { setScreenBusy } from "./skeleton";
 import { syncBodyScreenLock } from "./screen-lock";
 import { uiIcon } from "./ui-icons";
@@ -214,16 +215,6 @@ function createImpressionsControl(): ReviewControl {
   };
 }
 
-function lessonToolButton(glyph: string, ariaLabel: string): HTMLButtonElement {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "links-poses__tool";
-  btn.setAttribute("aria-label", ariaLabel);
-  btn.title = ariaLabel;
-  btn.textContent = glyph;
-  return btn;
-}
-
 /** Ordered list of short items; same pattern as the pose list in the place form. */
 function createLessonsControl(): ReviewControl {
   let lessons: string[] = [];
@@ -280,14 +271,14 @@ function createLessonsControl(): ReviewControl {
       const tools = document.createElement("div");
       tools.className = "links-poses__tools";
       if (movable) {
-        const up = lessonToolButton("↑", `Subir lição ${n}`);
+        const up = toolButton("↑", `Subir lição ${n}`);
         up.disabled = i === 0;
         up.dataset.focusKey = `up-${i}`;
         up.addEventListener("click", () => {
           lessons = moveItem(lessons, i, i - 1);
           render(`up-${i - 1}`);
         });
-        const down = lessonToolButton("↓", `Descer lição ${n}`);
+        const down = toolButton("↓", `Descer lição ${n}`);
         down.disabled = i === lessons.length - 1;
         down.dataset.focusKey = `down-${i}`;
         down.addEventListener("click", () => {
@@ -296,7 +287,7 @@ function createLessonsControl(): ReviewControl {
         });
         tools.append(up, down);
       }
-      const remove = lessonToolButton("×", `Remover lição ${n}`);
+      const remove = toolButton("×", `Remover lição ${n}`);
       remove.addEventListener("click", () => {
         lessons = lessons.filter((_, j) => j !== i);
         render("add");
