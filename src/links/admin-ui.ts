@@ -2449,7 +2449,7 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
    */
   async function sharePlan(): Promise<void> {
     if (!current) return;
-    const text = buildPlanMessage(current);
+    const text = buildPlanMessage(current, window.location.origin);
     const canNativeShare =
       typeof navigator.share === "function" && navigator.canShare?.({ text }) !== false;
     if (!canNativeShare) {
