@@ -4058,3 +4058,9 @@ textarea,
 select {
   font-size: max(16px, 1em);
 }
+
+/* Owner select of a plan item: full width, comfortable touch target. */
+.links-plan__who {
+  width: 100%;
+  min-height: 44px;
+}
