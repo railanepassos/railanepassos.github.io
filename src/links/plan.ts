@@ -1,4 +1,4 @@
-import { dedupePeople } from "./people";
+import { dedupePeople, normalizePerson, personKey } from "./people";
 
 /**
  * Trip plan (Phase 4): the checklist and the shopping list of a place, stored
@@ -132,4 +132,37 @@ export type PlanPatch = { people: string[] | null; plan_items: PlanItem[] | null
 export function planToPatch(values: PlanValues): PlanPatch {
   const people = dedupePeople(values.people);
   return { people: people.length > 0 ? people : null, plan_items: normalizePlan(values.items) };
+}
+
+/**
+ * Owner choices for an item: the participants, plus the stored owner when it
+ * is not among them (so removing a participant never loses the name).
+ */
+export function ownerOptions(people: readonly string[], who: string): string[] {
+  const options = dedupePeople(people);
+  const current = normalizePerson(who);
+  if (current !== "" && !options.some((p) => personKey(p) === personKey(current))) {
+    options.push(current);
+  }
+  return options;
+}
+
+export type PlanPersonGroup = { who: string; items: PlanItem[]; done: number };
+
+/** "Quem faz o quê": items grouped by owner (first appearance order); unowned items are left out. */
+export function planByPerson(items: readonly PlanItem[]): PlanPersonGroup[] {
+  const groups = new Map<string, PlanPersonGroup>();
+  for (const item of items) {
+    const who = normalizePerson(item.who ?? "");
+    if (who === "") continue;
+    const key = personKey(who);
+    let group = groups.get(key);
+    if (!group) {
+      group = { who, items: [], done: 0 };
+      groups.set(key, group);
+    }
+    group.items.push(item);
+    if (item.done) group.done += 1;
+  }
+  return [...groups.values()];
 }

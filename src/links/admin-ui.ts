@@ -38,7 +38,14 @@ import {
   type PoseDraft,
 } from "./poses";
 import { readLessons } from "./lessons";
-import { PLAN_LISTS, planProgress, readPlanItems, togglePlanItem, type PlanItem } from "./plan";
+import {
+  PLAN_LISTS,
+  planByPerson,
+  planProgress,
+  readPlanItems,
+  togglePlanItem,
+  type PlanItem,
+} from "./plan";
 import {
   MORE_TEXT_FIELDS,
   emptyMoreTextValues,
@@ -2069,6 +2076,17 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   planError.setAttribute("role", "alert");
   planError.hidden = true;
   planRow.value.appendChild(planError);
+  // "Quem faz o quê": the same items grouped by owner (hidden when nobody owns any).
+  const planWho = document.createElement("div");
+  planWho.className = "links-detail__plan-list links-detail__plan-who-summary";
+  planWho.dataset.planSummary = "who";
+  const planWhoTitle = document.createElement("p");
+  planWhoTitle.className = "links-detail__plan-title";
+  planWhoTitle.textContent = "Quem faz o quê";
+  const planWhoUl = document.createElement("ul");
+  planWhoUl.className = "links-detail__plan-items";
+  planWho.append(planWhoTitle, planWhoUl);
+  planRow.value.appendChild(planWho);
   const planEdit = document.createElement("button");
   planEdit.type = "button";
   planEdit.className = "links-detail__action links-detail__plan-edit";
@@ -2304,6 +2322,23 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
         })
       );
     }
+    const byPerson = planByPerson(planItems);
+    planWho.hidden = byPerson.length === 0;
+    planWhoUl.replaceChildren(
+      ...byPerson.map((group) => {
+        const li = document.createElement("li");
+        li.className = "links-detail__plan-item";
+        li.dataset.person = group.who;
+        const name = document.createElement("span");
+        name.className = "links-detail__plan-text";
+        name.textContent = group.who;
+        const what = document.createElement("span");
+        what.className = "links-detail__plan-who";
+        what.textContent = `${group.items.map((i) => i.text).join(", ")} · ${group.done} de ${group.items.length}`;
+        li.append(name, what);
+        return li;
+      })
+    );
   }
 
   /** Optimistic: show the tick, save, and put the item back if the save fails. */

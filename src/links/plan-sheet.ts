@@ -5,6 +5,7 @@ import {
   MAX_PLAN_ITEMS,
   PLAN_LISTS,
   PLAN_TEXT_MAX,
+  ownerOptions,
   type PlanDraft,
   type PlanList,
   type PlanValues,
@@ -21,8 +22,8 @@ import { resetPageZoom } from "./viewport-zoom";
  * zoom, flowing (non-sticky) action bar, controls at least 16px.
  *
  * Edits the participants (the people field, chip input) and the two item lists.
- * `who` (person in charge) and `done` are carried through untouched until the
- * tickets that edit them.
+ * Each item has an owner select (`who`: "Ninguém" + participants + the stored
+ * owner when no longer a participant). `done` is carried through untouched.
  */
 
 const TEXT_INPUT_TYPES = new Set(["text", "url", "search", "email", "tel"]);
@@ -64,6 +65,29 @@ type PlanListControl = {
   render: () => void;
 };
 
+/** Fills the owner select; the stored owner stays selectable even if no longer a participant. */
+function fillOwnerSelect(
+  select: HTMLSelectElement,
+  participants: readonly string[],
+  who: string
+): void {
+  select.replaceChildren();
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "Ninguém";
+  select.appendChild(none);
+  const names = ownerOptions(participants, who);
+  for (const name of names) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  }
+  const current = personKey(who);
+  const match = names.find((n) => personKey(n) === current);
+  select.value = current === "" || match === undefined ? "" : match;
+}
+
 function toolButton(glyph: string, ariaLabel: string): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.type = "button";
@@ -88,7 +112,8 @@ function createListControl(
   title: string,
   offset: () => number,
   totalCount: () => number,
-  onChange: () => void
+  onChange: () => void,
+  getParticipants: () => readonly string[]
 ): PlanListControl {
   let rows: PlanDraft[] = [];
 
@@ -142,6 +167,22 @@ function createListControl(
         focusInput(i + 1);
       });
 
+      const ownerSelect = document.createElement("select");
+      ownerSelect.className = "links-admin-form__control links-plan__who";
+      ownerSelect.id = `links-plan-who-${list}-${i}`;
+      ownerSelect.setAttribute("aria-label", `Quem faz o item ${n}`);
+      fillOwnerSelect(ownerSelect, getParticipants(), row.who);
+      const refreshOwner = (): void => {
+        // Participants may have changed since the row was drawn.
+        const current = row.who;
+        fillOwnerSelect(ownerSelect, getParticipants(), current);
+      };
+      ownerSelect.addEventListener("focus", refreshOwner);
+      ownerSelect.addEventListener("pointerdown", refreshOwner);
+      ownerSelect.addEventListener("change", () => {
+        row.who = ownerSelect.value;
+      });
+
       const tools = document.createElement("div");
       tools.className = "links-poses__tools";
       if (movable) {
@@ -169,7 +210,7 @@ function createListControl(
       });
       tools.append(remove);
 
-      li.append(input, tools);
+      li.append(input, ownerSelect, tools);
       ol.appendChild(li);
     });
     addBtn.disabled = totalCount() >= MAX_PLAN_ITEMS;
@@ -245,7 +286,8 @@ export function createPlanSheet(options: PlanSheetOptions = {}): PlanSheetHandle
         title,
         () => counts().slice(0, index).reduce((a, b) => a + b, 0),
         () => counts().reduce((a, b) => a + b, 0),
-        renderAll
+        renderAll,
+        () => peopleInput.getValues()
       )
     );
   });

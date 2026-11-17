@@ -267,5 +267,57 @@ test.describe("Plano do passeio", () => {
     await expect(detail.getByRole("alert").filter({ hasText: /\S/ })).toBeVisible();
     await expect(compras).toContainText("0 de 1");
     await expect(box).not.toBeChecked();
+
+  test("assigns an owner per item, keeps an ex-participant, shows who does what", async ({ page }) => {
+    const writes = await openAuthedWith(page, [
+      { ...PLANNED, people: ["Alana"] },
+      ...LINK_ROWS,
+    ]);
+    const detail0 = await openDetail(page, "Lugar Planejado");
+    // Stored owners show next to each item and in the summary.
+    const summary0 = detail0.locator("[data-plan-summary='who']");
+    await expect(summary0).toContainText("Quem faz o quê");
+    await expect(summary0.locator("[data-person='Alana']")).toContainText("Comprar ingressos · 1 de 1");
+    await expect(summary0.locator("[data-person='Bia Teste']")).toContainText("Biscoitos");
+    await detail0.getByRole("button", { name: "Voltar" }).click();
+
+    const sheet = await openSheet(page, "Lugar Planejado");
+    const second = sheet.getByLabel("Quem faz o item 2");
+    await expect(second.locator("option")).toHaveText(["Ninguém", "Alana"]);
+    // Bia Teste is no longer a participant but is kept, selected.
+    const third = sheet.getByLabel("Quem faz o item 3");
+    await expect(third.locator("option")).toHaveText(["Ninguém", "Alana", "Bia Teste"]);
+    await expect(third).toHaveValue("Bia Teste");
+    await second.selectOption("Alana");
+    await sheet.getByLabel("Quem faz o item 1").selectOption("");
+    await sheet.getByRole("button", { name: "Salvar" }).click();
+    await expect(sheet).toBeHidden();
+
+    expect(writes.allPatched[0]!.plan_items).toEqual([
+      { text: "Comprar ingressos", list: "checklist", done: true },
+      { text: "Protetor solar", list: "checklist", who: "Alana", done: false },
+      { text: "Biscoitos", list: "compras", who: "Bia Teste", done: false },
+    ]);
+    const summary = page.locator(".links-detail [data-plan-summary='who']");
+    await expect(summary.locator("[data-person='Alana']")).toContainText("Protetor solar");
+    await expect(summary.locator("[data-person='Alana']")).not.toContainText("Comprar ingressos");
+  });
+
+  test("summary is hidden when nobody owns an item", async ({ page }) => {
+    await openAuthedWith(page, [
+      { ...PLANNED, plan_items: [{ text: "X", list: "checklist", done: false }] },
+      ...LINK_ROWS,
+    ]);
+    const detail = await openDetail(page, "Lugar Planejado");
+    await expect(detail.locator("[data-plan-summary='who']")).toBeHidden();
+  });
+
+  test("owner selects are at least 44px tall", async ({ page }) => {
+    await openAuthedWith(page, [PLANNED, ...LINK_ROWS]);
+    const sheet = await openSheet(page, "Lugar Planejado");
+    const h = await sheet
+      .getByLabel("Quem faz o item 1")
+      .evaluate((e) => e.getBoundingClientRect().height);
+    expect(h).toBeGreaterThanOrEqual(44);
   });
 });

@@ -165,4 +165,58 @@ describe("createPlanSheet", () => {
     sheet.setBusy(false);
     expect(button("Salvar").disabled).toBe(false);
   });
+
+  describe("item owner", () => {
+    const owner = (sheet: { element: HTMLElement }, i = 0) =>
+      sheet.element.querySelectorAll<HTMLSelectElement>(".links-plan__who")[i]!;
+    const optionTexts = (sel: HTMLSelectElement) => Array.from(sel.options).map((o) => o.text);
+
+    it("offers Ninguém plus the participants and saves the choice as who", () => {
+      const { sheet, onSave, button } = setup({
+        people: ["Alana", "Bia"],
+        items: [item({ text: "Ingressos" })],
+      });
+      const sel = owner(sheet);
+      expect(optionTexts(sel)).toEqual(["Ninguém", "Alana", "Bia"]);
+      expect(sel.value).toBe("");
+      sel.value = "Bia";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+      button("Salvar").click();
+      expect(onSave.mock.calls[0]![0].items[0].who).toBe("Bia");
+    });
+
+    it("keeps a stored owner that is no longer a participant, selected", () => {
+      const { sheet, onSave, button } = setup({
+        people: ["Alana"],
+        items: [item({ text: "Ingressos", who: "Carlos" })],
+      });
+      const sel = owner(sheet);
+      expect(optionTexts(sel)).toEqual(["Ninguém", "Alana", "Carlos"]);
+      expect(sel.value).toBe("Carlos");
+      button("Salvar").click();
+      expect(onSave.mock.calls[0]![0].items[0].who).toBe("Carlos");
+    });
+
+    it("Ninguém clears the owner", () => {
+      const { sheet, onSave, button } = setup({
+        people: ["Alana"],
+        items: [item({ text: "Ingressos", who: "Alana" })],
+      });
+      const sel = owner(sheet);
+      sel.value = "";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+      button("Salvar").click();
+      expect(onSave.mock.calls[0]![0].items[0].who).toBe("");
+    });
+
+    it("picks up participants added while the sheet is open", () => {
+      const { sheet } = setup({ people: ["Alana"], items: [item({ text: "Ingressos" })] });
+      const people = sheet.element.querySelector<HTMLInputElement>("#links-plan-people")!;
+      people.value = "Bia";
+      people.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      const sel = owner(sheet);
+      sel.dispatchEvent(new Event("focus"));
+      expect(optionTexts(sel)).toEqual(["Ninguém", "Alana", "Bia"]);
+    });
+  });
 });

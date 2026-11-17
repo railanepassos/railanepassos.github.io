@@ -9,6 +9,8 @@ import {
   planFromLink,
   planToPatch,
   planProgress,
+  planByPerson,
+  ownerOptions,
   readPlanItems,
   storedPlanError,
   togglePlanItem,
@@ -186,5 +188,38 @@ describe("togglePlanItem", () => {
 
   it("returns an equal copy for an out-of-range index", () => {
     expect(togglePlanItem(items, 5, true)).toEqual(items);
+
+describe("ownerOptions", () => {
+  it("lists the participants, with the stored owner kept as an extra when absent", () => {
+    expect(ownerOptions(["Alana", "Bia"], "")).toEqual(["Alana", "Bia"]);
+    expect(ownerOptions(["Alana", "Bia"], "bia")).toEqual(["Alana", "Bia"]);
+    expect(ownerOptions(["Alana", "Bia"], "Carlos")).toEqual(["Alana", "Bia", "Carlos"]);
+    expect(ownerOptions([], " Carlos ")).toEqual(["Carlos"]);
+  });
+});
+
+describe("planByPerson", () => {
+  const it_ = (text: string, who?: string, done = false) => ({
+    text,
+    list: "checklist" as const,
+    ...(who ? { who } : {}),
+    done,
+  });
+
+  it("groups items by owner in order of first appearance, merging spellings", () => {
+    const groups = planByPerson([
+      it_("Ingressos", "Alana", true),
+      it_("Protetor"),
+      it_("Biscoitos", "Bia"),
+      it_("Água", "alana"),
+    ]);
+    expect(groups).toEqual([
+      { who: "Alana", items: [it_("Ingressos", "Alana", true), it_("Água", "alana")], done: 1 },
+      { who: "Bia", items: [it_("Biscoitos", "Bia")], done: 0 },
+    ]);
+  });
+
+  it("is empty when nobody owns anything", () => {
+    expect(planByPerson([it_("Protetor")])).toEqual([]);
   });
 });
