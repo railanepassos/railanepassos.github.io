@@ -32,7 +32,30 @@ export function planShareUrl(origin: string, token: string): string {
   return `${origin}/p/a8f3k2/${PLAN_FRAGMENT_PREFIX}${token}`;
 }
 
-export type SharedPlanItem = { text: string; who: string | null; done: boolean };
+export const SHARED_PLAN_CONFLICT = "O plano mudou, recarregamos para você";
+export const SHARED_PLAN_SAVE_ERROR = "Não foi possível salvar. Tente de novo.";
+
+export type PlanWriteError = "inactive" | "conflict" | "error";
+
+/**
+ * Failed links_shared_plan_set_done -> kind. The function raises 'inactive' or
+ * 'conflict' as the message of a 400; anything else (invalid, 5xx, network)
+ * is a generic error.
+ */
+export function classifyPlanWriteError(status: number, body: unknown): PlanWriteError {
+  if (status !== 400 || typeof body !== "object" || body === null) return "error";
+  const message = (body as Record<string, unknown>).message;
+  return message === "inactive" || message === "conflict" ? message : "error";
+}
+
+export function planWriteErrorMessage(kind: PlanWriteError): string {
+  if (kind === "conflict") return SHARED_PLAN_CONFLICT;
+  if (kind === "inactive") return SHARED_PLAN_INACTIVE;
+  return SHARED_PLAN_SAVE_ERROR;
+}
+
+/** `idx` is the position in the stored plan_items array (what the server expects). */
+export type SharedPlanItem = { idx: number; text: string; who: string | null; done: boolean };
 
 export type SharedPlanList = {
   key: PlanList;
@@ -73,16 +96,27 @@ export function buildSharedPlanView(raw: unknown): SharedPlanView | null {
     .map((p) => p.trim())
     .filter((p) => p !== "");
 
-  const items = readPlanItems(r.plan_items);
+  // Keep each item's position in the stored array: malformed entries are skipped
+  // for display but still occupy an index on the server.
+  const rawItems = Array.isArray(r.plan_items) ? r.plan_items : [];
+  const indexed = rawItems.flatMap((entry, idx) =>
+    readPlanItems([entry]).map((item) => ({ item, idx }))
+  );
+  const items = indexed.map((x) => x.item);
   const lists: SharedPlanList[] = [];
   for (const { key, title: listTitle } of PLAN_LISTS) {
-    const own = items.filter((i) => i.list === key);
+    const own = indexed.filter((x) => x.item.list === key);
     if (own.length === 0) continue;
     lists.push({
       key,
       title: listTitle,
       progress: planProgress(items, key).label,
-      items: own.map((i) => ({ text: i.text, who: i.who ?? null, done: i.done })),
+      items: own.map(({ item, idx }) => ({
+        idx,
+        text: item.text,
+        who: item.who ?? null,
+        done: item.done,
+      })),
     });
   }
 

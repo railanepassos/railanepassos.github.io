@@ -1,8 +1,9 @@
 import type { SharedPlanView } from "./plan-share";
 
 /**
- * Read-only render of a shared plan (Phase 4.1). Text nodes only (never HTML),
- * no inputs, no buttons, no login. Reuses the Plano section styles of the detail.
+ * Render of a shared plan (Phase 4.1). Text nodes only (never HTML), no login.
+ * The only controls are one checkbox per item (the tick). Reuses the Plano
+ * section styles of the detail.
  */
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -22,8 +23,21 @@ function block(title: string, ...content: HTMLElement[]): HTMLElement {
   return section;
 }
 
-export function renderSharedPlan(root: HTMLElement, view: SharedPlanView): void {
+export type ToggleHandler = (idx: number, text: string, done: boolean) => void;
+
+export function renderSharedPlan(
+  root: HTMLElement,
+  view: SharedPlanView,
+  onToggle: ToggleHandler,
+  notice: string | null = null
+): void {
+  const focusedIdx = (document.activeElement as HTMLElement | null)?.dataset?.idx ?? null;
   const article = el("article", "links-public-plan");
+  if (notice) {
+    const note = el("p", "links-public-plan__notice", notice);
+    note.setAttribute("role", "status");
+    article.appendChild(note);
+  }
   article.appendChild(el("h2", "links-public-plan__title", view.title));
   if (view.when) article.appendChild(el("p", "links-public-plan__meta", view.when));
   if (view.where) article.appendChild(el("p", "links-public-plan__meta", view.where));
@@ -40,17 +54,23 @@ export function renderSharedPlan(root: HTMLElement, view: SharedPlanView): void 
     for (const item of list.items) {
       const li = el("li", "links-detail__plan-item links-public-plan__item");
       if (item.done) li.classList.add("links-detail__plan-item--done");
-      li.append(
-        el("span", "links-public-plan__mark", item.done ? "✓" : "☐"),
-        el("span", "links-public-plan__sr", item.done ? "Feito: " : "Pendente: "),
-        el("span", "links-detail__plan-text", item.text)
-      );
+      const label = el("label", "links-public-plan__row");
+      const box = el("input", "links-public-plan__check");
+      box.type = "checkbox";
+      box.checked = item.done;
+      box.dataset.idx = String(item.idx);
+      box.addEventListener("change", () => onToggle(item.idx, item.text, box.checked));
+      label.append(box, el("span", "links-detail__plan-text", item.text));
+      li.appendChild(label);
       if (item.who) li.appendChild(el("span", "links-detail__plan-who", item.who));
       ul.appendChild(li);
     }
     article.appendChild(block(`${list.title} · ${list.progress}`, ul));
   }
   root.replaceChildren(article);
+  if (focusedIdx !== null) {
+    root.querySelector<HTMLElement>(`input[data-idx="${focusedIdx}"]`)?.focus();
+  }
 }
 
 /** Loading, inactive or error text, announced to screen readers. */
