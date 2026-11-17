@@ -46,6 +46,7 @@ import {
   togglePlanItem,
   type PlanItem,
 } from "./plan";
+import { buildPlanMessage, hasPlanToShare, whatsappUrl } from "./plan-message";
 import {
   MORE_TEXT_FIELDS,
   emptyMoreTextValues,
@@ -2098,7 +2099,19 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   planEditWrap.className = "links-detail__row links-detail__row--action";
   planEditWrap.dataset.field = "plan-edit";
   planEditWrap.appendChild(planEdit);
-  info.append(planRow.row, planEditWrap);
+  const planShare = document.createElement("button");
+  planShare.type = "button";
+  planShare.className = "links-detail__action links-detail__plan-share";
+  planShare.dataset.action = "share-plan";
+  const planShareText = document.createElement("span");
+  planShareText.textContent = "Enviar no WhatsApp";
+  planShare.append(uiIcon("share", 16), planShareText);
+  planShare.addEventListener("click", () => void sharePlan());
+  const planShareWrap = document.createElement("div");
+  planShareWrap.className = "links-detail__row links-detail__row--action";
+  planShareWrap.dataset.field = "plan-share";
+  planShareWrap.appendChild(planShare);
+  info.append(planRow.row, planEditWrap, planShareWrap);
 
   // Photo poses: ordered list, each with an optional new-tab link and note.
   const posesRow = infoRow("clipboard", "Referências de pose");
@@ -2229,6 +2242,7 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     planError.hidden = true;
     renderPlan();
     planEditWrap.hidden = !cb.onEditPlan;
+    planShareWrap.hidden = !hasPlanToShare(link);
 
     domainText.textContent = linkDomain(link.url);
     original.href = link.url;
@@ -2282,6 +2296,23 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     syncBodyScreenLock();
     cb.onOpenChange?.(link.id);
     backBtn.focus({ preventScroll: true });
+  }
+
+  /** Share the plan as text: native share sheet when present, else wa.me in a new tab. */
+  async function sharePlan(): Promise<void> {
+    if (!current) return;
+    const text = buildPlanMessage(current);
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ text });
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
+          window.open(whatsappUrl(text), "_blank", "noopener");
+        }
+      }
+      return;
+    }
+    window.open(whatsappUrl(text), "_blank", "noopener");
   }
 
   /** Plan section of the open link: one checkbox per item, progress per list. */
