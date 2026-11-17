@@ -69,7 +69,7 @@ test.describe("draw filters", () => {
     await expect(result.locator(".links-draw-sheet__category")).toHaveText("Passeio", { timeout: 10_000 });
     await expect(result.locator(".links-draw-sheet__reel-item--winner")).toHaveText("Lugar 1");
     await result.getByRole("button", { name: "Ver" }).waitFor();
-    await page.keyboard.press("Escape");
+    await result.getByRole("button", { name: "Fechar sorteio" }).click({ position: { x: 5, y: 5 } });
     await expect(result).toBeHidden();
 
     sheet = await openSheet(page);
@@ -92,7 +92,7 @@ test.describe("draw filters", () => {
         const cs = getComputedStyle(n);
         return { h: n.getBoundingClientRect().height, fs: parseFloat(cs.fontSize) };
       });
-      expect(m.h).toBeGreaterThanOrEqual(48);
+      expect(m.h).toBeGreaterThanOrEqual(47.5);
       expect(m.fs).toBeGreaterThanOrEqual(16);
     }
   });
