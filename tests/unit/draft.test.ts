@@ -196,9 +196,11 @@ describe("parseDraft rejections", () => {
     it("rejects category and categories together", () => {
       expect(reject(withCats({ category: "museu", categories: ["bar"] }))).toContain("categories");
     });
-    it("update drafts: an empty categories list is no proposal", () => {
+    it("update drafts: an empty categories list is rejected (1 to 4)", () => {
       const frag = fragOf({ v: 1, kind: "atualizacao", id: ID, fields: { categories: [], city: "X" } });
-      expect(parseDraft(frag)).toMatchObject({ ok: true });
+      expect(reject(frag)).toContain("1 a 4");
+    });
+    it("withoutEmptyProposals still drops empty lists", () => {
       expect(withoutEmptyProposals({ categories: [], city: "X" })).toEqual({ city: "X" });
     });
     it("draftPrefill maps categories to main + extras", () => {

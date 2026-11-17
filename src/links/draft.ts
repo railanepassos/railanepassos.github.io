@@ -194,9 +194,8 @@ function fieldsError(raw: unknown, requireUrl: boolean): string | null {
     if (v.some((x: string) => !DRAFT_LIMITS.categories.includes(x))) {
       return "O campo categories tem valor desconhecido.";
     }
-    if (v.length === 0 && requireUrl) return "O campo categories precisa de 1 a 4 itens.";
+    if (v.length === 0) return "O campo categories precisa de 1 a 4 itens.";
     if (new Set(v).size !== v.length) return "O campo categories tem valores repetidos.";
-    if (v.includes("")) return "O campo categories tem valor vazio.";
   }
   for (const [key, maxCount, maxLen] of [
     ["tags", DRAFT_LIMITS.maxTags, DRAFT_LIMITS.maxTagLength],
@@ -213,13 +212,13 @@ function fieldsError(raw: unknown, requireUrl: boolean): string | null {
     }
   }
   if (raw.sources !== undefined) {
-    const problem = sourcesError(raw.sources);
+    const problem = draftSourcesError(raw.sources);
     if (problem) return problem;
   }
   return null;
 }
 
-function sourcesError(raw: unknown): string | null {
+function draftSourcesError(raw: unknown): string | null {
   if (!Array.isArray(raw)) return "O campo sources deve ser uma lista.";
   if (raw.length > DRAFT_LIMITS.maxSources) {
     return `O campo sources passa de ${DRAFT_LIMITS.maxSources} itens.`;

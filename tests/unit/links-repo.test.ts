@@ -365,6 +365,23 @@ describe("Phase 2 fields", () => {
     ).resolves.toBeNull();
   });
 
+  it("rejects invalid extra_categories before writing", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    const bad: Array<[string[], string | undefined]> = [
+      [["praia", "passeio", "bar", "museu"], "restaurante"],
+      [["churrascaria"], "restaurante"],
+      [["praia", "praia"], "restaurante"],
+      [["restaurante"], "restaurante"],
+    ];
+    for (const [extra_categories, category] of bad) {
+      await expect(repo.createLink({ ...base, category, extra_categories })).rejects.toThrow(/extra_categories/);
+      await expect(repo.updateLink("1", { category, extra_categories })).rejects.toThrow(/extra_categories/);
+    }
+    await expect(
+      repo.createLink({ ...base, category: "restaurante", extra_categories: ["praia", "bar"] })
+    ).resolves.toBeDefined();
+  });
+
   it("sends sources on create and update, rejects invalid ones, reads them defensively", async () => {
     const sources = [{ title: "Guia", url: "https://example.com/guia" }];
     const client = makeFakeClient({ links: { data: { id: "n", ...base }, error: null } });

@@ -112,6 +112,21 @@ test.describe("fontes", () => {
     expect(writes.created).toBeNull();
   });
 
+  test("a row without title flags and focuses the title input", async ({ page }) => {
+    const writes = await openAuthedWith(page, LINK_ROWS);
+    await openAddForm(page);
+    const sheet = page.getByRole("dialog", { name: "Nova experiência" });
+    await sheet.getByLabel("Link do post ou lugar").fill("https://example.com/novo-lugar");
+    await sheet.locator("details.links-admin-form__more").getByText("Mais detalhes").click();
+    await sheet.getByRole("button", { name: "Adicionar fonte" }).click();
+    await sheet.getByLabel("Fonte 1: link").fill("https://example.com/guia");
+    await sheet.getByRole("button", { name: "Salvar" }).click();
+    await expect(sheet.getByLabel("Fonte 1: título")).toHaveAttribute("aria-invalid", "true");
+    await expect(sheet.getByLabel("Fonte 1: link")).not.toHaveAttribute("aria-invalid", "true");
+    await expect(sheet.getByLabel("Fonte 1: título")).toBeFocused();
+    expect(writes.created).toBeNull();
+  });
+
   test("editing keeps stored sources and PATCH sends the edited list", async ({ page }) => {
     const writes = await openAuthedWith(page, [WITH_SOURCES, ...LINK_ROWS]);
     const card = page.locator(".feed-card", { hasText: "Lugar Com Fontes" });

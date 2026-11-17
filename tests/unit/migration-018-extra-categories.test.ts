@@ -126,4 +126,19 @@ describe("migration 018: extra categories", () => {
     ).toBe(true);
     await db.query("update public.links set extra_categories = array['praia'] where id = $1", [id]);
   });
+
+  it("locks the helper: fixed search_path, no execute for anon", async () => {
+    const cfg = await db.query<{ proconfig: string[] | null }>(
+      "select proconfig from pg_proc where proname = 'links_extra_categories_ok'"
+    );
+    expect((cfg.rows[0]!.proconfig ?? []).some((c) => c.startsWith("search_path="))).toBe(true);
+    const sig = "public.links_extra_categories_ok(text[], text)";
+    const priv = async (role: string) =>
+      (
+        await db.query<{ ok: boolean }>(`select has_function_privilege('${role}', '${sig}', 'execute') as ok`)
+      ).rows[0]!.ok;
+    expect(await priv("anon")).toBe(false);
+    expect(await priv("authenticated")).toBe(true);
+    expect(await priv("service_role")).toBe(true);
+  });
 });

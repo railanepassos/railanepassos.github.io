@@ -1359,11 +1359,15 @@ export function createLinkFormModal(
     const row = sourceRows[index];
     const err = sourcesList.querySelector<HTMLElement>(`#links-form-source-${index}-error`);
     const urlInput = sourcesList.querySelector<HTMLInputElement>(`#links-form-source-${index}-url`);
-    if (!row || !err || !urlInput) return true;
+    const titleInput = sourcesList.querySelector<HTMLInputElement>(`#links-form-source-${index}-title`);
+    if (!row || !err || !urlInput || !titleInput) return true;
     const message = sourcesError([row]);
     err.textContent = message ? message.replace(/^Fonte \d+: /, "") : "";
     err.hidden = message === null;
-    if (message) urlInput.setAttribute("aria-invalid", "true");
+    const titleBad = message !== null && /título/.test(message);
+    if (titleBad) titleInput.setAttribute("aria-invalid", "true");
+    else titleInput.removeAttribute("aria-invalid");
+    if (message && !titleBad) urlInput.setAttribute("aria-invalid", "true");
     else urlInput.removeAttribute("aria-invalid");
     return message === null;
   }
@@ -1632,9 +1636,13 @@ export function createLinkFormModal(
     const badSource = sourceRows.findIndex((_, i) => !validateSourceRow(i));
     if (badSource >= 0) {
       more.open = true;
-      sourcesList
-        .querySelector<HTMLInputElement>(`#links-form-source-${badSource}-url`)
-        ?.focus();
+      const badTitle = sourcesList.querySelector<HTMLInputElement>(
+        `#links-form-source-${badSource}-title`
+      );
+      (badTitle?.getAttribute("aria-invalid") === "true"
+        ? badTitle
+        : sourcesList.querySelector<HTMLInputElement>(`#links-form-source-${badSource}-url`)
+      )?.focus();
       return;
     }
     onSubmit(

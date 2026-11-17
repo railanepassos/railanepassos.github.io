@@ -10,6 +10,7 @@ create or replace function public.links_extra_categories_ok(extras text[], main 
 returns boolean
 language sql
 immutable
+set search_path = ''
 as $$
   select
     extras is not null
@@ -31,6 +32,11 @@ as $$
     and cardinality(extras) = (select count(distinct e) from unnest(extras) as e)
     and (main is null or not (main = any (extras)))
 $$;
+
+-- Only meant for the CHECK constraint: not callable by anon (it would
+-- otherwise be exposed as RPC); the roles that write rows keep execute.
+revoke execute on function public.links_extra_categories_ok(text[], text) from public, anon;
+grant execute on function public.links_extra_categories_ok(text[], text) to authenticated, service_role;
 
 alter table public.links drop constraint if exists links_extra_categories_check;
 
