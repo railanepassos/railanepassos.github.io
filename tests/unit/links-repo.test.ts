@@ -365,6 +365,44 @@ describe("Phase 2 fields", () => {
     ).resolves.toBeNull();
   });
 
+  it("sends sources on create and update, rejects invalid ones, reads them defensively", async () => {
+    const sources = [{ title: "Guia", url: "https://example.com/guia" }];
+    const client = makeFakeClient({ links: { data: { id: "n", ...base }, error: null } });
+    await createLinksRepo(client).createLink({ ...base, sources });
+    const builder = (client.from as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(builder.insert).toHaveBeenCalledWith(expect.objectContaining({ sources }));
+
+    const client2 = makeFakeClient();
+    await createLinksRepo(client2).updateLink("1", { sources: [] });
+    const builder2 = (client2.from as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(builder2.update).toHaveBeenCalledWith(expect.objectContaining({ sources: [] }));
+
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(
+      repo.createLink({ ...base, sources: [{ title: "x", url: "http://example.com" }] })
+    ).rejects.toThrow(/sources/);
+    await expect(
+      repo.updateLink("1", { sources: Array.from({ length: 11 }, (_, i) => ({ title: "x", url: `https://example.com/${i}` })) })
+    ).rejects.toThrow(/sources/);
+
+    const listed = createLinksRepo(
+      makeFakeClient({
+        links: {
+          data: [
+            { id: "a", url: "https://example.com", label: "A", sources },
+            { id: "b", url: "https://example.com", label: "B" },
+            { id: "c", url: "https://example.com", label: "C", sources: [{ title: "", url: "javascript:1" }] },
+          ],
+          error: null,
+        },
+      })
+    );
+    const [a, b, c] = await listed.listLinks();
+    expect(a.sources).toEqual(sources);
+    expect(b.sources).toEqual([]);
+    expect(c.sources).toEqual([]);
+  });
+
   it("rejects impressions and lessons beyond the DB limits, accepts valid ones", async () => {
     const repo = createLinksRepo(makeFakeClient());
     await expect(repo.updateLink("1", { impressions: "x".repeat(5001) })).rejects.toThrow(/impressions/);

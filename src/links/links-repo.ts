@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isHttpsUrl, isOptionalHttpsUrl } from "./validate";
 import { MORE_TEXT_FIELDS } from "./more-fields";
+import { readSources, storedSourcesError, type Source } from "./sources";
 import { poseDraftsFromRefs, poseRefsError, readPoseRefs, type PoseRef } from "./poses";
 import { MAX_TAGS, MAX_TAG_LENGTH } from "./tags";
 import { normalizeRating, reviewColumnsError, type ReviewColumns } from "./review";
@@ -36,6 +37,8 @@ export type LinkRow = {
   itinerary?: string | null;
   source_url?: string | null;
   pose_refs?: PoseRef[] | null;
+  /** Fontes (migration 019): up to 10 {title, url}. */
+  sources?: Source[];
   tags?: string[] | null;
   people?: string[] | null;
   plan_items?: PlanItem[] | null;
@@ -70,6 +73,8 @@ export type CreateLinkInput = {
   itinerary?: string | null;
   source_url?: string | null;
   pose_refs?: PoseRef[] | null;
+  /** Fontes (migration 019): up to 10 {title, url}. */
+  sources?: Source[];
   tags?: string[] | null;
   people?: string[] | null;
   plan_items?: PlanItem[] | null;
@@ -99,6 +104,8 @@ export type UpdateLinkPatch = {
   itinerary?: string | null;
   source_url?: string | null;
   pose_refs?: PoseRef[] | null;
+  /** Fontes (migration 019): up to 10 {title, url}. */
+  sources?: Source[];
   tags?: string[] | null;
   people?: string[] | null;
   plan_items?: PlanItem[] | null;
@@ -132,6 +139,7 @@ export function normalizeLinkRow(
     itinerary: row.itinerary ?? null,
     source_url: row.source_url ?? null,
     pose_refs: row.pose_refs == null ? null : readPoseRefs(row.pose_refs),
+    sources: readSources(row.sources),
     tags: row.tags ?? null,
     people: row.people ?? null,
     plan_items: row.plan_items == null ? null : readPlanItems(row.plan_items),
@@ -160,6 +168,8 @@ function validateLinkFields(fields: {
   itinerary?: string | null;
   source_url?: string | null;
   pose_refs?: PoseRef[] | null;
+  /** Fontes (migration 019): up to 10 {title, url}. */
+  sources?: Source[];
   tags?: string[] | null;
   people?: string[] | null;
   plan_items?: PlanItem[] | null;
@@ -245,6 +255,11 @@ function validateLinkFields(fields: {
     const problem = poseRefsError(poseDraftsFromRefs(fields.pose_refs));
     if (problem) throw new Error(`pose_refs invalid: ${problem}`);
   }
+
+  if (fields.sources != null) {
+    const problem = storedSourcesError(fields.sources);
+    if (problem) throw new Error(`sources invalid: ${problem}`);
+  }
 }
 
 function validatePatch(patch: UpdateLinkPatch): UpdateLinkPatch {
@@ -262,6 +277,7 @@ function validatePatch(patch: UpdateLinkPatch): UpdateLinkPatch {
     itinerary: patch.itinerary,
     source_url: patch.source_url,
     pose_refs: patch.pose_refs,
+    sources: patch.sources,
     tags: patch.tags,
     people: patch.people,
     plan_items: patch.plan_items,
@@ -336,6 +352,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         itinerary: input.itinerary,
         source_url: input.source_url,
         pose_refs: input.pose_refs,
+        sources: input.sources,
         tags: input.tags,
         people: input.people,
         plan_items: input.plan_items,
