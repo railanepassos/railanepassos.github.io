@@ -18,6 +18,8 @@ export type LinkRow = {
   icon_preset: string | null;
   icon_url: string | null;
   category: string | null;
+  /** Up to 3 extra categories; the main one stays in `category`. */
+  extra_categories?: string[];
   sort_order: number;
   scheduled_start: string | null;
   scheduled_end: string | null;
@@ -51,6 +53,7 @@ export type CreateLinkInput = {
   icon_preset?: string | null;
   icon_url?: string | null;
   category?: string | null;
+  extra_categories?: string[];
   sort_order: number;
   scheduled_start?: string | null;
   scheduled_end?: string | null;
@@ -79,6 +82,7 @@ export type UpdateLinkPatch = {
   icon_preset?: string | null;
   icon_url?: string | null;
   category?: string | null;
+  extra_categories?: string[];
   sort_order?: number;
   scheduled_start?: string | null;
   scheduled_end?: string | null;
@@ -111,6 +115,7 @@ export function normalizeLinkRow(
     icon_preset: row.icon_preset ?? null,
     icon_url: row.icon_url ?? null,
     category: row.category ?? null,
+    extra_categories: Array.isArray(row.extra_categories) ? [...row.extra_categories] : [],
     sort_order: row.sort_order ?? 0,
     scheduled_start: row.scheduled_start ?? null,
     scheduled_end: row.scheduled_end ?? null,

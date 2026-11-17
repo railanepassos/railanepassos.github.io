@@ -151,6 +151,20 @@ describe("categoryCounts", () => {
   });
 });
 
+describe("categoryCounts with extra categories", () => {
+  it("counts an item once under each of its categories", () => {
+    const counts = categoryCounts([
+      row({ category: "restaurante", extra_categories: ["praia", "passeio"] }),
+      row({ category: "praia" }),
+    ]);
+    expect(counts).toEqual([
+      { category: "restaurante", count: 1 },
+      { category: "praia", count: 2 },
+      { category: "passeio", count: 1 },
+    ]);
+  });
+});
+
 describe("toggleCategory", () => {
   it("adds a category keeping option order", () => {
     expect(toggleCategory(["praia"], "museu")).toEqual(["museu", "praia"]);

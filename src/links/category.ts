@@ -69,7 +69,12 @@ export type CategoryFields = {
   description?: string | null;
   url?: string | null;
   category?: string | null;
+  /** Extra categories (discovery only). Cards, deck and theme use the main one. */
+  extra_categories?: readonly string[] | null;
 };
+
+/** Main category plus up to 3 extras. */
+export const MAX_CATEGORIES = 4;
 
 function normalize(text: string): string {
   return text
@@ -105,20 +110,55 @@ export function resolveCategory(fields: CategoryFields): Category {
   return inferCategory(fields);
 }
 
+/**
+ * Every category of an item: the resolved main first, then the valid, unique
+ * extras in stored order (capped at MAX_CATEGORIES in total).
+ */
+export function allCategories(fields: CategoryFields): Category[] {
+  const main = resolveCategory(fields);
+  return [main, ...normalizeExtraCategories(fields.extra_categories, main)];
+}
+
 export function categoryLabel(category: string): string {
   return isCategory(category) ? LABELS[category] : LABELS.outro;
 }
 
-/** Empty array = Todas (no filter). Match if resolveCategory is in the set. */
+/** Empty array = Todas (no filter). Match if any of the item's categories is in the set. */
 export function filterLinksByCategory<T extends CategoryFields>(
   links: T[],
   selected: readonly Category[]
 ): T[] {
   if (selected.length === 0) return links;
   const allowed = new Set(selected);
-  return links.filter((link) => allowed.has(resolveCategory(link)));
+  return links.filter((link) => allCategories(link).some((c) => allowed.has(c)));
 }
 
 export function isCategory(value: string): value is Category {
   return (CATEGORY_OPTIONS as readonly string[]).includes(value);
+}
+
+/**
+ * Form chips (ordered): the first picked is the main category. "" = Automática
+ * and clears everything. Ticking beyond MAX_CATEGORIES or an unknown value is
+ * ignored; unticking the main promotes the next one.
+ */
+export function togglePickedCategory(picked: readonly string[], value: string): string[] {
+  if (value === "") return [];
+  if (!isCategory(value)) return [...picked];
+  if (picked.includes(value)) return picked.filter((c) => c !== value);
+  if (picked.length >= MAX_CATEGORIES) return [...picked];
+  return [...picked, value];
+}
+
+/** Clean extras for a given main: valid, unique, not the main, at most MAX_CATEGORIES - 1. */
+export function normalizeExtraCategories(
+  extras: readonly string[] | null | undefined,
+  main: string | null | undefined
+): Category[] {
+  const out: Category[] = [];
+  for (const e of extras ?? []) {
+    if (out.length >= MAX_CATEGORIES - 1) break;
+    if (isCategory(e) && e !== main && !out.includes(e)) out.push(e);
+  }
+  return out;
 }

@@ -2,7 +2,7 @@ import type { LinkRow } from "./links-repo";
 import {
   CATEGORY_OPTIONS,
   categoryLabel,
-  resolveCategory,
+  allCategories,
   type Category,
 } from "./category";
 import { visibleListLinks } from "./sort-links";
@@ -129,8 +129,9 @@ export type CategoryCount = { category: Category; count: number };
 export function categoryCounts(links: readonly LinkRow[]): CategoryCount[] {
   const counts = new Map<Category, number>();
   for (const link of links) {
-    const c = resolveCategory(link);
-    counts.set(c, (counts.get(c) ?? 0) + 1);
+    for (const c of allCategories(link)) {
+      counts.set(c, (counts.get(c) ?? 0) + 1);
+    }
   }
   return CATEGORY_OPTIONS.filter((c) => counts.has(c)).map((category) => ({
     category,

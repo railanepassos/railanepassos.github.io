@@ -6,7 +6,11 @@ import {
   inferCategory,
   isCategory,
   resolveCategory,
+  allCategories,
   categoryLabel,
+  MAX_CATEGORIES,
+  normalizeExtraCategories,
+  togglePickedCategory,
   type Category,
 } from "./category";
 import {
@@ -269,6 +273,7 @@ export type CreatePrefill = Partial<
     | "image_url"
     | "source_url"
     | "category"
+    | "extra_categories"
     | "tags"
     | "people"
     | "cost_text"
@@ -291,6 +296,8 @@ export type LinkFormValues = MoreTextValues & {
   pose_refs: PoseDraft[];
   /** Picked category; "" = infer from text (Automática). */
   category: string;
+  /** Extra categories after the main one (up to 3); only used with a picked main. */
+  extra_categories?: string[];
   /** Free tags (display form, no `#`). */
   tags: string[];
   /** People (display form, no `@`). */
@@ -1061,41 +1068,58 @@ export function createLinkFormModal(
   labelField.wrapper.classList.add("links-admin-form__field--grow");
   preview.append(previewImg, labelField.wrapper);
 
-  // Category: one-tap chips. "" = Automática (inferred on save).
-  let pickedCategory = "";
+  // Category: multi-select chips. Tap order = priority: the first picked is the
+  // main category (marker "principal"). "" = Automática (inferred on save).
+  let pickedCategories: string[] = [];
   const categoryField = document.createElement("div");
   categoryField.className = "links-admin-form__field";
   const categoryLabelEl = document.createElement("span");
   categoryLabelEl.className = "links-admin-form__label";
   categoryLabelEl.id = "links-form-category-label";
-  categoryLabelEl.textContent = "Categoria";
+  categoryLabelEl.textContent = "Categorias";
   const categoryChips = document.createElement("div");
   categoryChips.className = "links-chips links-chips--wrap";
   categoryChips.setAttribute("role", "group");
   categoryChips.setAttribute("aria-labelledby", "links-form-category-label");
+  categoryChips.setAttribute("aria-describedby", "links-form-category-hint");
+  const categoryHint = document.createElement("p");
+  categoryHint.id = "links-form-category-hint";
+  categoryHint.className = "links-admin-form__hint";
+  categoryHint.setAttribute("aria-live", "polite");
   const chipButtons: HTMLButtonElement[] = [];
   for (const value of ["", ...CATEGORY_OPTIONS]) {
     const chipBtn = document.createElement("button");
     chipBtn.type = "button";
     chipBtn.className = "links-chip";
     chipBtn.dataset.category = value;
-    chipBtn.textContent = value === "" ? "Automática" : categoryLabel(value);
     chipBtn.addEventListener("click", () => {
-      pickedCategory = value;
+      pickedCategories = togglePickedCategory(pickedCategories, value);
       syncCategoryChips();
       syncPreview();
     });
     chipButtons.push(chipBtn);
     categoryChips.appendChild(chipBtn);
   }
-  categoryField.append(categoryLabelEl, categoryChips);
+  categoryField.append(categoryLabelEl, categoryChips, categoryHint);
 
   function syncCategoryChips(): void {
+    const full = pickedCategories.length >= MAX_CATEGORIES;
     for (const btn of chipButtons) {
-      const on = btn.dataset.category === pickedCategory;
+      const value = btn.dataset.category ?? "";
+      const on = value === "" ? pickedCategories.length === 0 : pickedCategories.includes(value);
+      const isMain = value !== "" && pickedCategories[0] === value;
       btn.setAttribute("aria-pressed", on ? "true" : "false");
       btn.classList.toggle("links-chip--active", on);
+      btn.disabled = full && !on && value !== "";
+      if (isMain) btn.dataset.main = "true";
+      else delete btn.dataset.main;
+      const name = value === "" ? "Automática" : categoryLabel(value);
+      btn.textContent = isMain ? `${name} · principal` : name;
     }
+    categoryHint.textContent =
+      pickedCategories.length === 0
+        ? `Automática: a categoria vem do texto. Marque até ${MAX_CATEGORIES}; a primeira é a principal.`
+        : `${pickedCategories.length} de ${MAX_CATEGORIES} categorias; a primeira é a principal (cor e ícone do card).`;
   }
 
   const descField = labelledTextarea(
@@ -1349,8 +1373,8 @@ export function createLinkFormModal(
   }
 
   function syncPreview(): void {
-    const category = isCategory(pickedCategory)
-      ? pickedCategory
+    const category = isCategory(pickedCategories[0] ?? "")
+      ? (pickedCategories[0] as Category)
       : inferCategory({
           label: labelField.input.value,
           description: descField.input.value,
@@ -1448,7 +1472,10 @@ export function createLinkFormModal(
     descField.input.value = prefill?.description ?? "";
     imageField.input.value = prefill?.image_url ?? "";
     holdDraftImage(Boolean(prefill?.image_url));
-    pickedCategory = prefill?.category && isCategory(prefill.category) ? prefill.category : "";
+    pickedCategories =
+      prefill?.category && isCategory(prefill.category)
+        ? [prefill.category, ...normalizeExtraCategories(prefill.extra_categories, prefill.category)]
+        : [];
     writeMoreText(prefill ?? null);
     syncCategoryChips();
     syncPreview();
@@ -1471,7 +1498,8 @@ export function createLinkFormModal(
     holdDraftImage(Boolean(changes?.image_url));
     memoryField.input.value = link.note ?? "";
     writeMoreText(link);
-    pickedCategory = link.category && isCategory(link.category) ? link.category : "";
+    pickedCategories =
+      link.category && isCategory(link.category) ? allCategories(link) : [];
     syncCategoryChips();
     syncPreview();
     descField.syncHeight();
@@ -1507,7 +1535,8 @@ export function createLinkFormModal(
         note: memoryField.input.value.trim(),
         source_url: normalizeUrlInput(sourceField.input.value),
         pose_refs: poses.map((p) => ({ url: normalizeUrlInput(p.url), note: p.note.trim() })),
-        category: pickedCategory,
+        category: pickedCategories[0] ?? "",
+        extra_categories: pickedCategories.slice(1),
         ...readMoreText(),
       },
       editingId
@@ -2314,7 +2343,9 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     if (src) heroImg.src = src;
     else heroImg.removeAttribute("src");
 
-    chips.replaceChildren(chip(categoryLabel(category), "category"));
+    chips.replaceChildren(
+      ...allCategories(link).map((c) => chip(categoryLabel(c), "category"))
+    );
     const hasSchedule = Boolean(link.scheduled_start && link.scheduled_end);
     if (hasSchedule) chips.appendChild(chip("Agendado", "schedule"));
     if (link.status === "done") chips.appendChild(chip("Feito", "done"));
@@ -2705,6 +2736,7 @@ export function toCreateInput(values: LinkFormValues, sortOrder: number): Create
     icon_preset: inferIconPreset(resolved.url),
     icon_url: null,
     category: pickCategory(resolved),
+    extra_categories: pickExtraCategories(resolved),
     sort_order: sortOrder,
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
@@ -2726,6 +2758,7 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
     icon_preset: inferIconPreset(resolved.url),
     icon_url: null,
     category: pickCategory(resolved),
+    extra_categories: pickExtraCategories(resolved),
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
     source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
@@ -2763,6 +2796,12 @@ function pickCategory(values: LinkFormValues): Category {
   return values.category && isCategory(values.category)
     ? values.category
     : inferCategory(values);
+}
+
+/** Extras only count with an explicit main; Automática stores none. */
+function pickExtraCategories(values: LinkFormValues): Category[] {
+  if (!values.category || !isCategory(values.category)) return [];
+  return normalizeExtraCategories(values.extra_categories, values.category);
 }
 
 /** Blank Nome falls back to the URL's hostname so quick-add can skip typing one. */

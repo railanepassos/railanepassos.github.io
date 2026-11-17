@@ -284,6 +284,43 @@ describe("Phase 2 fields", () => {
     );
   });
 
+  it("sends category and extra_categories on create", async () => {
+    const client = makeFakeClient({ links: { data: { id: "n", ...base }, error: null } });
+    await createLinksRepo(client).createLink({
+      ...base,
+      category: "restaurante",
+      extra_categories: ["praia", "passeio"],
+    });
+    const builder = (client.from as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(builder.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ category: "restaurante", extra_categories: ["praia", "passeio"] })
+    );
+  });
+
+  it("reads extra_categories, defaulting to an empty list", async () => {
+    const client = makeFakeClient({
+      links: {
+        data: [
+          { id: "a", url: "https://example.com", label: "A", extra_categories: ["praia"] },
+          { id: "b", url: "https://example.com", label: "B" },
+        ],
+        error: null,
+      },
+    });
+    const [a, b] = await createLinksRepo(client).listLinks();
+    expect(a.extra_categories).toEqual(["praia"]);
+    expect(b.extra_categories).toEqual([]);
+  });
+
+  it("sends extra_categories on update", async () => {
+    const client = makeFakeClient();
+    await createLinksRepo(client).updateLink("1", { category: "bar", extra_categories: [] });
+    const builder = (client.from as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ category: "bar", extra_categories: [] })
+    );
+  });
+
   it("rejects over-long cost, city and address", async () => {
     const repo = createLinksRepo(makeFakeClient());
     await expect(repo.createLink({ ...base, cost_text: "x".repeat(201) })).rejects.toThrow(/cost_text/);
