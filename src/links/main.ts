@@ -20,6 +20,7 @@ import { collectLessons } from "./lesson-suggestions";
 import { collectPeople } from "./people";
 import { matches, parseQuery, removeChip, setMinRating, toggleFilter } from "./query";
 import { renderDoneToolbar } from "./done-toolbar";
+import { renderMemoriesSwitch, renderMemoriesTimeline } from "./memories-ui";
 import { rankDone, filterDone } from "./ranking";
 import { renderLinksSkeleton, renderToolbarSkeleton } from "./skeleton";
 import {
@@ -857,6 +858,7 @@ function bootDynamic(
     if (categoryFilter.length > 0) return "Nenhuma experiência nas categorias selecionadas.";
     if (section === "agenda") return "Nada agendado ainda. Use Agendar em um card.";
     if (section === "done") return "Nenhuma experiência marcada como feita ainda.";
+    if (section === "memories") return "Nenhuma memória ainda.";
     return "Nenhuma experiência ainda.";
   }
 
@@ -917,10 +919,21 @@ function bootDynamic(
     const visible = filterLinksByCategory(sectionLinks, categoryFilter);
     renderChrome(sectionLinks, visible.length);
     const selected = viewModal.currentId();
+    if (section === "done" || section === "memories") {
+      els.list.appendChild(
+        renderMemoriesSwitch(section, {
+          onList: () => shellHandlers.onSection("done"),
+          onMemories: () => shellHandlers.onSection("memories"),
+        })
+      );
+    }
     if (doneToolbar) els.list.appendChild(doneToolbar);
     const filterBar = renderFilterBar();
     if (filterBar) els.list.appendChild(filterBar);
-    if (visible.length === 0) {
+    const filtering = query.trim().length > 0 || categoryFilter.length > 0;
+    if (section === "memories" && (visible.length > 0 || !filtering)) {
+      els.list.appendChild(renderMemoriesTimeline(visible, { onView: (l) => viewModal.open(l) }));
+    } else if (visible.length === 0) {
       const empty = document.createElement("p");
       empty.className = "links-status";
       empty.textContent = emptyText();

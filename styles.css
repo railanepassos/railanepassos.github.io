@@ -4356,3 +4356,130 @@ select {
   min-height: 48px;
   flex-shrink: 0;
 }
+
+/* --- Memórias: switch (mobile) and timeline ------------------------------ */
+.links-memswitch {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 4px;
+  border: 1px solid var(--app-line-strong);
+  border-radius: 24px;
+  background: var(--app-surface);
+}
+
+.links-memswitch__btn {
+  flex: 1;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 20px;
+  background: none;
+  color: var(--app-ink);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.links-memswitch__btn--active {
+  background: var(--app-ink);
+  color: #fff;
+}
+
+@media (min-width: 720px) {
+  /* Desktop reaches Memórias from the side nav. */
+  .links-memswitch {
+    display: none;
+  }
+}
+
+.links-memories__year-title {
+  margin: 20px 0 4px;
+  color: var(--app-ink);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.links-memories__month-title {
+  margin: 16px 0 8px;
+  color: var(--app-muted);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.links-memory {
+  display: flex;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--app-line);
+  border-radius: 14px;
+  background: var(--app-surface);
+}
+
+.links-memory__photo {
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.links-memory__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.links-memory__open {
+  min-height: 48px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--app-ink);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.links-memory__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 14px;
+}
+
+.links-memory__rating {
+  display: inline-flex;
+  align-items: center;
+}
+
+.links-memory__impressions {
+  margin: 8px 0 0;
+  color: var(--app-ink);
+  font-size: 16px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.links-memory__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  margin-top: 4px;
+  color: var(--app-ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.links-memory__thumb {
+  width: 64px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+}

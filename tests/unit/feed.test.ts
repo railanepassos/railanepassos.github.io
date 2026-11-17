@@ -131,7 +131,7 @@ describe("linksForSection", () => {
   });
 
   it("sectionCounts counts each section", () => {
-    expect(sectionCounts(links)).toEqual({ feed: 3, agenda: 2, done: 2 });
+    expect(sectionCounts(links)).toEqual({ feed: 3, agenda: 2, done: 2, memories: 2 });
   });
 });
 
@@ -172,5 +172,22 @@ describe("toggleCategory", () => {
 
   it("removes a selected category", () => {
     expect(toggleCategory(["museu", "praia"], "museu")).toEqual(["praia"]);
+  });
+});
+
+describe("memories section", () => {
+  const links = [
+    row({ id: "d", status: "done", completed_at: "2026-10-01T15:00:00Z" }),
+    row({ id: "e", status: "done", completed_at: "2026-11-01T15:00:00Z" }),
+    row({ id: "n", status: "done", completed_at: null }),
+    row({ id: "w" }),
+  ];
+
+  it("lists only dated done items, newest first", () => {
+    expect(linksForSection(links, "memories").map((l) => l.id)).toEqual(["e", "d"]);
+  });
+
+  it("counts them in sectionCounts", () => {
+    expect(sectionCounts(links).memories).toBe(2);
   });
 });

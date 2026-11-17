@@ -30,6 +30,7 @@ export const SECTION_TITLES: Record<Section, string> = {
   feed: "Quero conhecer",
   agenda: "Agenda",
   done: "Feitos",
+  memories: "Memórias",
 };
 
 function iconButton(icon: IconName, label: string, className: string): HTMLButtonElement {
@@ -215,7 +216,8 @@ export function renderSideNav(
   sections.append(
     sectionButton("feed", "home", state, handlers.onSection),
     sectionButton("agenda", "calendar", state, handlers.onSection),
-    sectionButton("done", "check", state, handlers.onSection)
+    sectionButton("done", "check", state, handlers.onSection),
+    sectionButton("memories", "clock", state, handlers.onSection)
   );
 
   const deck = document.createElement("button");
@@ -282,13 +284,16 @@ export function renderTabBar(
 ): void {
   container.replaceChildren();
 
+  /** The Memórias view lives under the Feitos tab (mobile switch), so it keeps that tab active. */
+  const activeTab: Section = state.section === "memories" ? "done" : state.section;
+
   function tab(icon: IconName, text: string, onClick: () => void, section?: Section): HTMLButtonElement {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "links-tabbar__tab";
     if (section) {
       btn.dataset.section = section;
-      if (state.section === section) {
+      if (activeTab === section) {
         btn.classList.add("links-tabbar__tab--active");
         btn.setAttribute("aria-current", "page");
       }
