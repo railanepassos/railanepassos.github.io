@@ -6,13 +6,14 @@ import {
   type Category,
 } from "./category";
 import { visibleListLinks } from "./sort-links";
+import { memoryTimeline } from "./memories";
 
 /**
  * Pure view-model helpers for the feed / grid UI: sections, category counts,
  * chip toggling, client-side search and a friendlier title fallback.
  */
 
-export type Section = "feed" | "agenda" | "done";
+export type Section = "feed" | "agenda" | "done" | "memories";
 
 export function linkDomain(url: string): string {
   try {
@@ -108,6 +109,7 @@ export function linksForSection(links: readonly LinkRow[], section: Section): Li
   if (section === "done") {
     return links.filter(isDone).sort((a, b) => completedMs(b) - completedMs(a));
   }
+  if (section === "memories") return memoryTimeline(links);
   if (section === "agenda") {
     return links
       .filter((l) => !isDone(l) && l.scheduled_start && l.scheduled_end)
@@ -121,6 +123,7 @@ export function sectionCounts(links: readonly LinkRow[]): Record<Section, number
     feed: linksForSection(links, "feed").length,
     agenda: linksForSection(links, "agenda").length,
     done: linksForSection(links, "done").length,
+    memories: linksForSection(links, "memories").length,
   };
 }
 

@@ -9,6 +9,7 @@
     "categories": ["museu", "parque"],
     "tags": ["arte", "jardim", "chuva"],
     "cost_text": "R$ 30 por pessoa",
+    "duration": "meio-periodo",
     "city": "Cidade Exemplo",
     "address": "Rua das Amostras, 100, Centro",
     "sources": [

@@ -1638,6 +1638,13 @@ body.links-screen-open {
   outline-offset: 1px;
 }
 
+/* Touch controls (selects, number inputs): 16px+ text and a 48px tap target. */
+.links-admin-form__control--select,
+.links-admin-form__control--touch {
+  min-height: 48px;
+  font-size: max(16px, 1rem);
+}
+
 .links-admin-form__control--textarea {
   resize: vertical;
   min-height: 84px;
@@ -4355,4 +4362,238 @@ select {
   /* 48px leaves room for sub-pixel rounding on scaled mobile viewports. */
   min-height: 48px;
   flex-shrink: 0;
+}
+
+/* --- Memórias: switch (mobile) and timeline ------------------------------ */
+.links-memswitch {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 4px;
+  border: 1px solid var(--app-line-strong);
+  border-radius: 24px;
+  background: var(--app-surface);
+}
+
+.links-memswitch__btn {
+  flex: 1;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 20px;
+  background: none;
+  color: var(--app-ink);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.links-memswitch__btn--active {
+  background: var(--app-ink);
+  color: #fff;
+}
+
+@media (min-width: 720px) {
+  /* Desktop reaches Memórias from the side nav. */
+  .links-memswitch {
+    display: none;
+  }
+}
+
+.links-anniversary {
+  margin: 12px 0 4px;
+  padding: 12px;
+  border: 1px solid var(--app-line);
+  border-radius: 14px;
+  background: var(--app-surface);
+}
+
+.links-anniversary__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.links-anniversary__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.links-anniversary__years {
+  color: var(--app-muted);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.links-anniversary__open {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--app-ink);
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.links-anniversary__name {
+  font-weight: 700;
+}
+
+.links-anniversary__date {
+  color: var(--app-muted);
+  font-size: 16px;
+}
+
+.links-memories__year-title {
+  margin: 20px 0 4px;
+  color: var(--app-ink);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.links-memories__month-title {
+  margin: 16px 0 8px;
+  color: var(--app-muted);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.links-memory {
+  display: flex;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--app-line);
+  border-radius: 14px;
+  background: var(--app-surface);
+}
+
+.links-memory__photo {
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.links-memory__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.links-memory__open {
+  min-height: 48px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--app-ink);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.links-memory__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 14px;
+}
+
+.links-memory__rating {
+  display: inline-flex;
+  align-items: center;
+}
+
+.links-memory__impressions {
+  margin: 8px 0 0;
+  color: var(--app-ink);
+  font-size: 16px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.links-memory__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  margin-top: 4px;
+  color: var(--app-ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.links-memory__thumb {
+  width: 64px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+/* --- Sortear filters sheet ------------------------------------------------ */
+.links-draw-filter__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 20px 12px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.links-draw-filter__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.links-draw-filter__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.links-draw-filter__tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--navy);
+  font: inherit;
+  font-size: max(16px, 1rem);
+  cursor: pointer;
+}
+
+.links-draw-filter__tag[aria-pressed="true"] {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+
+.links-draw-filter__count {
+  margin: 0;
+  color: var(--navy);
+  font-size: max(16px, 1rem);
+  font-weight: 600;
+  text-align: center;
+}
+
+.links-draw-filter-sheet .links-admin-button {
+  min-height: 48px;
+  font-size: max(16px, 1rem);
 }

@@ -38,12 +38,14 @@ Agenda / sorteio        História à mão             Vídeo/álbum (link)
 
 | Fase | Conteúdo | Status |
 |---|---|---|
-| 1 | Redesign visual (feed, grade desktop, detalhe, sheet de adicionar), busca simples, deck restilizado | Em implementação (`feat/links-social-redesign`) |
-| 2 | Campos novos: custo, cidade/endereço, dossiê (história/o que ver), roteiro, link do post de origem, poses de referência (links + texto), **tags `#` e menções `@`**, busca com sintaxe | Spec: `2026-11-16-links-phase2-fields-design.md` |
-| 3 | Depois da visita: nota (1–5), "voltaria?", impressões, lições aprendidas, ranking, link de vídeo/álbum de memória | A especificar |
-| 4 | Plano do passeio: **participantes** (por nome, sem precisar de conta, ex. Railane, Alana, Lúcia), **responsabilidades** (quem leva o quê, quem compra os ingressos), checklist marcável + lista de lanches/compras, lições da Fase 3 sugeridas como itens; **exportar mensagem para o WhatsApp** com data, local, roteiro e a lista de quem faz o quê | A especificar |
-| 5 | Skills do Claude local: importar do Instagram (DMs e posts compartilhados via Claude in Chrome), gerar dossiê, roteiro e lista de lanches, sempre com aprovação antes de inserir | A especificar |
-| 6 | Aba Memórias (linha do tempo dos feitos, "há 1 ano…"), sorteio com filtros (custo, cidade, tag, tempo) | A especificar |
+| 1 | Redesign visual (feed, grade desktop, detalhe, sheet de adicionar), busca simples, deck restilizado | ✅ No ar |
+| 2 | Campos novos: custo, cidade/endereço, dossiê (história/o que ver), roteiro, link do post de origem, poses de referência (links + texto), **tags `#` e menções `@`**, busca com sintaxe | ✅ No ar |
+| 3 | Depois da visita: nota (1–5), "voltaria?", impressões, lições aprendidas, ranking, link de vídeo/álbum de memória | ✅ No ar |
+| 4 | Plano do passeio: **participantes** (por nome, sem precisar de conta, ex. Railane, Alana, Lúcia), **responsabilidades** (quem leva o quê, quem compra os ingressos), checklist marcável + lista de lanches/compras, lições da Fase 3 sugeridas como itens; **exportar mensagem para o WhatsApp** com data, local, roteiro e a lista de quem faz o quê | ✅ No ar |
+| 5 | Skills do Claude local: importar do Instagram (DMs e posts compartilhados via Claude in Chrome), gerar dossiê, roteiro e lista de lanches, sempre com aprovação antes de inserir | ✅ No ar |
+| 6 | Aba Memórias (linha do tempo dos feitos, "há 1 ano…"), sorteio com filtros (custo, cidade, tag, tempo) | ✅ No ar |
+| 4.1 | Link do plano para participantes (marcar itens sem login) | ✅ No ar |
+| Extras | Dossiê e roteiro mais ricos na skill; várias categorias por item (principal + até 3); Fontes (links das fontes) nos detalhes; campo Duração | ✅ No ar |
 
 ## Decisões já tomadas
 
