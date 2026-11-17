@@ -1,5 +1,7 @@
+// @ts-expect-error node:fs is available at runtime via vitest/node environment
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+// @ts-expect-error node:url is available at runtime via vitest/node environment
+import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -9,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  * auth.users are stubbed: just enough for the migrations to run.
  */
 
-const MIGRATIONS = join(__dirname, "../../supabase/migrations");
+const MIGRATIONS = fileURLToPath(new URL("../../supabase/migrations/", import.meta.url));
 let db: PGlite;
 let seq = 0;
 
@@ -43,9 +45,9 @@ beforeAll(async () => {
     create table auth.users (id uuid primary key);
   `);
   const files = readdirSync(MIGRATIONS)
-    .filter((f) => f.endsWith(".sql"))
+    .filter((f: string) => f.endsWith(".sql"))
     .sort();
-  for (const file of files) await db.exec(readFileSync(join(MIGRATIONS, file), "utf8"));
+  for (const file of files) await db.exec(readFileSync(MIGRATIONS + file, "utf8"));
 });
 
 afterAll(async () => {

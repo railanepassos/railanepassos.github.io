@@ -206,6 +206,19 @@ describe("matches", () => {
     expect(m("lanche", row({ impressions: null, lessons: null }))).toBe(false);
   });
 
+  it("searches plan item text as free text", () => {
+    const l = row({
+      plan_items: [
+        { text: "Comprar ingressos", list: "checklist", done: false },
+        { text: "Protetor solar", list: "compras", who: "Alana", done: true },
+      ],
+    });
+    expect(m("ingressos", l)).toBe(true);
+    expect(m("protetor", l)).toBe(true);
+    expect(m("naoexiste", l)).toBe(false);
+    expect(m("ingressos", row({ plan_items: null }))).toBe(false);
+  });
+
   it("filters by cidade: as an accent-insensitive substring", () => {
     expect(m("cidade:salvador")).toBe(true);
     expect(m("cidade:salv")).toBe(true);
