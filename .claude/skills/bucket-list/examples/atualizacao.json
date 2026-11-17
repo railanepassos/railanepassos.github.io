@@ -4,6 +4,7 @@
   "id": "00000000-0000-4000-8000-000000000001",
   "fields": {
     "categories": ["museu", "passeio"],
+    "duration": "dia-inteiro",
     "dossier": "Fundado em 1950 (fictício). Vale ver o jardim de esculturas e a sala de arte moderna.",
     "itinerary": "10h chegada e jardim. 12h almoço perto. 14h salas internas. 16h café.",
     "sources": [{ "title": "Histórico do museu (fictício)", "url": "https://example.com/museu-do-exemplo/historia" }]

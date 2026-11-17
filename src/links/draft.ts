@@ -52,6 +52,8 @@ export const DRAFT_LIMITS = {
   maxSources: 10,
   sourceTitleMax: 120,
   sourceUrlMax: 2000,
+  /** Duração values (mirrors duration.ts / migration 020). */
+  durations: ["rapido", "meio-periodo", "dia-inteiro"],
 };
 
 /** A Fonte (same shape as `Source` in sources.ts; duplicated to stay import-free). */
@@ -70,6 +72,8 @@ export type DraftFields = {
   /** Fontes: up to 10 {title, url}. On an update they are appended to the current ones (dedupe by URL). */
   sources?: DraftSource[];
   cost_text?: string;
+  /** Duração: "rapido" | "meio-periodo" | "dia-inteiro". "" means no proposal. */
+  duration?: string;
   city?: string;
   address?: string;
   dossier?: string;
@@ -87,7 +91,7 @@ export type ParseDraftResult = { ok: true; draft: Draft } | { ok: false; reason:
 
 const URL_KEYS = ["url", "source_url", "image_url"];
 const TEXT_KEYS = ["label", "description", "cost_text", "city", "address", "dossier", "itinerary"];
-const FIELD_KEYS = [...URL_KEYS, ...TEXT_KEYS, "category", "categories", "tags", "people", "sources"];
+const FIELD_KEYS = [...URL_KEYS, ...TEXT_KEYS, "category", "categories", "tags", "people", "sources", "duration"];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const B64URL_RE = /^[A-Za-z0-9_-]*$/;
 // Encoded size of DRAFT_MAX_BYTES (no padding); anything longer is rejected before decoding.
@@ -210,6 +214,11 @@ function fieldsError(raw: unknown, requireUrl: boolean): string | null {
     if (v.some((x: string) => x.length > maxLen)) {
       return `O campo ${key} tem item com mais de ${maxLen} caracteres.`;
     }
+  }
+  if (raw.duration !== undefined) {
+    const v = raw.duration;
+    if (typeof v !== "string") return "O campo duration deve ser texto.";
+    if (v !== "" && !DRAFT_LIMITS.durations.includes(v)) return "O campo duration é desconhecido.";
   }
   if (raw.sources !== undefined) {
     const problem = draftSourcesError(raw.sources);

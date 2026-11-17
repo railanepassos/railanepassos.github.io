@@ -249,6 +249,33 @@ describe("parseDraft rejections", () => {
       expect(reject(fragOf({ v: 1, kind: "atualizacao", id: ID, fields: { sources: [] } }))).toContain("nada");
     });
   });
+  describe("duration", () => {
+    const withDuration = (duration: unknown, kind: "novo" | "atualizacao" = "novo") =>
+      fragOf(
+        kind === "novo"
+          ? { v: 1, kind, fields: { url: "https://example.com", duration } }
+          : { v: 1, kind, id: ID, fields: { duration, city: "X" } }
+      );
+
+    it.each(["rapido", "meio-periodo", "dia-inteiro"])("accepts %s", (duration) => {
+      expect(parseDraft(withDuration(duration)).ok).toBe(true);
+      expect(parseDraft(withDuration(duration, "atualizacao")).ok).toBe(true);
+    });
+    it("accepts an empty string (no proposal on an update)", () => {
+      expect(parseDraft(withDuration("")).ok).toBe(true);
+      expect(withoutEmptyProposals({ duration: "", city: "X" })).toEqual({ city: "X" });
+    });
+    it.each([["unknown value", "longo"], ["label instead of value", "Rápido (até 2h)"], ["non-string", 2], ["null", null]])(
+      "rejects %s",
+      (_n, duration) => {
+        expect(reject(withDuration(duration))).toContain("duration");
+      }
+    );
+    it("an update draft with only an empty duration proposes nothing", () => {
+      const only = fragOf({ v: 1, kind: "atualizacao", id: ID, fields: { duration: "" } });
+      expect(reject(only)).toContain("nada");
+    });
+  });
   it("rejects non-string field values and non-string tags", () => {
     const f = (extra: object) => fragOf({ v: 1, kind: "novo", fields: { url: "https://example.com", ...extra } });
     expect(reject(f({ city: 5 }))).toContain("city");
