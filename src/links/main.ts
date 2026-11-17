@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { getSupabaseConfig, isSupabaseConfigured, isBrowserSafeAnonKey } from "./config";
 import { createAuth, type Auth } from "./auth";
 import { createAuthStorage, setRememberMe } from "./session-storage";
+import { isPlanShareFragment } from "./plan-share";
+import { bootSharedPlan } from "./shared-plan-boot";
 import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
 import { renderGuestGate } from "./render";
 import { collectTags } from "./tags";
@@ -227,6 +229,15 @@ function bootDynamic(
       links = links.map((row) => (row.id === l.id ? { ...row, plan_items: items } : row));
       renderList();
       deckScreen.refresh(links);
+    },
+    onPlanShareEnable: async (l) => {
+      const token = await repo.enablePlanShare(l.id);
+      links = links.map((row) => (row.id === l.id ? { ...row, plan_share_token: token } : row));
+      return token;
+    },
+    onPlanShareDisable: async (l) => {
+      await repo.disablePlanShare(l.id);
+      links = links.map((row) => (row.id === l.id ? { ...row, plan_share_token: null } : row));
     },
     onDelete: (l) => void deleteLink(l),
     onTag: (tag) => toggleTagFilter(tag),
@@ -867,6 +878,13 @@ function messageOf(err: unknown, fallback: string): string {
 }
 
 async function boot(): Promise<void> {
+  // Public plan link: decided FIRST, before any auth/session code below runs.
+  // That path never creates a supabase client nor reads the auth storage.
+  if (isPlanShareFragment(window.location.hash)) {
+    await bootSharedPlan(window.location.hash);
+    return;
+  }
+
   const els = getEls();
   if (!els) return;
 
