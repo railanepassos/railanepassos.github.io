@@ -543,3 +543,39 @@ describe("Phase 4 plan_items", () => {
     await expect(repo.updateLink("1", { plan_items: null })).resolves.toBeNull();
   });
 });
+
+describe("duration (migration 020)", () => {
+  const base = { url: "https://example.com", label: "Example", sort_order: 0 };
+
+  it("reads a stored value, and null for missing or unknown values", async () => {
+    const client = makeFakeClient({
+      links: {
+        data: [
+          { id: "1", url: "https://a.com", label: "A", duration: "meio-periodo" },
+          { id: "2", url: "https://b.com", label: "B" },
+          { id: "3", url: "https://c.com", label: "C", duration: "longo" },
+        ],
+        error: null,
+      },
+    });
+    const items = await createLinksRepo(client).listLinks();
+    expect(items.map((i) => i.duration)).toEqual(["meio-periodo", null, null]);
+  });
+
+  it("accepts the three values and null on create and update", async () => {
+    const repo = createLinksRepo(
+      makeFakeClient({ links: { data: { id: "1", url: base.url, label: "Example" }, error: null } })
+    );
+    for (const duration of ["rapido", "meio-periodo", "dia-inteiro", null]) {
+      await expect(repo.createLink({ ...base, duration })).resolves.toBeDefined();
+      await expect(repo.updateLink("1", { duration })).resolves.toBeNull();
+    }
+  });
+
+  it("rejects anything else", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(repo.createLink({ ...base, duration: "longo" })).rejects.toThrow(/duration/);
+    await expect(repo.updateLink("1", { duration: "" })).rejects.toThrow(/duration/);
+    await expect(repo.updateLink("1", { duration: "Rápido (até 2h)" })).rejects.toThrow(/duration/);
+  });
+});

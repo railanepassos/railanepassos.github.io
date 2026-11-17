@@ -1549,3 +1549,65 @@ describe("Phase 5: a draft-supplied image is not loaded until the editor asks", 
     expect(button.hidden).toBe(true);
   });
 });
+
+describe("Duração", () => {
+  function open(prefill?: Parameters<ReturnType<typeof createLinkFormModal>["openCreate"]>[0], onSubmit = vi.fn()) {
+    const modal = createLinkFormModal(onSubmit);
+    document.body.appendChild(modal.element);
+    modal.openCreate({ url: "https://example.com/lugar", ...prefill });
+    const select = modal.element.querySelector<HTMLSelectElement>("#links-form-duration")!;
+    const submit = () =>
+      modal.element.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    return { modal, select, submit, onSubmit };
+  }
+
+  it("maps to the payload (blank -> null) and validates", () => {
+    expect(toCreateInput(formValues({ duration: "meio-periodo" }), 1)).toMatchObject({ duration: "meio-periodo" });
+    expect(toCreateInput(formValues(), 1)).toMatchObject({ duration: null });
+    expect(toUpdatePatch(formValues({ duration: "" }))).toMatchObject({ duration: null });
+    expect(toUpdatePatch(formValues({ duration: "dia-inteiro" }))).toMatchObject({ duration: "dia-inteiro" });
+    expect(() => toUpdatePatch(formValues({ duration: "longo" }))).toThrow(/Duração/);
+  });
+
+  it("form select lists the pt-BR labels, empty by default, and submits the value", () => {
+    const { select, submit, onSubmit } = open();
+    expect([...select.options].map((o) => o.textContent)).toEqual([
+      "Não informada",
+      "Rápido (até 2h)",
+      "Meio período",
+      "Dia inteiro",
+    ]);
+    expect(select.value).toBe("");
+    expect(select.labels?.[0]?.textContent).toBe("Duração (opcional)");
+    select.value = "meio-periodo";
+    select.dispatchEvent(new Event("change"));
+    submit();
+    expect((onSubmit.mock.calls[0]![0] as LinkFormValues).duration).toBe("meio-periodo");
+  });
+
+  it("prefill selects the value and opens Mais detalhes; edit round-trips; create resets", () => {
+    const { modal, select } = open({ duration: "dia-inteiro" });
+    expect(select.value).toBe("dia-inteiro");
+    expect(modal.element.querySelector<HTMLDetailsElement>("details.links-admin-form__more")!.open).toBe(true);
+    modal.openEdit(row({ duration: "rapido" }));
+    expect(select.value).toBe("rapido");
+    modal.openEdit(row({ duration: "rapido" }), { duration: "" });
+    expect(select.value).toBe("rapido");
+    modal.openEdit(row({ duration: "rapido" }), { duration: "meio-periodo" });
+    expect(select.value).toBe("meio-periodo");
+    modal.openCreate({ url: "" });
+    expect(select.value).toBe("");
+  });
+
+  it("detail shows the label, hidden when empty", () => {
+    const modal = createViewModal({ onEdit: vi.fn(), onSchedule: vi.fn(), onMarkDone: vi.fn(), onDelete: vi.fn() });
+    document.body.appendChild(modal.element);
+    modal.open(row({ duration: "rapido" }));
+    const wrap = modal.element.querySelector<HTMLElement>("[data-field='duration']")!;
+    expect(wrap.hidden).toBe(false);
+    expect(wrap.textContent).toContain("Duração");
+    expect(wrap.textContent).toContain("Rápido (até 2h)");
+    modal.open(row({ duration: null }));
+    expect(wrap.hidden).toBe(true);
+  });
+});

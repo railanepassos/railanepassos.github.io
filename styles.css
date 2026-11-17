@@ -1638,6 +1638,12 @@ body.links-screen-open {
   outline-offset: 1px;
 }
 
+/* Duração select: 16px+ text and a 48px tap target. */
+.links-admin-form__control--select {
+  min-height: 48px;
+  font-size: max(16px, 1rem);
+}
+
 .links-admin-form__control--textarea {
   resize: vertical;
   min-height: 84px;

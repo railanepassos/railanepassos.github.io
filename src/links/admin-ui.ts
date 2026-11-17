@@ -55,6 +55,7 @@ import {
   type SourceDraft,
 } from "./sources";
 import { readLessons } from "./lessons";
+import { DURATIONS, DURATION_LABELS, DURATION_TERM, durationLabel, isDuration, readDuration } from "./duration";
 import {
   PLAN_LISTS,
   planByPerson,
@@ -288,7 +289,9 @@ export type CreatePrefill = Partial<
     | "tags"
     | "people"
     | "sources"
+    | "duration"
     | "cost_text"
+    | "duration"
     | "city"
     | "address"
     | "dossier"
@@ -308,6 +311,8 @@ export type LinkFormValues = MoreTextValues & {
   pose_refs: PoseDraft[];
   /** Fontes (title + https link rows); blank rows are dropped on save. */
   sources?: SourceDraft[];
+  /** Duração value; "" = not informed. */
+  duration?: string;
   /** Picked category; "" = infer from text (Automática). */
   category: string;
   /** Extra categories after the main one (up to 3); only used with a picked main. */
@@ -1185,6 +1190,22 @@ export function createLinkFormModal(
     return { key: field.key, input: f.input, syncHeight };
   });
 
+  // Duração: a native select (one tap on mobile), empty = not informed.
+  const durationId = "links-form-duration";
+  const durationWrap = document.createElement("div");
+  durationWrap.className = "links-admin-form__field";
+  const durationLabelEl = document.createElement("label");
+  durationLabelEl.className = "links-admin-form__label";
+  durationLabelEl.htmlFor = durationId;
+  durationLabelEl.textContent = `${DURATION_TERM} (opcional)`;
+  const durationSelect = document.createElement("select");
+  durationSelect.id = durationId;
+  durationSelect.className = "links-admin-form__control links-admin-form__control--select";
+  durationSelect.add(new Option("Não informada", ""));
+  for (const value of DURATIONS) durationSelect.add(new Option(DURATION_LABELS[value], value));
+  durationWrap.append(durationLabelEl, durationSelect);
+  moreBody.appendChild(durationWrap);
+
   const tagsInput = createChipInput({
     id: "links-form-tags",
     label: "Tags (opcional)",
@@ -1440,6 +1461,9 @@ export function createLinkFormModal(
       f.input.dispatchEvent(new Event("input"));
       if (value) any = true;
     }
+    const duration = readDuration(link?.duration) ?? "";
+    durationSelect.value = duration;
+    if (duration) any = true;
     const tags = link?.tags ?? [];
     tagsInput.setValues(tags);
     if (tags.length > 0) any = true;
@@ -1659,6 +1683,7 @@ export function createLinkFormModal(
         sources: sourceRows.map((s) => ({ title: s.title.trim(), url: normalizeUrlInput(s.url) })),
         category: pickedCategories[0] ?? "",
         extra_categories: pickedCategories.slice(1),
+        duration: durationSelect.value,
         ...readMoreText(),
       },
       editingId
@@ -2249,6 +2274,10 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     info.appendChild(r.row);
     return { field, ...r };
   });
+  const durationRow = infoRow("clock", DURATION_TERM);
+  durationRow.row.dataset.field = "duration";
+  durationRow.row.hidden = true;
+  info.appendChild(durationRow.row);
   const tagsRow = infoRow("tag", "Tags");
   tagsRow.row.dataset.field = "tags";
   tagsRow.row.hidden = true;
@@ -2518,6 +2547,9 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
       r.row.hidden = !value;
       r.value.textContent = value;
     }
+    const durationText = durationLabel(link.duration) ?? "";
+    durationRow.row.hidden = durationText === "";
+    durationRow.value.textContent = durationText;
     for (const [kind, row, values, pick] of [
       ["tag", tagsRow, link.tags, cb.onTag],
       ["person", peopleRow, link.people, cb.onPerson],
@@ -2892,6 +2924,7 @@ export function toCreateInput(values: LinkFormValues, sortOrder: number): Create
     source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
     pose_refs: draftsToPoseRefs(resolved.pose_refs),
     sources: draftsToSources(resolved.sources ?? []),
+    duration: durationPayload(resolved),
     ...moreTextPayload(resolved),
     tags: tagsPayload(resolved),
     people: peoplePayload(resolved),
@@ -2914,6 +2947,7 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
     source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
     pose_refs: draftsToPoseRefs(resolved.pose_refs),
     sources: draftsToSources(resolved.sources ?? []),
+    duration: durationPayload(resolved),
     ...moreTextPayload(resolved),
     tags: tagsPayload(resolved),
     people: peoplePayload(resolved),
@@ -2928,6 +2962,12 @@ function moreTextPayload(values: LinkFormValues): Record<MoreTextKey, string | n
     out[field.key] = value.length > 0 ? value : null;
   }
   return out;
+}
+
+/** Duração value; blank -> null. */
+function durationPayload(values: LinkFormValues): string | null {
+  const value = (values.duration ?? "").trim();
+  return value.length > 0 ? value : null;
 }
 
 /** Normalized, deduped tags; empty -> null. */
@@ -2984,6 +3024,9 @@ function assertFormValues(values: LinkFormValues): void {
   if (poseError) throw new Error(poseError);
   const sourcesProblem = sourcesError(values.sources ?? []);
   if (sourcesProblem) throw new Error(sourcesProblem);
+  if (values.duration && !isDuration(values.duration)) {
+    throw new Error(`${DURATION_TERM} inválida.`);
+  }
   for (const field of MORE_TEXT_FIELDS) {
     if (values[field.key].length > field.max) {
       throw new Error(`${field.term} deve ter no máximo ${field.max} caracteres.`);

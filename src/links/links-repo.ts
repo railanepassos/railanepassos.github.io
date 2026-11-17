@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isHttpsUrl, isOptionalHttpsUrl } from "./validate";
 import { MORE_TEXT_FIELDS } from "./more-fields";
 import { isCategory } from "./category";
+import { isDuration, readDuration } from "./duration";
 import { readSources, storedSourcesError, type Source } from "./sources";
 import { poseDraftsFromRefs, poseRefsError, readPoseRefs, type PoseRef } from "./poses";
 import { MAX_TAGS, MAX_TAG_LENGTH } from "./tags";
@@ -32,6 +33,8 @@ export type LinkRow = {
   note: string | null;
   completed_at: string | null;
   cost_text?: string | null;
+  /** Duração (migration 020): rapido | meio-periodo | dia-inteiro, or null. */
+  duration?: string | null;
   city?: string | null;
   address?: string | null;
   dossier?: string | null;
@@ -68,6 +71,8 @@ export type CreateLinkInput = {
   note?: string | null;
   completed_at?: string | null;
   cost_text?: string | null;
+  /** Duração (migration 020): rapido | meio-periodo | dia-inteiro, or null. */
+  duration?: string | null;
   city?: string | null;
   address?: string | null;
   dossier?: string | null;
@@ -99,6 +104,8 @@ export type UpdateLinkPatch = {
   note?: string | null;
   completed_at?: string | null;
   cost_text?: string | null;
+  /** Duração (migration 020): rapido | meio-periodo | dia-inteiro, or null. */
+  duration?: string | null;
   city?: string | null;
   address?: string | null;
   dossier?: string | null;
@@ -134,6 +141,7 @@ export function normalizeLinkRow(
     note: row.note ?? null,
     completed_at: row.completed_at ?? null,
     cost_text: row.cost_text ?? null,
+    duration: readDuration(row.duration),
     city: row.city ?? null,
     address: row.address ?? null,
     dossier: row.dossier ?? null,
@@ -165,6 +173,8 @@ function validateLinkFields(fields: {
   image_url?: string | null;
   note?: string | null;
   cost_text?: string | null;
+  /** Duração (migration 020): rapido | meio-periodo | dia-inteiro, or null. */
+  duration?: string | null;
   city?: string | null;
   address?: string | null;
   dossier?: string | null;
@@ -224,6 +234,10 @@ function validateLinkFields(fields: {
     if (value != null && value.length > field.max) {
       throw new Error(`${field.key} must not exceed ${field.max} characters`);
     }
+  }
+
+  if (fields.duration != null && !isDuration(fields.duration)) {
+    throw new Error("duration must be rapido, meio-periodo or dia-inteiro");
   }
 
   if (fields.tags != null) {
@@ -292,6 +306,7 @@ function validatePatch(patch: UpdateLinkPatch): UpdateLinkPatch {
     image_url: patch.image_url,
     note: patch.note,
     cost_text: patch.cost_text,
+    duration: patch.duration,
     city: patch.city,
     address: patch.address,
     dossier: patch.dossier,
@@ -369,6 +384,7 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         image_url: input.image_url,
         note: input.note,
         cost_text: input.cost_text,
+        duration: input.duration,
         city: input.city,
         address: input.address,
         dossier: input.dossier,

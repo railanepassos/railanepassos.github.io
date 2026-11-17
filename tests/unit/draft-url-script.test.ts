@@ -76,6 +76,14 @@ describe("scripts/draft-url.mjs", () => {
     expect(bad.err).toContain("sources");
   });
 
+  it("accepts fields.duration and rejects an unknown value", () => {
+    const f = (duration: unknown) => JSON.stringify({ ...VALID, fields: { url: "https://a.com", duration } });
+    expect(run([], f("meio-periodo")).code).toBe(0);
+    const bad = run([], f("Meio período"));
+    expect(bad.code).not.toBe(0);
+    expect(bad.err).toContain("duration");
+  });
+
   it("exits non-zero when the file does not exist", () => {
     expect(run(["/nonexistent/draft.json"]).code).not.toBe(0);
   });
