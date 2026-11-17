@@ -1268,3 +1268,59 @@ describe("detail: Plano do passeio", () => {
     expect(modal.element.querySelector<HTMLElement>("[data-field='plan-edit']")!.hidden).toBe(true);
   });
 });
+
+describe("Phase 5: update draft over the edit form", () => {
+  it("empty proposed values do not overwrite the current ones", () => {
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    modal.openEdit(row({ category: "bar", city: "Cidade Atual", description: "Atual" }), {
+      category: "",
+      city: "",
+      description: "Proposta",
+    });
+    expect(
+      modal.element.querySelector('[data-category="bar"]')?.getAttribute("aria-pressed")
+    ).toBe("true");
+    expect((modal.element.querySelector("#links-form-city") as HTMLInputElement).value).toBe("Cidade Atual");
+    expect((modal.element.querySelector("#links-form-desc") as HTMLTextAreaElement).value).toBe("Proposta");
+  });
+});
+
+describe("Phase 5: a draft-supplied image is not loaded until the editor asks", () => {
+  const IMG = "https://draft-image.example.test/foto.jpg";
+  const previewSrc = (modal: { element: HTMLElement }): string | null =>
+    modal.element.querySelector(".links-admin-form__preview-img")?.getAttribute("src") ?? null;
+
+  it("openCreate: no preview from the draft image; the button loads it", () => {
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    modal.openCreate({ url: "https://example.com/x", image_url: IMG });
+    expect(previewSrc(modal)).not.toBe(IMG);
+    expect((modal.element.querySelector("#links-form-image") as HTMLInputElement).value).toBe(IMG);
+    const button = Array.from(modal.element.querySelectorAll("button")).find((b) => b.textContent === "Carregar prévia")!;
+    expect(button.hidden).toBe(false);
+    button.click();
+    expect(previewSrc(modal)).toBe(IMG);
+    expect(button.hidden).toBe(true);
+  });
+
+  it("openEdit: a proposed image is held; typing in the field releases it", () => {
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    modal.openEdit(row(), { image_url: IMG });
+    expect(previewSrc(modal)).not.toBe(IMG);
+    const field = modal.element.querySelector("#links-form-image") as HTMLInputElement;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(previewSrc(modal)).toBe(IMG);
+  });
+
+  it("an image already saved on the item still previews, and so does a plain create", () => {
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    modal.openEdit(row({ image_url: "https://example.com/salva.jpg" }));
+    expect(previewSrc(modal)).toBe("https://example.com/salva.jpg");
+    modal.openCreate({ url: "https://example.com/x" });
+    const button = Array.from(modal.element.querySelectorAll("button")).find((b) => b.textContent === "Carregar prévia")!;
+    expect(button.hidden).toBe(true);
+  });
+});

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { openAuthedWith } from "./helpers/authed";
+import { isMobile, openAuthedWith } from "./helpers/authed";
 
 /** Phase 5: an update draft (#rascunho=, kind "atualizacao") for an existing item. Fake data only. */
 
@@ -168,5 +168,71 @@ test.describe("Links app: update draft (#rascunho=)", () => {
     await login.getByLabel("Senha").fill("senha-de-teste");
     await login.getByRole("button", { name: /Entrar/ }).click();
     await expect(page.getByRole("dialog", { name: FORM }).getByLabel("Cidade (opcional)")).toHaveValue("Cidade Proposta");
+  });
+
+  test("the draft notice shows once: the next render clears it", async ({ page }) => {
+    await openAuthedWith(page, [ITEM], {
+      hash: hashOf({ v: 1, kind: "atualizacao", id: "00000000-0000-4000-8000-0000000000ff", fields: FIELDS }),
+    });
+    const notice = page.getByRole("alert").filter({ hasText: "rascunho" });
+    await expect(notice).toBeVisible();
+    const input = page.getByRole("searchbox", { name: "Buscar experiências" });
+    if (isMobile(page) && !(await input.isVisible())) {
+      await page.getByRole("button", { name: "Buscar", exact: true }).click();
+    }
+    await input.fill("lugar");
+    await expect(page.locator(".feed-card").first()).toBeVisible();
+    await expect(notice).toHaveCount(0);
+  });
+
+  test("the list failed to load: says so, not that the item is gone", async ({ page }) => {
+    await openAuthedWith(page, [ITEM], {
+      hash: hashOf({ v: 1, kind: "atualizacao", id: ID, fields: FIELDS }),
+      listFails: true,
+    });
+    const alerts = page.getByRole("alert");
+    await expect(alerts.filter({ hasText: "não carregou" })).toBeVisible();
+    await expect(alerts.filter({ hasText: "não existe mais" })).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("empty proposed values keep the current ones", async ({ page }) => {
+    const writes = await openAuthedWith(page, [ITEM], {
+      hash: hashOf({ v: 1, kind: "atualizacao", id: ID, fields: { category: "", city: "", dossier: FIELDS.dossier } }),
+    });
+    const form = page.getByRole("dialog", { name: FORM });
+    await expect(form.getByLabel("Cidade (opcional)")).toHaveValue("Cidade Atual");
+    await expect(form.locator("[data-category='museu']")).toHaveAttribute("aria-pressed", "true");
+    await form.getByRole("button", { name: "Salvar" }).click();
+    await expect.poll(() => writes.patched).not.toBeNull();
+    expect(writes.patched).toMatchObject({ city: "Cidade Atual", category: "museu", dossier: FIELDS.dossier });
+  });
+
+  test("a draft image host gets no request on open; Carregar prévia loads it", async ({ page }) => {
+    const hits: string[] = [];
+    await page.route("https://draft-image.example.test/**", (route) => {
+      hits.push(route.request().url());
+      return route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\"/>" });
+    });
+    await openAuthedWith(page, [ITEM], {
+      hash: hashOf({ v: 1, kind: "atualizacao", id: ID, fields: { image_url: "https://draft-image.example.test/f.png" } }),
+    });
+    const form = page.getByRole("dialog", { name: FORM });
+    await expect(form).toBeVisible();
+    await page.waitForTimeout(400);
+    expect(hits).toHaveLength(0);
+    await form.getByRole("button", { name: "Carregar prévia" }).click();
+    await expect.poll(() => hits.length).toBeGreaterThan(0);
+  });
+
+  test("static mode (no Supabase config): the draft is not dropped silently", async ({ page }) => {
+    await page.route("**/p/a8f3k2/app.js*", async (route) => {
+      const response = await route.fetch();
+      const body = (await response.text()).replace(/url:"https:\/\/[a-z0-9]+\.supabase\.co"/, 'url:""');
+      await route.fulfill({ response, body });
+    });
+    await page.goto(`/p/a8f3k2/${hashOf({ v: 1, kind: "atualizacao", id: ID, fields: FIELDS })}`);
+    await expect(page.getByRole("alert").filter({ hasText: "login de editor" })).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 });

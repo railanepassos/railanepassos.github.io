@@ -15,6 +15,8 @@ export const DRAFT_FRAGMENT_PREFIX = "#rascunho=";
 /** Cap of the decoded JSON. */
 export const DRAFT_MAX_BYTES = 16 * 1024;
 
+type TextKey = "label" | "description" | "cost_text" | "city" | "address" | "dossier" | "itinerary";
+
 export const DRAFT_LIMITS = {
   categories: [
     "museu",
@@ -38,7 +40,7 @@ export const DRAFT_LIMITS = {
     address: 300,
     dossier: 5000,
     itinerary: 5000,
-  } as Record<string, number>,
+  } as Record<TextKey, number>,
   maxUrlLength: 2000,
   maxTags: 30,
   maxTagLength: 40,
@@ -81,6 +83,19 @@ const B64URL_RE = /^[A-Za-z0-9_-]*$/;
 const MAX_ENCODED_LENGTH = Math.ceil((DRAFT_MAX_BYTES * 4) / 3);
 
 const TOO_BIG = "O rascunho passa de 16 KB.";
+
+/**
+ * Update drafts: an empty string or empty list means "no proposal" for that
+ * field (it must never blank out what the item already has).
+ */
+export function withoutEmptyProposals<T extends object>(fields: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const [key, value] of Object.entries(fields) as Array<[keyof T, T[keyof T]]>) {
+    if (value === "" || (Array.isArray(value) && value.length === 0)) continue;
+    out[key] = value;
+  }
+  return out;
+}
 
 export function isDraftFragment(hash: string): boolean {
   return hash.startsWith(DRAFT_FRAGMENT_PREFIX);
@@ -140,8 +155,9 @@ function fieldsError(raw: unknown, requireUrl: boolean): string | null {
       if (!isHttps(v)) return `O campo ${key} deve ser um link https válido.`;
     } else if (key === "category") {
       if (v !== "" && !DRAFT_LIMITS.categories.includes(v)) return `O campo category é desconhecido.`;
-    } else if (v.length > (DRAFT_LIMITS.text[key] ?? 0)) {
-      return `O campo ${key} passa de ${DRAFT_LIMITS.text[key]} caracteres.`;
+    } else {
+      const max = DRAFT_LIMITS.text[key as TextKey] ?? 0;
+      if (v.length > max) return `O campo ${key} passa de ${max} caracteres.`;
     }
   }
   for (const [key, maxCount, maxLen] of [
@@ -222,7 +238,7 @@ export function parseDraft(fragment: string): ParseDraftResult {
     if (problem) return fail(problem);
   }
   if (!isNew) {
-    const hasFields = isRecord(json.fields) && Object.keys(json.fields).length > 0;
+    const hasFields = isRecord(json.fields) && Object.keys(withoutEmptyProposals(json.fields)).length > 0;
     const hasPlan = Array.isArray(json.plan) && json.plan.length > 0;
     if (!hasFields && !hasPlan) return fail("O rascunho de atualização não propõe nada.");
   }

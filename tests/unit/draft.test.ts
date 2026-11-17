@@ -5,8 +5,10 @@ import {
   encodeDraft,
   isDraftFragment,
   parseDraft,
+  withoutEmptyProposals,
   type Draft,
 } from "../../src/links/draft";
+import { isHttpsUrl } from "../../src/links/validate";
 import { CATEGORY_OPTIONS } from "../../src/links/category";
 import { MORE_TEXT_FIELDS } from "../../src/links/more-fields";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH } from "../../src/links/people";
@@ -267,5 +269,46 @@ describe("DRAFT_LIMITS stays in sync with the app (the codec is import-free)", (
     expect(DRAFT_LIMITS.maxPersonLength).toBe(MAX_PERSON_LENGTH);
     expect(DRAFT_LIMITS.maxPlanItems).toBe(MAX_PLAN_ITEMS);
     expect(DRAFT_LIMITS.planTextMax).toBe(PLAN_TEXT_MAX);
+  });
+});
+
+describe("the codec's https rule agrees with isHttpsUrl (the codec is import-free)", () => {
+  const CASES = [
+    "https://example.com",
+    "https://example.com/a?b=1#c",
+    "HTTPS://EXAMPLE.COM",
+    "http://example.com",
+    "//example.com",
+    "example.com",
+    "ftp://example.com",
+    "javascript:alert(1)",
+    "data:text/html,<b>x</b>",
+    "https:",
+    "https://",
+    "https:example.com",
+    " https://example.com",
+    "",
+    "not a url",
+  ];
+  for (const value of CASES) {
+    it(`url ${JSON.stringify(value)}`, () => {
+      const accepted = parseDraft(fragOf({ v: 1, kind: "novo", fields: { url: value } })).ok;
+      expect(accepted).toBe(isHttpsUrl(value));
+    });
+  }
+});
+
+describe("update draft: empty proposed values are no proposal", () => {
+  it("withoutEmptyProposals drops empty strings and empty lists, keeps the rest", () => {
+    expect(withoutEmptyProposals({ category: "", city: "Cidade", tags: [], people: ["A"], dossier: "" })).toEqual({
+      city: "Cidade",
+      people: ["A"],
+    });
+    expect(withoutEmptyProposals({})).toEqual({});
+  });
+
+  it("an update draft whose fields are all empty (and no plan) proposes nothing", () => {
+    expect(reject(fragOf({ v: 1, kind: "atualizacao", id: ID, fields: { category: "", city: "" } }))).toMatch(/não propõe nada/);
+    expect(parseDraft(fragOf({ v: 1, kind: "atualizacao", id: ID, fields: { category: "", city: "" }, plan: [{ text: "x", list: "compras" }] })).ok).toBe(true);
   });
 });

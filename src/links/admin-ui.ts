@@ -23,6 +23,7 @@ import { setScreenBusy } from "./skeleton";
 import { formatScheduleChip, formatScheduleLabel } from "./schedule";
 import { isPanelMode, syncBodyScreenLock } from "./screen-lock";
 import { categoryBackdropSrc } from "./card-theme";
+import { withoutEmptyProposals } from "./draft";
 import { displayTitle, linkDomain } from "./feed";
 import { uiIcon, type IconName } from "./ui-icons";
 import { buildMapUrl } from "./map-url";
@@ -1335,6 +1336,18 @@ export function createLinkFormModal(
   }
   more.addEventListener("toggle", syncMoreHeights);
 
+  let draftImageHeld = false;
+  const loadPreviewBtn = document.createElement("button");
+  loadPreviewBtn.type = "button";
+  loadPreviewBtn.className = "links-admin-button links-admin-button--ghost";
+  loadPreviewBtn.textContent = "Carregar prévia";
+  loadPreviewBtn.hidden = true;
+
+  function holdDraftImage(hold: boolean): void {
+    draftImageHeld = hold;
+    loadPreviewBtn.hidden = !hold;
+  }
+
   function syncPreview(): void {
     const category = isCategory(pickedCategory)
       ? pickedCategory
@@ -1343,7 +1356,8 @@ export function createLinkFormModal(
           description: descField.input.value,
           url: urlField.input.value,
         });
-    const image = imageField.input.value.trim();
+    // A draft-supplied image is not fetched until the editor asks (a crafted link must not ping a host).
+    const image = draftImageHeld ? "" : imageField.input.value.trim();
     const src = categoryBackdropSrc(category, image);
     if (src) previewImg.src = src;
     else previewImg.removeAttribute("src");
@@ -1352,6 +1366,14 @@ export function createLinkFormModal(
     input.addEventListener("input", syncPreview);
   }
   descField.input.addEventListener("input", syncPreview);
+  imageField.input.addEventListener("input", () => {
+    holdDraftImage(false);
+    syncPreview();
+  });
+  loadPreviewBtn.addEventListener("click", () => {
+    holdDraftImage(false);
+    syncPreview();
+  });
 
   const error = document.createElement("p");
   error.className = "links-admin-form__error";
@@ -1383,6 +1405,7 @@ export function createLinkFormModal(
     categoryField,
     descField.wrapper,
     imageField.wrapper,
+    loadPreviewBtn,
     memoryField.wrapper,
     more,
     error,
@@ -1424,6 +1447,7 @@ export function createLinkFormModal(
     labelField.input.value = prefill?.label ?? "";
     descField.input.value = prefill?.description ?? "";
     imageField.input.value = prefill?.image_url ?? "";
+    holdDraftImage(Boolean(prefill?.image_url));
     pickedCategory = prefill?.category && isCategory(prefill.category) ? prefill.category : "";
     writeMoreText(prefill ?? null);
     syncCategoryChips();
@@ -1436,13 +1460,15 @@ export function createLinkFormModal(
   }
 
   function openEdit(current: LinkRow, proposed?: CreatePrefill): void {
-    const link: LinkRow = proposed ? { ...current, ...proposed } : current;
+    const changes = proposed ? withoutEmptyProposals(proposed) : undefined;
+    const link: LinkRow = changes ? { ...current, ...changes } : current;
     editingId = link.id;
     title.textContent = "Editar experiência";
     urlField.input.value = link.url;
     labelField.input.value = link.label;
     descField.input.value = link.description ?? "";
     imageField.input.value = link.image_url ?? "";
+    holdDraftImage(Boolean(changes?.image_url));
     memoryField.input.value = link.note ?? "";
     writeMoreText(link);
     pickedCategory = link.category && isCategory(link.category) ? link.category : "";

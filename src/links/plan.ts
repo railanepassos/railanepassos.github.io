@@ -113,6 +113,7 @@ export function mergeProposedPlanItems(
   proposed: ReadonlyArray<{ text: string; list: PlanList }>
 ): PlanDraft[] {
   const out = [...current];
+  // One set for both lists on purpose: the same text in checklist and compras would just be a duplicate row.
   const seen = new Set(current.map((d) => d.text.trim().toLowerCase()));
   for (const item of proposed) {
     if (out.length >= MAX_PLAN_ITEMS) break;
@@ -125,7 +126,7 @@ export function mergeProposedPlanItems(
   return out;
 }
 
-export type PlanProgress ={ done: number; total: number; label: string };
+export type PlanProgress = { done: number; total: number; label: string };
 
 /** Progress of one list: "3 de 7". */
 export function planProgress(items: readonly PlanItem[], list: PlanList): PlanProgress {

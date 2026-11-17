@@ -5,7 +5,13 @@ import { createAuth, type Auth } from "./auth";
 import { createAuthStorage, setRememberMe } from "./session-storage";
 import { PLAN_STALE_NOTICE, isPlanShareFragment } from "./plan-share";
 import { bootSharedPlan } from "./shared-plan-boot";
-import { isDraftFragment, parseDraft, type DraftPlanItem, type ParseDraftResult } from "./draft";
+import {
+  isDraftFragment,
+  parseDraft,
+  withoutEmptyProposals,
+  type DraftPlanItem,
+  type ParseDraftResult,
+} from "./draft";
 import { StaleLinkError, createLinksRepo, type LinksRepo, type LinkRow, type UpdateLinkPatch } from "./links-repo";
 import { renderGuestGate } from "./render";
 import { collectTags } from "./tags";
@@ -145,6 +151,14 @@ function icsFilename(link: LinkRow): string {
 function bootStatic(els: Els): void {
   els.adminRoot.replaceChildren();
   renderGuestGate(els.list);
+  if (pendingDraft) {
+    // No editor login in this mode, so the draft cannot be opened: say so instead of dropping it silently.
+    pendingDraft = null;
+    renderMessage(
+      els.list,
+      "Não foi possível abrir o rascunho: rascunhos precisam do login de editor, que não está disponível agora."
+    );
+  }
 }
 
 /**
@@ -175,6 +189,8 @@ function bootDynamic(
   let notice = warning ?? null;
   /** Why a draft was not opened; kept so later re-renders do not drop it. */
   let draftNotice: string | null = null;
+  /** The last list load failed: an unknown draft id then says that, not "item gone". */
+  let listLoadFailed = false;
   let categoryFilter: Category[] = [];
   let section: Section = "feed";
   /**
@@ -843,6 +859,26 @@ function bootDynamic(
     return "Nenhuma experiência ainda.";
   }
 
+  /**
+   * The draft notice survives the automatic re-renders of boot (the session is
+   * loaded twice) but not the editor's next action: the first interaction
+   * clears it, so the render that follows starts clean.
+   */
+  let draftNoticeArmed = false;
+  const NOTICE_CLEAR_EVENTS = ["pointerdown", "keydown", "input"];
+  function clearDraftNotice(): void {
+    draftNotice = null;
+    draftNoticeArmed = false;
+    for (const type of NOTICE_CLEAR_EVENTS) document.removeEventListener(type, clearDraftNotice, true);
+  }
+  function showDraftNotice(): void {
+    if (!draftNotice) return;
+    renderMessage(els.list, draftNotice);
+    if (draftNoticeArmed) return;
+    draftNoticeArmed = true;
+    for (const type of NOTICE_CLEAR_EVENTS) document.addEventListener(type, clearDraftNotice, true);
+  }
+
   function renderList(): void {
     els.list.replaceChildren();
     if (!authenticated) {
@@ -851,7 +887,7 @@ function bootDynamic(
       if (notice) {
         renderMessage(els.list, notice);
       }
-      if (draftNotice) renderMessage(els.list, draftNotice);
+      showDraftNotice();
       return;
     }
     setShellVisible(true);
@@ -911,7 +947,7 @@ function bootDynamic(
     if (notice) {
       renderMessage(els.list, notice);
     }
-    if (draftNotice) renderMessage(els.list, draftNotice);
+    showDraftNotice();
   }
 
   function render(): void {
@@ -949,10 +985,13 @@ function bootDynamic(
       formModal.openCreate(result.draft.fields);
       return;
     }
-    const { id, fields, plan } = result.draft;
+    const { id, plan } = result.draft;
+    const fields = result.draft.fields ? withoutEmptyProposals(result.draft.fields) : undefined;
     const target = findLink(id);
     if (!target) {
-      draftNotice = "Não foi possível abrir o rascunho: o item não existe mais ou o id está errado.";
+      draftNotice = listLoadFailed
+        ? "Não foi possível abrir o rascunho: a lista de itens não carregou. Recarregue a página e tente de novo."
+        : "Não foi possível abrir o rascunho: o item não existe mais ou o id está errado.";
       renderList();
       return;
     }
@@ -973,8 +1012,10 @@ function bootDynamic(
         try {
           links = sortLinks(await repo.listLinks());
           notice = null;
+          listLoadFailed = false;
         } catch {
           links = [];
+          listLoadFailed = true;
           notice =
             "Não foi possível carregar links do Supabase. Confira a migration e a chave anon.";
         }
@@ -996,8 +1037,10 @@ function bootDynamic(
         try {
           links = sortLinks(await repo.listLinks());
           notice = null;
+          listLoadFailed = false;
         } catch {
           links = [];
+          listLoadFailed = true;
           notice =
             "Não foi possível carregar links do Supabase. Confira a migration e a chave anon.";
         }

@@ -119,4 +119,21 @@ test.describe("Links app: new-item draft (#rascunho=)", () => {
     await login.getByRole("button", { name: /Entrar/ }).click();
     await expectPrefilled(page);
   });
+
+  test("the draft image host gets no request on open; Carregar prévia loads it", async ({ page }) => {
+    const hits: string[] = [];
+    await page.route("https://draft-image.example.test/**", (route) => {
+      hits.push(route.request().url());
+      return route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\"/>" });
+    });
+    await openAuthedWith(page, LINK_ROWS, {
+      hash: hashOf({ v: 1, kind: "novo", fields: { url: "https://example.com/x", image_url: "https://draft-image.example.test/f.png" } }),
+    });
+    const sheet = page.getByRole("dialog", { name: SHEET });
+    await expect(sheet).toBeVisible();
+    await page.waitForTimeout(400);
+    expect(hits).toHaveLength(0);
+    await sheet.getByRole("button", { name: "Carregar prévia" }).click();
+    await expect.poll(() => hits.length).toBeGreaterThan(0);
+  });
 });

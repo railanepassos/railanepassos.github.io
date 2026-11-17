@@ -58,7 +58,7 @@ let stamp = 0;
 export async function openAuthedWith(
   page: Page,
   initialRows: Array<Record<string, unknown>>,
-  options: { /** Fragment to open the page with, e.g. "#rascunho=...". */ hash?: string; /** No stored session: the login form answers with the fake session. */ loggedOut?: boolean } = {}
+  options: { /** Fragment to open the page with, e.g. "#rascunho=...". */ hash?: string; /** No stored session: the login form answers with the fake session. */ loggedOut?: boolean; /** The list GET fails (HTTP 500). */ listFails?: boolean } = {}
 ): Promise<Writes> {
   // Own copies: the mock "server" mutates its rows, shared fixtures must stay pristine.
   const rows = initialRows.map((row) => ({ ...row }));
@@ -77,7 +77,9 @@ export async function openAuthedWith(
     const method = request.method();
     const params = new URL(request.url()).searchParams;
     const idFilter = params.get("id")?.replace(/^eq\./, "");
-    if (method === "GET") {
+    if (method === "GET" && options.listFails) {
+      await route.fulfill({ status: 500, contentType: "application/json", body: '{"message":"boom"}' });
+    } else if (method === "GET") {
       const single = (request.headers().accept ?? "").includes("vnd.pgrst.object");
       const found = idFilter ? rows.filter((r) => r.id === idFilter) : rows;
       await route.fulfill({
@@ -120,7 +122,7 @@ export async function openAuthedWith(
     })
   );
   await page.goto(`/p/a8f3k2/${options.hash ?? ""}`);
-  if (!options.loggedOut) await expect(page.locator(".feed-card").first()).toBeVisible();
+  if (!options.loggedOut && !options.listFails) await expect(page.locator(".feed-card").first()).toBeVisible();
   return writes;
 }
 
