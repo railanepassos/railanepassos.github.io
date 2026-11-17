@@ -42,8 +42,9 @@ Input: a post link, a DM chat the editor points to, or her saved items.
 
 1. Open the post read-only in Chrome and read its text. In a DM chat, find the shared post links only.
 2. Extract the place: name, city, address, category, cost, tags. Use public research (the place's own page, maps) when the post lacks the address or link.
-3. Build one `novo` draft per post. `source_url` is the post link; `url` is the place's official page, or the post link when none exists.
-4. One draft at a time: show it, build the URL, open it, and continue with the next post after the editor moves on.
+3. Research the place and its surroundings in public sources (news, the place's site, city tourism pages, maps), then fill `dossier` and `itinerary` on every import (see **Dossier and itinerary content** below).
+4. Build one `novo` draft per post. `source_url` is the post link; `url` is the place's official page, or the post link when none exists.
+5. One draft at a time: show it, build the URL, open it, and continue with the next post after the editor moves on.
 
 ## Mode: dossier, itinerary, snacks for an existing item
 
@@ -51,3 +52,22 @@ Input: a post link, a DM chat the editor points to, or her saved items.
 2. Research the place in public sources.
 3. Build an `atualizacao` draft with the requested parts only: `dossier` (history, what to see), `itinerary` (hour by hour), `plan` (snacks to `checklist`, purchases to `compras`). Do not repeat items already in the plan.
 4. Show, build the URL, open. The edit form shows the proposed text over the current one for the editor to compare.
+
+## Dossier and itinerary content
+
+Both modes use these. Write in pt-BR plain text with short paragraphs and line breaks.
+
+**Dossier (`dossier`)**, about the place itself:
+- History: when it opened or was founded and how long it has existed. Mention the founders or origin when public sources say so.
+- One or two curiosities: a signature dish or attraction, a renovation, a famous visitor, a name origin, a record.
+- What to see or order there.
+- A practical warning when it matters, for example a rough sea, a dress code or booking ahead.
+- State only what a source supports. When a fact you looked for is not found, say so in one short clause, for example "não achei a data exata de abertura". Never guess dates.
+
+**Itinerary (`itinerary`)**, a day around the place:
+- A time-stamped plan, one line per step (`10h: ...`). Fit it to the opening hours and any promotion window from the post.
+- What to do in the area: a beach (say whether it is good for swimming or only for walking), a walk or bike route with its rough length, parks, viewpoints, other nearby spots.
+- The best time to go: cooler hours, sunset, quieter weekdays. Mark it as a suggestion when no source says it.
+- A closing `Dicas:` line covering sunscreen and water, what to wear, getting there or parking, and a reminder to confirm promotions or hours that may change.
+
+In the chat, list the sources you used for the facts as links.
