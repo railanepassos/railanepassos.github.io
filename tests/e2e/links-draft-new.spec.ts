@@ -119,11 +119,4 @@ test.describe("Links app: new-item draft (#rascunho=)", () => {
     await login.getByRole("button", { name: /Entrar/ }).click();
     await expectPrefilled(page);
   });
-
-  test("an update draft is not opened as a new item by this version", async ({ page }) => {
-    await openAuthedWith(page, LINK_ROWS, {
-      hash: hashOf({ v: 1, kind: "atualizacao", id: LINK_ROWS[0]!.id, fields: { city: "Outra" } }),
-    });
-    await expect(page.getByRole("dialog", { name: SHEET })).toHaveCount(0);
-  });
 });

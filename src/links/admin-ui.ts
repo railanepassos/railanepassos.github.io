@@ -1008,7 +1008,8 @@ export function createDeleteConfirmSheet(): DeleteSheetHandle {
 export type LinkFormHandle = {
   element: HTMLElement;
   openCreate: (prefill?: CreatePrefill) => void;
-  openEdit: (link: LinkRow) => void;
+  /** `proposed` (update draft) is shown over the current values; nothing is saved until Salvar. */
+  openEdit: (link: LinkRow, proposed?: CreatePrefill) => void;
   close: () => void;
   setError: (message: string) => void;
   setBusy: (busy: boolean) => void;
@@ -1019,6 +1020,8 @@ export type LinkFormOptions = {
   getTagSuggestions?: () => readonly string[];
   /** Names already used across items (autocomplete source). */
   getPeopleSuggestions?: () => readonly string[];
+  /** Fired when the editor closes the form without saving (Voltar / Escape). */
+  onDismiss?: () => void;
 };
 
 export function createLinkFormModal(
@@ -1432,7 +1435,8 @@ export function createLinkFormModal(
     afterOpen();
   }
 
-  function openEdit(link: LinkRow): void {
+  function openEdit(current: LinkRow, proposed?: CreatePrefill): void {
+    const link: LinkRow = proposed ? { ...current, ...proposed } : current;
     editingId = link.id;
     title.textContent = "Editar experiência";
     urlField.input.value = link.url;
@@ -1484,11 +1488,16 @@ export function createLinkFormModal(
     );
   });
 
-  backBtn.addEventListener("click", close);
+  function dismiss(): void {
+    close();
+    formOptions.onDismiss?.();
+  }
+
+  backBtn.addEventListener("click", dismiss);
   overlay.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.stopPropagation();
-      close();
+      dismiss();
     }
   });
 
