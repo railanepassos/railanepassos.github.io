@@ -53,6 +53,8 @@ import {
 import { buildIcs, downloadIcs } from "./ics";
 import { createReviewSheet, type ReviewSheetHandle } from "./review-sheet";
 import { UNMARK_DONE_PATCH, reviewError, reviewFromLink, reviewToPatch } from "./review";
+import { createPlanSheet, type PlanSheetHandle } from "./plan-sheet";
+import { planError, planFromLink, planToPatch } from "./plan";
 import { createDeckScreen, type DeckHandle } from "./deck-ui";
 import { nextPriority } from "./deck-queue";
 import { pickSharedUrl } from "./share-target";
@@ -207,12 +209,16 @@ function bootDynamic(
   const deleteSheet: DeleteSheetHandle = createDeleteConfirmSheet();
   const scheduleSheet: ScheduleSheetHandle = createScheduleSheet();
   const reviewSheet: ReviewSheetHandle = createReviewSheet();
+  const planSheet: PlanSheetHandle = createPlanSheet({
+    getPeopleSuggestions: () => collectPeople(links),
+  });
   const viewModal: ViewModalHandle = createViewModal({
     onEdit: (l) => formModal.openEdit(l),
     onSchedule: (l) => openSchedule(l),
     onMarkDone: (l) => void markDone(l),
     onUnmarkDone: (l) => void unmarkDone(l),
     onEditReview: (l) => openReview(l, "edit"),
+    onEditPlan: (l) => openPlan(l),
     onDelete: (l) => void deleteLink(l),
     onTag: (tag) => toggleTagFilter(tag),
     onPerson: (person) => togglePeopleFilter(person),
@@ -268,6 +274,7 @@ function bootDynamic(
     viewModal.element,
     scheduleSheet.element,
     reviewSheet.element,
+    planSheet.element,
     drawSheet.element,
     deckScreen.element
   );
@@ -395,6 +402,40 @@ function bootDynamic(
           reviewSheet.setError(messageOf(err, GENERIC_ERROR));
         } finally {
           reviewSheet.setBusy(false);
+        }
+      },
+    });
+  }
+
+  /** "Plano do passeio" sheet, opened from the detail; the detail comes back when it closes. */
+  function openPlan(link: LinkRow): void {
+    const reopenDetail = (): void => {
+      const current = findLink(link.id);
+      if (current) viewModal.open(current);
+    };
+    planSheet.open({
+      label: displayTitle(link),
+      initial: planFromLink(link),
+      onSkip: reopenDetail,
+      onSave: async (values) => {
+        const problem = planError(values.items);
+        if (problem) {
+          planSheet.setError(problem);
+          return;
+        }
+        planSheet.setBusy(true);
+        try {
+          const patch = planToPatch(values);
+          await repo.updateLink(link.id, patch);
+          links = sortLinks(links.map((row) => (row.id === link.id ? { ...row, ...patch } : row)));
+          renderList();
+          deckScreen.refresh(links);
+          planSheet.close();
+          reopenDetail();
+        } catch (err) {
+          planSheet.setError(messageOf(err, GENERIC_ERROR));
+        } finally {
+          planSheet.setBusy(false);
         }
       },
     });

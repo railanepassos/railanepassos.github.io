@@ -6,6 +6,8 @@ import {
   normalizePlan,
   planDraftsFromItems,
   planError,
+  planFromLink,
+  planToPatch,
   planProgress,
   readPlanItems,
   storedPlanError,
@@ -123,5 +125,36 @@ describe("planProgress", () => {
 
   it("handles an empty list", () => {
     expect(planProgress([], "compras")).toEqual({ done: 0, total: 0, label: "0 de 0" });
+  });
+});
+
+describe("planFromLink / planToPatch", () => {
+  it("reads people and items from a link (defensive) into sheet values", () => {
+    expect(
+      planFromLink({
+        people: ["Alana", "Bia"],
+        plan_items: [{ text: "Ingressos", list: "checklist", who: "Alana", done: true }],
+      })
+    ).toEqual({
+      people: ["Alana", "Bia"],
+      items: [{ text: "Ingressos", list: "checklist", who: "Alana", done: true }],
+    });
+    expect(planFromLink({})).toEqual({ people: [], items: [] });
+  });
+
+  it("builds the PATCH with deduped people and normalized items, null when empty", () => {
+    expect(
+      planToPatch({
+        people: ["Alana", " alana ", "Bia"],
+        items: [draft({ text: " Ingressos ", who: "Alana", done: true }), draft({ text: "" })],
+      })
+    ).toEqual({
+      people: ["Alana", "Bia"],
+      plan_items: [{ text: "Ingressos", list: "checklist", who: "Alana", done: true }],
+    });
+    expect(planToPatch({ people: [], items: [draft({ text: " " })] })).toEqual({
+      people: null,
+      plan_items: null,
+    });
   });
 });

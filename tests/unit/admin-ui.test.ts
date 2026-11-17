@@ -1041,3 +1041,87 @@ describe("Phase 3: Como foi on card and detail", () => {
     expect(unmark.hidden).toBe(true);
   });
 });
+
+describe("detail: Plano do passeio", () => {
+  const cb = () => ({
+    onEdit: vi.fn(),
+    onSchedule: vi.fn(),
+    onMarkDone: vi.fn(),
+    onDelete: vi.fn(),
+    onEditPlan: vi.fn(),
+  });
+  const plan = [
+    { text: "Comprar ingressos", list: "checklist" as const, who: "Alana", done: true },
+    { text: "Protetor solar", list: "checklist" as const, done: false },
+    { text: "Pão", list: "compras" as const, done: false },
+  ];
+
+  it("shows both lists with progress and the person in charge, read-only", () => {
+    const modal = createViewModal(cb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    expect(section.hidden).toBe(false);
+    const checklist = section.querySelector<HTMLElement>("[data-plan-list='checklist']")!;
+    expect(checklist.textContent).toContain("Checklist");
+    expect(checklist.textContent).toContain("1 de 2");
+    expect(checklist.textContent).toContain("Comprar ingressos");
+    expect(checklist.textContent).toContain("Alana");
+    const compras = section.querySelector<HTMLElement>("[data-plan-list='compras']")!;
+    expect(compras.textContent).toContain("Lanches e compras");
+    expect(compras.textContent).toContain("0 de 1");
+    expect(section.querySelectorAll("input, button")).toHaveLength(0);
+  });
+
+  it("hides the section (and an empty list) when there is nothing to show", () => {
+    const modal = createViewModal(cb());
+    document.body.appendChild(modal.element);
+    modal.open(row());
+    expect(modal.element.querySelector<HTMLElement>("[data-field='plan']")!.hidden).toBe(true);
+    modal.open(row({ plan_items: [plan[2]!] }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    expect(section.hidden).toBe(false);
+    expect(section.querySelector<HTMLElement>("[data-plan-list='checklist']")!.hidden).toBe(true);
+    expect(section.querySelector<HTMLElement>("[data-plan-list='compras']")!.hidden).toBe(false);
+  });
+
+  it("ignores malformed stored items and renders text safely", () => {
+    const modal = createViewModal(cb());
+    document.body.appendChild(modal.element);
+    modal.open(
+      row({
+        plan_items: [
+          { text: "<img src=x onerror=alert(1)>", list: "checklist", done: false },
+          { text: "", list: "checklist", done: false },
+        ] as never,
+      })
+    );
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    expect(section.querySelectorAll("img")).toHaveLength(0);
+    expect(section.textContent).toContain("<img src=x onerror=alert(1)>");
+    expect(section.textContent).toContain("0 de 1");
+  });
+
+  it("offers Editar plano on any place and closes the detail before calling back", () => {
+    const callbacks = cb();
+    const modal = createViewModal(callbacks);
+    document.body.appendChild(modal.element);
+    const link = row();
+    modal.open(link);
+    const btn = modal.element.querySelector<HTMLButtonElement>("[data-action='edit-plan']")!;
+    expect(btn.textContent).toContain("Editar plano");
+    expect(btn.closest<HTMLElement>("[data-field='plan-edit']")!.hidden).toBe(false);
+    btn.click();
+    expect(modal.element.hidden).toBe(true);
+    expect(callbacks.onEditPlan).toHaveBeenCalledWith(link);
+  });
+
+  it("hides Editar plano when no handler is wired", () => {
+    const { onEditPlan, ...withoutPlan } = cb();
+    void onEditPlan;
+    const modal = createViewModal(withoutPlan);
+    document.body.appendChild(modal.element);
+    modal.open(row());
+    expect(modal.element.querySelector<HTMLElement>("[data-field='plan-edit']")!.hidden).toBe(true);
+  });
+});

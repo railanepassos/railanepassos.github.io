@@ -92,6 +92,24 @@ test.describe("iOS focus zoom (controls at least 16px)", () => {
     for (const c of sizes) expect(c.size, c.id).toBeGreaterThanOrEqual(16);
   });
 
+  test("every visible control in the Plano do passeio sheet is at least 16px", async ({ page }) => {
+    const PLANNED = {
+      ...TODO,
+      plan_items: [{ text: "Comprar ingressos", list: "checklist", done: false }],
+    };
+    await openAuthedWith(page, [PLANNED, ...LINK_ROWS]);
+    await page
+      .locator(".feed-card", { hasText: "Lugar Para Fazer" })
+      .locator(".feed-card__open")
+      .click();
+    await page.locator(".links-detail").getByRole("button", { name: "Editar plano" }).click();
+    const sheet = page.getByRole("dialog", { name: "Plano do passeio" });
+    await sheet.getByRole("button", { name: "Adicionar item a lanches e compras" }).click();
+    const sizes = await controlFontSizes(sheet);
+    expect(sizes.length).toBeGreaterThanOrEqual(3);
+    for (const c of sizes) expect(c.size, c.id).toBeGreaterThanOrEqual(16);
+  });
+
   test("every visible control in the add form is at least 16px", async ({ page }) => {
     await openAuthedWith(page, LINK_ROWS);
     await openAddForm(page);

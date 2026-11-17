@@ -1,3 +1,5 @@
+import { dedupePeople } from "./people";
+
 /**
  * Trip plan (Phase 4): the checklist and the shopping list of a place, stored
  * in links.plan_items (jsonb array of { text, list, who?, done }). Pure
@@ -103,4 +105,26 @@ export function planProgress(items: readonly PlanItem[], list: PlanList): PlanPr
   const own = items.filter((i) => i.list === list);
   const done = own.filter((i) => i.done).length;
   return { done, total: own.length, label: `${done} de ${own.length}` };
+}
+
+/** What the "Plano do passeio" sheet edits. */
+export type PlanValues = { people: string[]; items: PlanDraft[] };
+
+/** Sheet values of a link (defensive read of both columns). */
+export function planFromLink(link: {
+  people?: readonly string[] | null;
+  plan_items?: unknown;
+}): PlanValues {
+  return {
+    people: dedupePeople(link.people ?? []),
+    items: planDraftsFromItems(readPlanItems(link.plan_items)),
+  };
+}
+
+/** Columns written by the sheet (empty -> null). */
+export type PlanPatch = { people: string[] | null; plan_items: PlanItem[] | null };
+
+export function planToPatch(values: PlanValues): PlanPatch {
+  const people = dedupePeople(values.people);
+  return { people: people.length > 0 ? people : null, plan_items: normalizePlan(values.items) };
 }

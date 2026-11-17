@@ -38,6 +38,7 @@ import {
   type PoseDraft,
 } from "./poses";
 import { readLessons } from "./lessons";
+import { PLAN_LISTS, planProgress, readPlanItems } from "./plan";
 import {
   MORE_TEXT_FIELDS,
   emptyMoreTextValues,
@@ -1775,6 +1776,8 @@ export type ViewModalCallbacks = {
   onUnmarkDone?: (link: LinkRow) => void;
   /** Done places only: open the "Como foi" sheet to edit it. */
   onEditReview?: (link: LinkRow) => void;
+  /** Any place: open the "Plano do passeio" sheet to edit the plan. */
+  onEditPlan?: (link: LinkRow) => void;
   /** Tap on a tag chip: close the detail and filter the feed by that tag. */
   onTag?: (tag: string) => void;
   /** Tap on a person chip: close the detail and filter the feed by that person. */
@@ -2039,6 +2042,36 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   sourceWrap.appendChild(sourceLink);
   info.append(mapWrap, sourceWrap);
 
+  // Trip plan (Phase 4), read-only here: one block per list with its progress.
+  // The participants are the "Pessoas" row above. Hidden when there are no items.
+  const planRow = infoRow("clipboard", "Plano do passeio");
+  planRow.row.dataset.field = "plan";
+  planRow.row.classList.add("links-detail__row--long");
+  const planLists = PLAN_LISTS.map(({ key, title }) => {
+    const block = document.createElement("div");
+    block.className = "links-detail__plan-list";
+    block.dataset.planList = key;
+    const heading = document.createElement("p");
+    heading.className = "links-detail__plan-title";
+    const ul = document.createElement("ul");
+    ul.className = "links-detail__plan-items";
+    block.append(heading, ul);
+    planRow.value.appendChild(block);
+    return { key, title, block, heading, ul };
+  });
+  const planEdit = document.createElement("button");
+  planEdit.type = "button";
+  planEdit.className = "links-detail__action links-detail__plan-edit";
+  planEdit.dataset.action = "edit-plan";
+  const planEditText = document.createElement("span");
+  planEditText.textContent = "Editar plano";
+  planEdit.append(uiIcon("edit", 16), planEditText);
+  const planEditWrap = document.createElement("div");
+  planEditWrap.className = "links-detail__row links-detail__row--action";
+  planEditWrap.dataset.field = "plan-edit";
+  planEditWrap.appendChild(planEdit);
+  info.append(planRow.row, planEditWrap);
+
   // Photo poses: ordered list, each with an optional new-tab link and note.
   const posesRow = infoRow("clipboard", "Referências de pose");
   posesRow.row.dataset.field = "pose_refs";
@@ -2165,6 +2198,39 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     posesRow.row.hidden = poseRefs.length === 0;
     posesOl.replaceChildren(...poseRefs.map(renderPoseItem));
 
+    const planItems = readPlanItems(link.plan_items);
+    planRow.row.hidden = planItems.length === 0;
+    for (const list of planLists) {
+      const own = planItems.filter((i) => i.list === list.key);
+      list.block.hidden = own.length === 0;
+      list.heading.textContent = `${list.title} · ${planProgress(planItems, list.key).label}`;
+      list.ul.replaceChildren(
+        ...own.map((item) => {
+          const li = document.createElement("li");
+          li.className = "links-detail__plan-item";
+          if (item.done) li.classList.add("links-detail__plan-item--done");
+          const text = document.createElement("span");
+          text.className = "links-detail__plan-text";
+          text.textContent = item.text;
+          li.appendChild(text);
+          if (item.who) {
+            const who = document.createElement("span");
+            who.className = "links-detail__plan-who";
+            who.textContent = item.who;
+            li.appendChild(who);
+          }
+          if (item.done) {
+            const state = document.createElement("span");
+            state.className = "links-detail__plan-state";
+            state.textContent = "Feito";
+            li.appendChild(state);
+          }
+          return li;
+        })
+      );
+    }
+    planEditWrap.hidden = !cb.onEditPlan;
+
     domainText.textContent = linkDomain(link.url);
     original.href = link.url;
     openLink.href = link.url;
@@ -2233,6 +2299,9 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   });
   reviewEdit.addEventListener("click", () => {
     if (cb.onEditReview) act(cb.onEditReview);
+  });
+  planEdit.addEventListener("click", () => {
+    if (cb.onEditPlan) act(cb.onEditPlan);
   });
   backBtn.addEventListener("click", close);
   overlay.addEventListener("keydown", (e) => {
