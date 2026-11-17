@@ -72,4 +72,4 @@ Both modes use these. Write in pt-BR plain text with short paragraphs and line b
 - The best time to go: cooler hours, sunset, quieter weekdays. Mark it as a suggestion when no source says it.
 - A closing `Dicas:` line covering sunscreen and water, what to wear, getting there or parking, and a reminder to confirm promotions or hours that may change.
 
-In the chat, list the sources you used for the facts as links.
+Put the pages you used for the facts in `fields.sources` (short readable title + https URL), and also list them as links in the chat.
