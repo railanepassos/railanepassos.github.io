@@ -68,6 +68,8 @@ beforeAll(async () => {
     create role service_role nologin;
     create schema auth;
     create table auth.users (id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as
+      $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   `);
   const files = readdirSync(MIGRATIONS)
     .filter((f: string) => f.endsWith(".sql"))
@@ -76,6 +78,9 @@ beforeAll(async () => {
   await db.exec(`
     grant usage on schema public to anon, authenticated;
     grant select, insert, update, delete on public.links to anon, authenticated;
+    insert into auth.users (id) values ('00000000-0000-0000-0000-0000000000e1');
+    insert into public.links_editors (user_id) values ('00000000-0000-0000-0000-0000000000e1');
+    select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000e1', false);
   `);
 });
 
