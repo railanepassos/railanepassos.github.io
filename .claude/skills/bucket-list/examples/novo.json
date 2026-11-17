@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "kind": "novo",
+  "fields": {
+    "url": "https://example.com/museu-do-exemplo",
+    "label": "Museu do Exemplo",
+    "description": "Museu fictício de arte moderna, com jardim de esculturas.",
+    "source_url": "https://www.instagram.com/p/EXEMPLO123/",
+    "category": "museu",
+    "tags": ["arte", "jardim", "chuva"],
+    "cost_text": "R$ 30 por pessoa",
+    "city": "Cidade Exemplo",
+    "address": "Rua das Amostras, 100, Centro"
+  }
+}

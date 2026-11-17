@@ -10,6 +10,7 @@
     "serve": "python3 -m http.server 8080 --bind 0.0.0.0",
     "test:unit": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "draft-url": "node --experimental-strip-types --no-warnings scripts/draft-url.mjs",
     "lint": "echo \"use CI stylelint/html-validate\""
   },
   "dependencies": {
