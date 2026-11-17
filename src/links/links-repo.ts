@@ -6,6 +6,7 @@ import { MAX_TAGS, MAX_TAG_LENGTH } from "./tags";
 import { normalizeRating, reviewColumnsError, type ReviewColumns } from "./review";
 import { readPlanItems, storedPlanError, type PlanItem } from "./plan";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH } from "./people";
+import { parsePlanFragment, PLAN_FRAGMENT_PREFIX } from "./plan-share";
 
 export type LinkStatus = "wishlist" | "done";
 
@@ -36,6 +37,8 @@ export type LinkRow = {
   tags?: string[] | null;
   people?: string[] | null;
   plan_items?: PlanItem[] | null;
+  /** Plan share link (migration 014): null = off. Only ever written by the rpc functions. */
+  plan_share_token?: string | null;
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -127,6 +130,7 @@ export function normalizeLinkRow(
     tags: row.tags ?? null,
     people: row.people ?? null,
     plan_items: row.plan_items == null ? null : readPlanItems(row.plan_items),
+    plan_share_token: row.plan_share_token ?? null,
     rating: normalizeRating(row.rating),
     impressions: row.impressions ?? null,
     lessons: row.lessons ?? null,
@@ -243,6 +247,10 @@ export interface LinksRepo {
   createLink(input: CreateLinkInput): Promise<LinkRow>;
   updateLink(id: string, patch: UpdateLinkPatch): Promise<void>;
   deleteLink(id: string): Promise<void>;
+  /** Turn the plan share link on, or rotate it. Resolves with the new token. */
+  enablePlanShare(id: string): Promise<string>;
+  /** Turn the plan share link off (the old token stops working). */
+  disablePlanShare(id: string): Promise<void>;
 }
 
 export function createLinksRepo(client: SupabaseClient): LinksRepo {
@@ -348,6 +356,21 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         error: { message: string } | null;
       }>);
 
+      if (result.error) throw new Error(result.error.message);
+    },
+
+    async enablePlanShare(id: string): Promise<string> {
+      const result = await client.rpc("links_plan_share_enable", { link_id: id });
+      if (result.error) throw new Error(result.error.message);
+      const token = typeof result.data === "string" ? result.data : "";
+      if (parsePlanFragment(PLAN_FRAGMENT_PREFIX + token) === null) {
+        throw new Error("invalid plan share token");
+      }
+      return token;
+    },
+
+    async disablePlanShare(id: string): Promise<void> {
+      const result = await client.rpc("links_plan_share_disable", { link_id: id });
       if (result.error) throw new Error(result.error.message);
     },
   };
