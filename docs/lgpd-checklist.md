@@ -114,6 +114,12 @@ Marque a(s) aplicável(is):
 
 ---
 
+## Supabase: lista de editores (migração 017)
+
+Depois de aplicar `supabase/migrations/017_links_editor_allowlist.sql`, só quem está em `public.links_editors` lê ou escreve em `public.links`. Rode **uma vez** no SQL editor do dashboard (nunca commitar e-mails ou ids): `insert into public.links_editors (user_id) select id from auth.users where email in ('<editor1>', '<editor2>');`. Sem esse seed ninguém acessa a lista via API. Mantenha o **signup por e-mail desativado** no dashboard (Authentication > Sign In / Providers); a allowlist é defesa em profundidade.
+
+---
+
 ## Referências
 
 - [PLAYBOOK.md](../PLAYBOOK.md) §5
