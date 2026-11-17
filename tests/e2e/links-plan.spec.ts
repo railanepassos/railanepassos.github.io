@@ -202,6 +202,50 @@ test.describe("Plano do passeio", () => {
     await expect(page.locator(".feed-card")).toContainText("Lugar Planejado");
   });
 
+  test("suggests lessons from done places and a tap adds a saved checklist item", async ({ page }) => {
+    const done = (id: string, label: string, lessons: string[], status = "done") => ({
+      ...PLACE,
+      id,
+      url: `https://example.com/${id}`,
+      label,
+      status,
+      completed_at: status === "done" ? "2026-10-30T12:00:00Z" : null,
+      lessons,
+    });
+    const rows = [
+      PLACE,
+      done("00000000-0000-4000-8000-0000000000f1", "Feito Um", ["Levar lanche", "Chegar cedo"]),
+      done("00000000-0000-4000-8000-0000000000f2", "Feito Dois", ["CHEGAR CEDO", "Levar água"]),
+      done("00000000-0000-4000-8000-0000000000f3", "Desejo", ["Só desejo"], "wishlist"),
+      ...LINK_ROWS,
+    ];
+    const writes = await openAuthedWith(page, rows);
+    const sheet = await openSheet(page, "Lugar Do Plano");
+    const chips = sheet.locator("[data-lesson-suggestion]");
+    await expect(chips).toHaveText(["Chegar cedo", "Levar lanche", "Levar água"]);
+
+    await chips.first().click();
+    await expect(chips).toHaveText(["Levar lanche", "Levar água"]);
+    await expect(sheet.locator("[data-plan-list='checklist'] .links-plan__text").first()).toHaveValue(
+      "Chegar cedo"
+    );
+    const box = await chips.first().boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+
+    await sheet.getByRole("button", { name: "Salvar" }).click();
+    await expect(sheet).toBeHidden();
+    expect(writes.allPatched[0]).toEqual({
+      people: null,
+      plan_items: [{ text: "Chegar cedo", list: "checklist", done: false }],
+    });
+  });
+
+  test("hides the suggestions section when there are no lessons", async ({ page }) => {
+    await openAuthedWith(page, [PLACE, ...LINK_ROWS]);
+    const sheet = await openSheet(page, "Lugar Do Plano");
+    await expect(sheet.locator("[data-lesson-suggestions]")).toBeHidden();
+  });
+
   test("opens at the top and every control is at least 16px", async ({ page }) => {
     await openAuthedWith(page, [PLANNED, ...LINK_ROWS]);
     const sheet = await openSheet(page, "Lugar Planejado");

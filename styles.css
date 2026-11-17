@@ -1707,6 +1707,33 @@ body.links-screen-open {
   cursor: pointer;
 }
 
+.links-plan-suggestions__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.links-plan-suggestions__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--navy);
+  font: inherit;
+  font-size: 1rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.links-plan-suggestions__chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .links-poses__tool:disabled,
 .links-poses__add:disabled {
   opacity: 0.4;
