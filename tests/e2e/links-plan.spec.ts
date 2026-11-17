@@ -218,4 +218,54 @@ test.describe("Plano do passeio", () => {
     expect(sizes.length).toBeGreaterThanOrEqual(5);
     for (const c of sizes) expect(c.size, c.id).toBeGreaterThanOrEqual(16);
   });
+
+  test("ticking an item PATCHes only plan_items and updates the progress", async ({ page }) => {
+    const writes = await openAuthedWith(page, [PLANNED, ...LINK_ROWS]);
+    const detail = await openDetail(page, "Lugar Planejado");
+    const checklist = detail.locator("[data-plan-list='checklist']");
+    await expect(checklist).toContainText("1 de 2");
+
+    const box = checklist.getByRole("checkbox", { name: /Protetor solar/ });
+    await expect(box).not.toBeChecked();
+    const target = await box.evaluate((el) => {
+      const r = (el.closest("label") ?? el).getBoundingClientRect();
+      return { w: r.width, h: r.height };
+    });
+    expect(target.h).toBeGreaterThanOrEqual(44);
+    expect(target.w).toBeGreaterThanOrEqual(44);
+
+    await box.check();
+    await expect(checklist).toContainText("2 de 2");
+    await expect.poll(() => writes.allPatched.length).toBe(1);
+    expect(Object.keys(writes.allPatched[0]!)).toEqual(["plan_items"]);
+    expect(writes.allPatched[0]!.plan_items).toEqual([
+      { text: "Comprar ingressos", list: "checklist", who: "Alana", done: true },
+      { text: "Protetor solar", list: "checklist", done: true },
+      { text: "Biscoitos", list: "compras", who: "Bia Teste", done: false },
+    ]);
+
+    await checklist.getByRole("checkbox", { name: /Comprar ingressos/ }).uncheck();
+    await expect(checklist).toContainText("1 de 2");
+    await expect.poll(() => writes.allPatched.length).toBe(2);
+    expect((writes.allPatched[1]!.plan_items as Array<{ done: boolean }>)[0]!.done).toBe(false);
+  });
+
+  test("a failed save rolls the tick back and shows an error", async ({ page }) => {
+    await openAuthedWith(page, [PLANNED, ...LINK_ROWS]);
+    await page.route("**/rest/v1/links**", async (route) => {
+      if (route.request().method() === "PATCH") {
+        await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+      } else {
+        await route.fallback();
+      }
+    });
+    const detail = await openDetail(page, "Lugar Planejado");
+    const compras = detail.locator("[data-plan-list='compras']");
+    await expect(compras).toContainText("0 de 1");
+    const box = compras.getByRole("checkbox", { name: /Biscoitos/ });
+    await box.click();
+    await expect(detail.getByRole("alert").filter({ hasText: /\S/ })).toBeVisible();
+    await expect(compras).toContainText("0 de 1");
+    await expect(box).not.toBeChecked();
+  });
 });

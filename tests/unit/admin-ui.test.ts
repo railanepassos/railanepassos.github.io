@@ -1056,7 +1056,7 @@ describe("detail: Plano do passeio", () => {
     { text: "Pão", list: "compras" as const, done: false },
   ];
 
-  it("shows both lists with progress and the person in charge, read-only", () => {
+  it("shows both lists with progress and the person in charge; no save callback: disabled boxes", () => {
     const modal = createViewModal(cb());
     document.body.appendChild(modal.element);
     modal.open(row({ plan_items: plan }));
@@ -1070,7 +1070,47 @@ describe("detail: Plano do passeio", () => {
     const compras = section.querySelector<HTMLElement>("[data-plan-list='compras']")!;
     expect(compras.textContent).toContain("Lanches e compras");
     expect(compras.textContent).toContain("0 de 1");
-    expect(section.querySelectorAll("input, button")).toHaveLength(0);
+    const boxes = section.querySelectorAll<HTMLInputElement>("input[type='checkbox']");
+    expect(boxes).toHaveLength(3);
+    expect([...boxes].every((b) => b.disabled)).toBe(true);
+    expect(section.querySelectorAll("button")).toHaveLength(0);
+  });
+
+  it("ticking saves the whole plan optimistically and updates the progress", async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const modal = createViewModal({ ...cb(), onSavePlanItems: save });
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    const box = section.querySelectorAll<HTMLInputElement>("input[type='checkbox']")[1]!;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    await Promise.resolve();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0]![1]).toEqual([
+      plan[0],
+      { ...plan[1], done: true },
+      plan[2],
+    ]);
+    expect(section.querySelector("[data-plan-list='checklist']")!.textContent).toContain("2 de 2");
+  });
+
+  it("rolls the tick back and shows an error when the save fails", async () => {
+    const save = vi.fn().mockRejectedValue(new Error("Sem conexão."));
+    const modal = createViewModal({ ...cb(), onSavePlanItems: save });
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    const box = section.querySelectorAll<HTMLInputElement>("input[type='checkbox']")[1]!;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    const after = section.querySelectorAll<HTMLInputElement>("input[type='checkbox']")[1]!;
+    expect(after.checked).toBe(false);
+    expect(section.querySelector("[data-plan-list='checklist']")!.textContent).toContain("1 de 2");
+    const alert = section.querySelector<HTMLElement>("[role='alert']")!;
+    expect(alert.hidden).toBe(false);
+    expect(alert.textContent).toBe("Sem conexão.");
   });
 
   it("hides the section (and an empty list) when there is nothing to show", () => {

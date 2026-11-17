@@ -107,6 +107,11 @@ export function planProgress(items: readonly PlanItem[], list: PlanList): PlanPr
   return { done, total: own.length, label: `${done} de ${own.length}` };
 }
 
+/** Copy of the items with item `index` set to `done` (out of range: unchanged). */
+export function togglePlanItem(items: readonly PlanItem[], index: number, done: boolean): PlanItem[] {
+  return items.map((item, i) => (i === index ? { ...item, done } : { ...item }));
+}
+
 /** What the "Plano do passeio" sheet edits. */
 export type PlanValues = { people: string[]; items: PlanDraft[] };
 

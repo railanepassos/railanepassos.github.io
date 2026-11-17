@@ -219,6 +219,12 @@ function bootDynamic(
     onUnmarkDone: (l) => void unmarkDone(l),
     onEditReview: (l) => openReview(l, "edit"),
     onEditPlan: (l) => openPlan(l),
+    onSavePlanItems: async (l, items) => {
+      await repo.updateLink(l.id, { plan_items: items });
+      links = links.map((row) => (row.id === l.id ? { ...row, plan_items: items } : row));
+      renderList();
+      deckScreen.refresh(links);
+    },
     onDelete: (l) => void deleteLink(l),
     onTag: (tag) => toggleTagFilter(tag),
     onPerson: (person) => togglePeopleFilter(person),

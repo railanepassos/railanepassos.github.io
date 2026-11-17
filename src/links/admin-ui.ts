@@ -38,7 +38,7 @@ import {
   type PoseDraft,
 } from "./poses";
 import { readLessons } from "./lessons";
-import { PLAN_LISTS, planProgress, readPlanItems } from "./plan";
+import { PLAN_LISTS, planProgress, readPlanItems, togglePlanItem, type PlanItem } from "./plan";
 import {
   MORE_TEXT_FIELDS,
   emptyMoreTextValues,
@@ -1778,6 +1778,11 @@ export type ViewModalCallbacks = {
   onEditReview?: (link: LinkRow) => void;
   /** Any place: open the "Plano do passeio" sheet to edit the plan. */
   onEditPlan?: (link: LinkRow) => void;
+  /**
+   * Tick/untick a plan item: persist `items` (the whole plan_items array).
+   * Rejects when the save fails; the detail then rolls the tick back.
+   */
+  onSavePlanItems?: (link: LinkRow, items: PlanItem[]) => Promise<void>;
   /** Tap on a tag chip: close the detail and filter the feed by that tag. */
   onTag?: (tag: string) => void;
   /** Tap on a person chip: close the detail and filter the feed by that person. */
@@ -2059,6 +2064,11 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     planRow.value.appendChild(block);
     return { key, title, block, heading, ul };
   });
+  const planError = document.createElement("p");
+  planError.className = "links-detail__plan-error";
+  planError.setAttribute("role", "alert");
+  planError.hidden = true;
+  planRow.value.appendChild(planError);
   const planEdit = document.createElement("button");
   planEdit.type = "button";
   planEdit.className = "links-detail__action links-detail__plan-edit";
@@ -2198,37 +2208,8 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     posesRow.row.hidden = poseRefs.length === 0;
     posesOl.replaceChildren(...poseRefs.map(renderPoseItem));
 
-    const planItems = readPlanItems(link.plan_items);
-    planRow.row.hidden = planItems.length === 0;
-    for (const list of planLists) {
-      const own = planItems.filter((i) => i.list === list.key);
-      list.block.hidden = own.length === 0;
-      list.heading.textContent = `${list.title} · ${planProgress(planItems, list.key).label}`;
-      list.ul.replaceChildren(
-        ...own.map((item) => {
-          const li = document.createElement("li");
-          li.className = "links-detail__plan-item";
-          if (item.done) li.classList.add("links-detail__plan-item--done");
-          const text = document.createElement("span");
-          text.className = "links-detail__plan-text";
-          text.textContent = item.text;
-          li.appendChild(text);
-          if (item.who) {
-            const who = document.createElement("span");
-            who.className = "links-detail__plan-who";
-            who.textContent = item.who;
-            li.appendChild(who);
-          }
-          if (item.done) {
-            const state = document.createElement("span");
-            state.className = "links-detail__plan-state";
-            state.textContent = "Feito";
-            li.appendChild(state);
-          }
-          return li;
-        })
-      );
-    }
+    planError.hidden = true;
+    renderPlan();
     planEditWrap.hidden = !cb.onEditPlan;
 
     domainText.textContent = linkDomain(link.url);
@@ -2283,6 +2264,69 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     syncBodyScreenLock();
     cb.onOpenChange?.(link.id);
     backBtn.focus({ preventScroll: true });
+  }
+
+  /** Plan section of the open link: one checkbox per item, progress per list. */
+  function renderPlan(): void {
+    if (!current) return;
+    const planItems = readPlanItems(current.plan_items);
+    planRow.row.hidden = planItems.length === 0;
+    for (const list of planLists) {
+      const entries = planItems
+        .map((item, index) => ({ item, index }))
+        .filter((e) => e.item.list === list.key);
+      list.block.hidden = entries.length === 0;
+      list.heading.textContent = `${list.title} · ${planProgress(planItems, list.key).label}`;
+      list.ul.replaceChildren(
+        ...entries.map(({ item, index }) => {
+          const li = document.createElement("li");
+          li.className = "links-detail__plan-item";
+          if (item.done) li.classList.add("links-detail__plan-item--done");
+          const label = document.createElement("label");
+          label.className = "links-detail__plan-check";
+          const box = document.createElement("input");
+          box.type = "checkbox";
+          box.checked = item.done;
+          box.disabled = !cb.onSavePlanItems;
+          box.addEventListener("change", () => void tickPlanItem(index, box.checked));
+          const text = document.createElement("span");
+          text.className = "links-detail__plan-text";
+          text.textContent = item.text;
+          label.append(box, text);
+          li.appendChild(label);
+          if (item.who) {
+            const who = document.createElement("span");
+            who.className = "links-detail__plan-who";
+            who.textContent = item.who;
+            li.appendChild(who);
+          }
+          return li;
+        })
+      );
+    }
+  }
+
+  /** Optimistic: show the tick, save, and put the item back if the save fails. */
+  async function tickPlanItem(index: number, done: boolean): Promise<void> {
+    const link = current;
+    if (!link || !cb.onSavePlanItems) return;
+    const items = readPlanItems(link.plan_items);
+    const previous = items[index]?.done ?? !done;
+    const next = togglePlanItem(items, index, done);
+    planError.hidden = true;
+    current = { ...link, plan_items: next };
+    renderPlan();
+    try {
+      await cb.onSavePlanItems(link, next);
+    } catch (err) {
+      if (current?.id !== link.id) return;
+      const latest = readPlanItems(current.plan_items);
+      current = { ...current, plan_items: togglePlanItem(latest, index, previous) };
+      planError.textContent =
+        err instanceof Error && err.message !== "" ? err.message : "Não foi possível salvar. Tente novamente.";
+      planError.hidden = false;
+      renderPlan();
+    }
   }
 
   function act(fn: (link: LinkRow) => void): void {

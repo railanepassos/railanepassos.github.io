@@ -11,6 +11,7 @@ import {
   planProgress,
   readPlanItems,
   storedPlanError,
+  togglePlanItem,
   type PlanDraft,
 } from "../../src/links/plan";
 
@@ -156,5 +157,34 @@ describe("planFromLink / planToPatch", () => {
       people: null,
       plan_items: null,
     });
+  });
+});
+
+describe("togglePlanItem", () => {
+  const items = [
+    { text: "A", list: "checklist" as const, done: false },
+    { text: "B", list: "compras" as const, who: "Alana", done: true },
+  ];
+
+  it("sets done on one item only, keeping order and other fields", () => {
+    expect(togglePlanItem(items, 0, true)).toEqual([
+      { text: "A", list: "checklist", done: true },
+      { text: "B", list: "compras", who: "Alana", done: true },
+    ]);
+    expect(togglePlanItem(items, 1, false)[1]).toEqual({
+      text: "B",
+      list: "compras",
+      who: "Alana",
+      done: false,
+    });
+  });
+
+  it("does not mutate the input", () => {
+    togglePlanItem(items, 0, true);
+    expect(items[0]!.done).toBe(false);
+  });
+
+  it("returns an equal copy for an out-of-range index", () => {
+    expect(togglePlanItem(items, 5, true)).toEqual(items);
   });
 });

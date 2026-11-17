@@ -1804,6 +1804,36 @@ body.links-screen-open {
   color: var(--app-muted);
 }
 
+.links-detail__plan-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  min-width: 44px;
+  cursor: pointer;
+}
+
+.links-detail__plan-check input {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  accent-color: var(--app-accent);
+}
+
+.links-detail__plan-error {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--green-light);
+  color: var(--green-dark);
+  font-size: 14px;
+}
+
+.links-detail__plan-error[hidden] {
+  display: none;
+}
+
 .links-detail__plan-who,
 .links-detail__plan-state {
   color: var(--app-muted);
