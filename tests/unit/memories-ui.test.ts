@@ -77,6 +77,36 @@ describe("renderMemoriesTimeline", () => {
   });
 });
 
+describe("anniversary highlight", () => {
+  const now = new Date("2026-11-17T12:00:00");
+
+  it("lists Há 1 ano / Há N anos with name and date, and opens the detail", () => {
+    const one = row({ id: "a", label: "Forte <i>X</i>", completed_at: "2025-11-15T15:00:00" });
+    const three = row({ id: "b", label: "Praia", completed_at: "2023-11-19T15:00:00" });
+    const onView = vi.fn();
+    const el = renderMemoriesTimeline([one, three], { onView }, now);
+    const items = el.querySelectorAll(".links-anniversary__item");
+    expect(items).toHaveLength(2);
+    expect(items[0]!.querySelector(".links-anniversary__years")?.textContent).toBe("Há 1 ano");
+    expect(items[1]!.querySelector(".links-anniversary__years")?.textContent).toBe("Há 3 anos");
+    expect(items[0]!.querySelector(".links-anniversary__name")?.textContent).toBe("Forte <i>X</i>");
+    expect(items[0]!.querySelector("i")).toBeNull();
+    expect(items[0]!.querySelector(".links-anniversary__date")?.textContent).toContain("2025");
+    items[1]!.querySelector<HTMLButtonElement>(".links-anniversary__open")!.click();
+    expect(onView).toHaveBeenCalledWith(three);
+    expect(el.firstElementChild?.classList.contains("links-anniversary")).toBe(true);
+  });
+
+  it("is hidden when nothing is near today", () => {
+    const el = renderMemoriesTimeline(
+      [row({ completed_at: "2025-03-10T15:00:00" })],
+      { onView: vi.fn() },
+      now
+    );
+    expect(el.querySelector(".links-anniversary")).toBeNull();
+  });
+});
+
 describe("renderMemoriesSwitch", () => {
   it("marks the active view and calls the handlers", () => {
     const onList = vi.fn();
