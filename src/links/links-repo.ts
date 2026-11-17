@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isHttpsUrl, isOptionalHttpsUrl } from "./validate";
 import { MORE_TEXT_FIELDS } from "./more-fields";
+import { isCategory } from "./category";
+import { readSources, storedSourcesError, type Source } from "./sources";
 import { poseDraftsFromRefs, poseRefsError, readPoseRefs, type PoseRef } from "./poses";
 import { MAX_TAGS, MAX_TAG_LENGTH } from "./tags";
 import { normalizeRating, reviewColumnsError, type ReviewColumns } from "./review";
@@ -18,6 +20,8 @@ export type LinkRow = {
   icon_preset: string | null;
   icon_url: string | null;
   category: string | null;
+  /** Up to 3 extra categories; the main one stays in `category`. */
+  extra_categories?: string[];
   sort_order: number;
   scheduled_start: string | null;
   scheduled_end: string | null;
@@ -34,6 +38,8 @@ export type LinkRow = {
   itinerary?: string | null;
   source_url?: string | null;
   pose_refs?: PoseRef[] | null;
+  /** Fontes (migration 019): up to 10 {title, url}. */
+  sources?: Source[];
   tags?: string[] | null;
   people?: string[] | null;
   plan_items?: PlanItem[] | null;
@@ -51,6 +57,7 @@ export type CreateLinkInput = {
   icon_preset?: string | null;
   icon_url?: string | null;
   category?: string | null;
+  extra_categories?: string[];
   sort_order: number;
   scheduled_start?: string | null;
   scheduled_end?: string | null;
@@ -67,6 +74,8 @@ export type CreateLinkInput = {
   itinerary?: string | null;
   source_url?: string | null;
   pose_refs?: PoseRef[] | null;
+  /** Fontes (migration 019): up to 10 {title, url}. */
+  sources?: Source[];
   tags?: string[] | null;
   people?: string[] | null;
   plan_items?: PlanItem[] | null;
@@ -79,6 +88,7 @@ export type UpdateLinkPatch = {
   icon_preset?: string | null;
   icon_url?: string | null;
   category?: string | null;
+  extra_categories?: string[];
   sort_order?: number;
   scheduled_start?: string | null;
   scheduled_end?: string | null;
@@ -95,6 +105,8 @@ export type UpdateLinkPatch = {
   itinerary?: string | null;
   source_url?: string | null;
   pose_refs?: PoseRef[] | null;
+  /** Fontes (migration 019): up to 10 {title, url}. */
+  sources?: Source[];
   tags?: string[] | null;
   people?: string[] | null;
   plan_items?: PlanItem[] | null;
@@ -111,6 +123,7 @@ export function normalizeLinkRow(
     icon_preset: row.icon_preset ?? null,
     icon_url: row.icon_url ?? null,
     category: row.category ?? null,
+    extra_categories: Array.isArray(row.extra_categories) ? [...row.extra_categories] : [],
     sort_order: row.sort_order ?? 0,
     scheduled_start: row.scheduled_start ?? null,
     scheduled_end: row.scheduled_end ?? null,
@@ -127,6 +140,7 @@ export function normalizeLinkRow(
     itinerary: row.itinerary ?? null,
     source_url: row.source_url ?? null,
     pose_refs: row.pose_refs == null ? null : readPoseRefs(row.pose_refs),
+    sources: readSources(row.sources),
     tags: row.tags ?? null,
     people: row.people ?? null,
     plan_items: row.plan_items == null ? null : readPlanItems(row.plan_items),
@@ -140,6 +154,8 @@ export function normalizeLinkRow(
     updated_at: row.updated_at,
   };
 }
+
+const MAX_EXTRA_CATEGORIES = 3;
 
 function validateLinkFields(fields: {
   url?: string;
@@ -155,6 +171,10 @@ function validateLinkFields(fields: {
   itinerary?: string | null;
   source_url?: string | null;
   pose_refs?: PoseRef[] | null;
+  /** Fontes (migration 019): up to 10 {title, url}. */
+  sources?: Source[];
+  category?: string | null;
+  extra_categories?: string[] | null;
   tags?: string[] | null;
   people?: string[] | null;
   plan_items?: PlanItem[] | null;
@@ -240,6 +260,27 @@ function validateLinkFields(fields: {
     const problem = poseRefsError(poseDraftsFromRefs(fields.pose_refs));
     if (problem) throw new Error(`pose_refs invalid: ${problem}`);
   }
+
+  if (fields.extra_categories != null) {
+    const extras = fields.extra_categories;
+    if (extras.length > MAX_EXTRA_CATEGORIES) {
+      throw new Error(`extra_categories invalid: use no máximo ${MAX_EXTRA_CATEGORIES} categorias extras.`);
+    }
+    if (extras.some((c) => !isCategory(c))) {
+      throw new Error("extra_categories invalid: categoria desconhecida.");
+    }
+    if (new Set(extras).size !== extras.length) {
+      throw new Error("extra_categories invalid: categorias repetidas.");
+    }
+    if (fields.category != null && extras.includes(fields.category)) {
+      throw new Error("extra_categories invalid: não repita a categoria principal.");
+    }
+  }
+
+  if (fields.sources != null) {
+    const problem = storedSourcesError(fields.sources);
+    if (problem) throw new Error(`sources invalid: ${problem}`);
+  }
 }
 
 function validatePatch(patch: UpdateLinkPatch): UpdateLinkPatch {
@@ -257,6 +298,9 @@ function validatePatch(patch: UpdateLinkPatch): UpdateLinkPatch {
     itinerary: patch.itinerary,
     source_url: patch.source_url,
     pose_refs: patch.pose_refs,
+    sources: patch.sources,
+    category: patch.category,
+    extra_categories: patch.extra_categories,
     tags: patch.tags,
     people: patch.people,
     plan_items: patch.plan_items,
@@ -331,6 +375,9 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
         itinerary: input.itinerary,
         source_url: input.source_url,
         pose_refs: input.pose_refs,
+        sources: input.sources,
+        category: input.category,
+        extra_categories: input.extra_categories,
         tags: input.tags,
         people: input.people,
         plan_items: input.plan_items,

@@ -136,4 +136,45 @@ test.describe("Links app: new-item draft (#rascunho=)", () => {
     await sheet.getByRole("button", { name: "Carregar prévia" }).click();
     await expect.poll(() => hits.length).toBeGreaterThan(0);
   });
+
+  test("draft with categories pre-fills the chips", async ({ page }) => {
+    const { category: _drop, ...rest } = DRAFT.fields;
+    const draft = { ...DRAFT, fields: { ...rest, categories: ["restaurante", "praia", "passeio"] } };
+    const writes = await openAuthedWith(page, LINK_ROWS, { hash: hashOf(draft) });
+    const sheet = page.getByRole("dialog", { name: SHEET });
+    await expect(sheet).toBeVisible();
+    for (const c of ["restaurante", "praia", "passeio"]) {
+      await expect(sheet.locator(`[data-category="${c}"]`)).toHaveAttribute("aria-pressed", "true");
+    }
+    await expect(sheet.locator("[data-category='museu']")).toHaveAttribute("aria-pressed", "false");
+    await expect(sheet.locator('[data-category="restaurante"]')).toHaveAttribute("data-main", "true");
+    await expect(sheet.locator("[data-main]")).toHaveCount(1);
+
+    await sheet.getByRole("button", { name: "Salvar" }).click();
+    await expect.poll(() => writes.created).not.toBeNull();
+    expect(writes.created).toMatchObject({
+      category: "restaurante",
+      extra_categories: ["praia", "passeio"],
+    });
+  });
+
+  test("draft with sources pre-fills the Fontes editor and Salvar sends them", async ({ page }) => {
+    const sources = [
+      { title: "Guia da cidade", url: "https://example.com/guia" },
+      { title: "<b>Notícia</b>", url: "https://example.com/noticia" },
+    ];
+    const writes = await openAuthedWith(page, LINK_ROWS, {
+      hash: hashOf({ ...DRAFT, fields: { ...DRAFT.fields, sources } }),
+    });
+    const sheet = page.getByRole("dialog", { name: SHEET });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByLabel("Fonte 1: título")).toHaveValue("Guia da cidade");
+    await expect(sheet.getByLabel("Fonte 1: link")).toHaveValue("https://example.com/guia");
+    await expect(sheet.getByLabel("Fonte 2: título")).toHaveValue("<b>Notícia</b>");
+    await expect(sheet.getByLabel("Fonte 3: título")).toHaveCount(0);
+
+    await sheet.getByRole("button", { name: "Salvar" }).click();
+    await expect.poll(() => writes.created).not.toBeNull();
+    expect(writes.created).toMatchObject({ sources });
+  });
 });

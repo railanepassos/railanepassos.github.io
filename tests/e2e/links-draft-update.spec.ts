@@ -235,4 +235,58 @@ test.describe("Links app: update draft (#rascunho=)", () => {
     await expect(page.getByRole("alert").filter({ hasText: "login de editor" })).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
+
+  test("fields.categories: the edit form proposes main + extras; Salvar PATCHes the split", async ({ page }) => {
+    const writes = await openAuthedWith(page, [ITEM], {
+      hash: hashOf({ v: 1, kind: "atualizacao", id: ID, fields: { categories: ["parque", "praia"] } }),
+    });
+    const form = page.getByRole("dialog", { name: FORM });
+    await expect(form).toBeVisible();
+    await expect(form.locator('[data-category="parque"]')).toHaveAttribute("data-main", "true");
+    await expect(form.locator('[data-category="praia"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(form.locator('[data-category="museu"]')).toHaveAttribute("aria-pressed", "false");
+
+    await form.getByRole("button", { name: "Salvar" }).click();
+    await expect.poll(() => writes.patched).not.toBeNull();
+    expect(writes.patched).toMatchObject({ category: "parque", extra_categories: ["praia"] });
+  });
+
+  test("fields.sources: the edit form shows current + proposed, deduped by URL; Salvar PATCHes the merge", async ({ page }) => {
+    const item = {
+      ...ITEM,
+      sources: [
+        { title: "Guia atual", url: "https://example.com/guia" },
+        { title: "Matéria atual", url: "https://example.com/materia" },
+      ],
+    };
+    const writes = await openAuthedWith(page, [item], {
+      hash: hashOf({
+        v: 1,
+        kind: "atualizacao",
+        id: ID,
+        fields: {
+          sources: [
+            { title: "Guia repetido", url: "https://EXAMPLE.com/guia/" },
+            { title: "Site oficial", url: "https://example.com/oficial" },
+          ],
+        },
+      }),
+    });
+    const form = page.getByRole("dialog", { name: FORM });
+    await expect(form).toBeVisible();
+    await expect(form.getByLabel("Fonte 1: título")).toHaveValue("Guia atual");
+    await expect(form.getByLabel("Fonte 2: título")).toHaveValue("Matéria atual");
+    await expect(form.getByLabel("Fonte 3: título")).toHaveValue("Site oficial");
+    await expect(form.getByLabel("Fonte 4: título")).toHaveCount(0);
+
+    await form.getByRole("button", { name: "Salvar" }).click();
+    await expect.poll(() => writes.patched).not.toBeNull();
+    expect(writes.patched).toMatchObject({
+      sources: [
+        { title: "Guia atual", url: "https://example.com/guia" },
+        { title: "Matéria atual", url: "https://example.com/materia" },
+        { title: "Site oficial", url: "https://example.com/oficial" },
+      ],
+    });
+  });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DRAFT_LIMITS,
   DRAFT_MAX_BYTES,
+  draftPrefill,
   encodeDraft,
   isDraftFragment,
   parseDraft,
@@ -9,11 +10,12 @@ import {
   type Draft,
 } from "../../src/links/draft";
 import { isHttpsUrl } from "../../src/links/validate";
-import { CATEGORY_OPTIONS } from "../../src/links/category";
+import { CATEGORY_OPTIONS, MAX_CATEGORIES } from "../../src/links/category";
 import { MORE_TEXT_FIELDS } from "../../src/links/more-fields";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH } from "../../src/links/people";
 import { MAX_PLAN_ITEMS, PLAN_TEXT_MAX } from "../../src/links/plan";
 import { MAX_TAGS, MAX_TAG_LENGTH } from "../../src/links/tags";
+import { MAX_SOURCES, SOURCE_TITLE_MAX, SOURCE_URL_MAX } from "../../src/links/sources";
 
 const ID = "00000000-0000-4000-8000-0000000000a1";
 
@@ -170,6 +172,83 @@ describe("parseDraft rejections", () => {
     const fields = { ...NEW_DRAFT.fields, category: "zoologico" };
     expect(reject(fragOf({ ...NEW_DRAFT, fields }))).toContain("category");
   });
+  describe("categories", () => {
+    const withCats = (extra: object) =>
+      fragOf({ v: 1, kind: "novo", fields: { url: "https://example.com", ...extra } });
+    it("accepts 1 to 4 distinct allowed values, in order", () => {
+      for (const categories of [["museu"], ["museu", "parque"], ["bar", "evento", "praia", "trilha"]]) {
+        expect(parseDraft(withCats({ categories }))).toMatchObject({ ok: true });
+      }
+    });
+    it.each([
+      ["empty list", []],
+      ["more than 4", ["museu", "bar", "praia", "trilha", "parque"]],
+      ["duplicates", ["museu", "bar", "museu"]],
+      ["unknown value", ["museu", "zoologico"]],
+      ["non-string item", ["museu", 3]],
+      ["not a list", "museu"],
+    ])("rejects %s", (_n, categories) => {
+      expect(reject(withCats({ categories }))).toContain("categories");
+    });
+    it("still accepts a single category", () => {
+      expect(parseDraft(withCats({ category: "museu" }))).toMatchObject({ ok: true });
+    });
+    it("rejects category and categories together", () => {
+      expect(reject(withCats({ category: "museu", categories: ["bar"] }))).toContain("categories");
+    });
+    it("update drafts: an empty categories list is rejected (1 to 4)", () => {
+      const frag = fragOf({ v: 1, kind: "atualizacao", id: ID, fields: { categories: [], city: "X" } });
+      expect(reject(frag)).toContain("1 a 4");
+    });
+    it("withoutEmptyProposals still drops empty lists", () => {
+      expect(withoutEmptyProposals({ categories: [], city: "X" })).toEqual({ city: "X" });
+    });
+    it("draftPrefill maps categories to main + extras", () => {
+      expect(draftPrefill({ label: "A", categories: ["bar", "praia", "museu"] })).toEqual({
+        label: "A",
+        category: "bar",
+        extra_categories: ["praia", "museu"],
+      });
+      expect(draftPrefill({ category: "bar" })).toEqual({ category: "bar" });
+    });
+  });
+  describe("sources", () => {
+    const withSources = (sources: unknown) =>
+      fragOf({ v: 1, kind: "novo", fields: { url: "https://example.com", sources } });
+    const S = (n: number) => ({ title: `Fonte ${n}`, url: `https://example.com/f${n}` });
+    it("accepts 1 to 10 well-formed sources", () => {
+      for (const n of [1, 3, 10]) {
+        expect(parseDraft(withSources(Array.from({ length: n }, (_, i) => S(i))))).toMatchObject({ ok: true });
+      }
+    });
+    it.each([
+      ["more than 10", Array.from({ length: 11 }, (_, i) => S(i))],
+      ["not a list", "https://example.com"],
+      ["item not an object", ["https://example.com"]],
+      ["unknown key", [{ title: "A", url: "https://example.com", note: "x" }]],
+      ["missing url", [{ title: "A" }]],
+      ["blank title", [{ title: "  ", url: "https://example.com" }]],
+      ["title too long", [{ title: "a".repeat(121), url: "https://example.com" }]],
+      ["http url", [{ title: "A", url: "http://example.com" }]],
+      ["url with space", [{ title: "A", url: "https://example.com/a b" }]],
+      ["url too long", [{ title: "A", url: "https://example.com/" + "a".repeat(2000) }]],
+      ["non-string title", [{ title: 3, url: "https://example.com" }]],
+    ])("rejects %s", (_n, sources) => {
+      expect(reject(withSources(sources))).toContain("sources");
+    });
+    it("accepts title at 120 chars and url at 2000", () => {
+      const url = "https://example.com/" + "a".repeat(2000 - 20);
+      expect(parseDraft(withSources([{ title: "a".repeat(120), url }]))).toMatchObject({ ok: true });
+    });
+    it("update drafts: an empty sources list is no proposal", () => {
+      const frag = fragOf({ v: 1, kind: "atualizacao", id: ID, fields: { sources: [], city: "X" } });
+      expect(parseDraft(frag)).toMatchObject({ ok: true });
+      expect(withoutEmptyProposals({ sources: [], city: "X" })).toEqual({ city: "X" });
+    });
+    it("an update draft with only an empty sources list proposes nothing", () => {
+      expect(reject(fragOf({ v: 1, kind: "atualizacao", id: ID, fields: { sources: [] } }))).toContain("nada");
+    });
+  });
   it("rejects non-string field values and non-string tags", () => {
     const f = (extra: object) => fragOf({ v: 1, kind: "novo", fields: { url: "https://example.com", ...extra } });
     expect(reject(f({ city: 5 }))).toContain("city");
@@ -258,6 +337,7 @@ describe("parseDraft limits (boundary accepted, +1 rejected)", () => {
 describe("DRAFT_LIMITS stays in sync with the app (the codec is import-free)", () => {
   it("matches the app constants", () => {
     expect(DRAFT_LIMITS.categories).toEqual([...CATEGORY_OPTIONS]);
+    expect(DRAFT_LIMITS.maxCategories).toBe(MAX_CATEGORIES);
     for (const f of MORE_TEXT_FIELDS) {
       expect(DRAFT_LIMITS.text[f.key]).toBe(f.max);
     }
@@ -269,6 +349,9 @@ describe("DRAFT_LIMITS stays in sync with the app (the codec is import-free)", (
     expect(DRAFT_LIMITS.maxPersonLength).toBe(MAX_PERSON_LENGTH);
     expect(DRAFT_LIMITS.maxPlanItems).toBe(MAX_PLAN_ITEMS);
     expect(DRAFT_LIMITS.planTextMax).toBe(PLAN_TEXT_MAX);
+    expect(DRAFT_LIMITS.maxSources).toBe(MAX_SOURCES);
+    expect(DRAFT_LIMITS.sourceTitleMax).toBe(SOURCE_TITLE_MAX);
+    expect(DRAFT_LIMITS.sourceUrlMax).toBe(SOURCE_URL_MAX);
   });
 });
 

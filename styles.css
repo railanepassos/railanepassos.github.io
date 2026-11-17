@@ -1467,6 +1467,21 @@ body.links-screen-open {
   background: var(--surface);
 }
 
+.links-admin-form__field > .links-admin-form__hint {
+  margin: 6px 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, inherit);
+}
+
+.links-chip[data-main="true"] {
+  font-weight: 600;
+}
+
+.links-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .links-admin-form--schedule .links-admin-form__hint {
   margin-bottom: 0;
 }
@@ -1772,6 +1787,84 @@ body.links-screen-open {
   font-weight: 600;
 }
 
+/* Fontes editor: title + link rows. Controls >= 16px (no iOS focus zoom), taps >= 48px. */
+.links-sources {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.links-sources__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.links-sources__item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.links-sources__item .links-admin-form__control {
+  min-height: 48px;
+  font-size: 1rem;
+}
+
+.links-sources__remove,
+.links-sources__add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--navy);
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.links-sources__remove {
+  align-self: flex-start;
+}
+
+.links-sources__add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.links-detail__sources {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.links-detail__source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 48px;
+  color: var(--app-accent);
+  font-size: 1rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 /* Dossier / itinerary: long text, comfortable line length on a 360px phone. */
 .links-detail__row--long .links-detail__value {
   line-height: 1.6;
@@ -1873,6 +1966,11 @@ body.links-screen-open {
 
 .links-detail__plan-action {
   margin-top: 12px;
+}
+
+/* 48px, not 44: sub-pixel layout can measure 43.99994px against a 44px tap-target check. */
+.links-detail__action.links-detail__plan-share {
+  min-height: 48px;
 }
 
 .links-detail__plan-who-line {

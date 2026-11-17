@@ -284,6 +284,43 @@ describe("Phase 2 fields", () => {
     );
   });
 
+  it("sends category and extra_categories on create", async () => {
+    const client = makeFakeClient({ links: { data: { id: "n", ...base }, error: null } });
+    await createLinksRepo(client).createLink({
+      ...base,
+      category: "restaurante",
+      extra_categories: ["praia", "passeio"],
+    });
+    const builder = (client.from as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(builder.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ category: "restaurante", extra_categories: ["praia", "passeio"] })
+    );
+  });
+
+  it("reads extra_categories, defaulting to an empty list", async () => {
+    const client = makeFakeClient({
+      links: {
+        data: [
+          { id: "a", url: "https://example.com", label: "A", extra_categories: ["praia"] },
+          { id: "b", url: "https://example.com", label: "B" },
+        ],
+        error: null,
+      },
+    });
+    const [a, b] = await createLinksRepo(client).listLinks();
+    expect(a.extra_categories).toEqual(["praia"]);
+    expect(b.extra_categories).toEqual([]);
+  });
+
+  it("sends extra_categories on update", async () => {
+    const client = makeFakeClient();
+    await createLinksRepo(client).updateLink("1", { category: "bar", extra_categories: [] });
+    const builder = (client.from as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ category: "bar", extra_categories: [] })
+    );
+  });
+
   it("rejects over-long cost, city and address", async () => {
     const repo = createLinksRepo(makeFakeClient());
     await expect(repo.createLink({ ...base, cost_text: "x".repeat(201) })).rejects.toThrow(/cost_text/);
@@ -326,6 +363,61 @@ describe("Phase 2 fields", () => {
     await expect(
       repo.updateLink("1", { pose_refs: [{ url: "https://example.com/a", note: "n" }] })
     ).resolves.toBeNull();
+  });
+
+  it("rejects invalid extra_categories before writing", async () => {
+    const repo = createLinksRepo(makeFakeClient());
+    const bad: Array<[string[], string | undefined]> = [
+      [["praia", "passeio", "bar", "museu"], "restaurante"],
+      [["churrascaria"], "restaurante"],
+      [["praia", "praia"], "restaurante"],
+      [["restaurante"], "restaurante"],
+    ];
+    for (const [extra_categories, category] of bad) {
+      await expect(repo.createLink({ ...base, category, extra_categories })).rejects.toThrow(/extra_categories/);
+      await expect(repo.updateLink("1", { category, extra_categories })).rejects.toThrow(/extra_categories/);
+    }
+    await expect(
+      repo.createLink({ ...base, category: "restaurante", extra_categories: ["praia", "bar"] })
+    ).resolves.toBeDefined();
+  });
+
+  it("sends sources on create and update, rejects invalid ones, reads them defensively", async () => {
+    const sources = [{ title: "Guia", url: "https://example.com/guia" }];
+    const client = makeFakeClient({ links: { data: { id: "n", ...base }, error: null } });
+    await createLinksRepo(client).createLink({ ...base, sources });
+    const builder = (client.from as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(builder.insert).toHaveBeenCalledWith(expect.objectContaining({ sources }));
+
+    const client2 = makeFakeClient();
+    await createLinksRepo(client2).updateLink("1", { sources: [] });
+    const builder2 = (client2.from as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(builder2.update).toHaveBeenCalledWith(expect.objectContaining({ sources: [] }));
+
+    const repo = createLinksRepo(makeFakeClient());
+    await expect(
+      repo.createLink({ ...base, sources: [{ title: "x", url: "http://example.com" }] })
+    ).rejects.toThrow(/sources/);
+    await expect(
+      repo.updateLink("1", { sources: Array.from({ length: 11 }, (_, i) => ({ title: "x", url: `https://example.com/${i}` })) })
+    ).rejects.toThrow(/sources/);
+
+    const listed = createLinksRepo(
+      makeFakeClient({
+        links: {
+          data: [
+            { id: "a", url: "https://example.com", label: "A", sources },
+            { id: "b", url: "https://example.com", label: "B" },
+            { id: "c", url: "https://example.com", label: "C", sources: [{ title: "", url: "javascript:1" }] },
+          ],
+          error: null,
+        },
+      })
+    );
+    const [a, b, c] = await listed.listLinks();
+    expect(a.sources).toEqual(sources);
+    expect(b.sources).toEqual([]);
+    expect(c.sources).toEqual([]);
   });
 
   it("rejects impressions and lessons beyond the DB limits, accepts valid ones", async () => {

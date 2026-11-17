@@ -25,7 +25,9 @@ Examples: `examples/novo.json` and `examples/atualizacao.json` (fake content). T
 
 - `novo`: `{ "v": 1, "kind": "novo", "fields": { "url": ... } }`. `fields.url` is required.
 - `atualizacao`: `{ "v": 1, "kind": "atualizacao", "id": "<uuid>", "fields": {...}, "plan": [{ "text", "list": "checklist" | "compras" }] }`. Needs `fields` or `plan`.
-- `fields` keys: `url`, `label`, `description`, `source_url`, `category`, `tags`, `people`, `cost_text`, `city`, `address`, `dossier`, `itinerary`, `image_url`.
+- `fields` keys: `url`, `label`, `description`, `source_url`, `category` or `categories`, `tags`, `people`, `sources`, `cost_text`, `city`, `address`, `dossier`, `itinerary`, `image_url`.
+- Category: `category` is a single value; `categories` is a list of 1 to 4 distinct values, the first is the main one (cards and theme use it), the rest are extras for discovery. Use `categories` when the experience mixes kinds (a museum with a garden: `["museu", "parque"]`); otherwise use `category`. Sending both is an error. Allowed values: museu, evento, restaurante, bar, cafeteria, trilha, praca, parque, praia, ponto-turistico, passeio, outro. In an `atualizacao`, the edit form shows the proposed main + extras over the current ones.
+- Sources: `sources` is a list of up to 10 `{ "title", "url" }` (title 1-120 chars, https url, no other keys). Fill it with the public pages you actually used for the dossier, itinerary and place facts (the place's official site, press, guides, maps), one entry per page, and still list them in the chat. Never include Instagram DMs or private pages. In a `novo` they pre-fill the Fontes editor; in an `atualizacao` they are appended to the current ones (deduped by URL, capped at 10), so propose only the ones you used.
 - Links are https. `source_url` is the Instagram post link. `image_url` only when it is a public https URL.
 - Plan items are appended to the editor's list, so propose only new ones. Never include `who` or `done`.
 
@@ -70,4 +72,4 @@ Both modes use these. Write in pt-BR plain text with short paragraphs and line b
 - The best time to go: cooler hours, sunset, quieter weekdays. Mark it as a suggestion when no source says it.
 - A closing `Dicas:` line covering sunscreen and water, what to wear, getting there or parking, and a reminder to confirm promotions or hours that may change.
 
-In the chat, list the sources you used for the facts as links.
+Put the pages you used for the facts in `fields.sources` (short readable title + https URL), and also list them as links in the chat.

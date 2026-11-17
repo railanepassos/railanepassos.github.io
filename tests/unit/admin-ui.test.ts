@@ -34,6 +34,10 @@ function formValues(partial: Partial<LinkFormValues> = {}): LinkFormValues {
   };
 }
 
+function modalSourceRows(q: <T extends HTMLElement>(sel: string) => T): number {
+  return q<HTMLElement>(".links-sources__list").children.length;
+}
+
 function row(partial: Partial<LinkRow> = {}): LinkRow {
   return {
     id: "link-1",
@@ -412,6 +416,146 @@ describe("createLinkFormModal category chips", () => {
     expect(
       modal.element.querySelector('[data-category="bar"]')?.getAttribute("aria-pressed")
     ).toBe("true");
+  });
+});
+
+describe("createLinkFormModal multi-select category chips", () => {
+  function submitWith(modal: ReturnType<typeof createLinkFormModal>): void {
+    (modal.element.querySelector("#links-form-url") as HTMLInputElement).value =
+      "https://example.com";
+    modal.element.querySelector("form")?.dispatchEvent(
+      new SubmitEvent("submit", { bubbles: true, cancelable: true })
+    );
+  }
+  function chipOf(modal: ReturnType<typeof createLinkFormModal>, value: string): HTMLButtonElement {
+    return modal.element.querySelector(`[data-category="${value}"]`) as HTMLButtonElement;
+  }
+
+  it("marks the first ticked chip as main and submits main + extras", () => {
+    const onSubmit = vi.fn();
+    const modal = createLinkFormModal(onSubmit);
+    document.body.appendChild(modal.element);
+    modal.openCreate();
+    chipOf(modal, "restaurante").click();
+    chipOf(modal, "praia").click();
+    chipOf(modal, "passeio").click();
+
+    expect(chipOf(modal, "restaurante").dataset.main).toBe("true");
+    expect(chipOf(modal, "restaurante").textContent).toMatch(/principal/i);
+    expect(chipOf(modal, "praia").dataset.main).toBeUndefined();
+    expect(chipOf(modal, "praia").getAttribute("aria-pressed")).toBe("true");
+
+    submitWith(modal);
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: "restaurante",
+        extra_categories: ["praia", "passeio"],
+      }),
+      null
+    );
+  });
+
+  it("promotes the next chip when the main one is unticked", () => {
+    const onSubmit = vi.fn();
+    const modal = createLinkFormModal(onSubmit);
+    document.body.appendChild(modal.element);
+    modal.openCreate();
+    chipOf(modal, "restaurante").click();
+    chipOf(modal, "praia").click();
+    chipOf(modal, "restaurante").click();
+    expect(chipOf(modal, "praia").dataset.main).toBe("true");
+    expect(chipOf(modal, "restaurante").getAttribute("aria-pressed")).toBe("false");
+    submitWith(modal);
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ category: "praia", extra_categories: [] }),
+      null
+    );
+  });
+
+  it("Automática clears every chip", () => {
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    modal.openCreate();
+    chipOf(modal, "restaurante").click();
+    chipOf(modal, "praia").click();
+    chipOf(modal, "").click();
+    expect(chipOf(modal, "").getAttribute("aria-pressed")).toBe("true");
+    expect(chipOf(modal, "restaurante").getAttribute("aria-pressed")).toBe("false");
+    expect(modal.element.querySelector("[data-main]")).toBeNull();
+  });
+
+  it("enforces the limit of 4 and shows it", () => {
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    modal.openCreate();
+    for (const v of ["museu", "evento", "restaurante", "bar"]) chipOf(modal, v).click();
+    expect(chipOf(modal, "praia").disabled).toBe(true);
+    chipOf(modal, "praia").click();
+    expect(chipOf(modal, "praia").getAttribute("aria-pressed")).toBe("false");
+    expect(chipOf(modal, "bar").disabled).toBe(false);
+    expect(modal.element.querySelector("#links-form-category-hint")?.textContent).toMatch(/4/);
+    expect(chipOf(modal, "").disabled).toBe(false);
+    chipOf(modal, "bar").click();
+    expect(chipOf(modal, "praia").disabled).toBe(false);
+  });
+
+  it("pre-ticks main and extras when editing", () => {
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    modal.openEdit(row({ category: "restaurante", extra_categories: ["praia", "passeio"] }));
+    expect(chipOf(modal, "restaurante").dataset.main).toBe("true");
+    expect(chipOf(modal, "praia").getAttribute("aria-pressed")).toBe("true");
+    expect(chipOf(modal, "passeio").getAttribute("aria-pressed")).toBe("true");
+    expect(chipOf(modal, "bar").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("pre-ticks a create prefill with categories", () => {
+    const modal = createLinkFormModal(vi.fn());
+    document.body.appendChild(modal.element);
+    modal.openCreate({ category: "bar", extra_categories: ["museu"] });
+    expect(chipOf(modal, "bar").dataset.main).toBe("true");
+    expect(chipOf(modal, "museu").getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+describe("payload helpers with extra categories", () => {
+  it("sends category (main) and extra_categories on create and update", () => {
+    const values = formValues({ category: "restaurante", extra_categories: ["praia", "passeio"] });
+    expect(toCreateInput(values, 0)).toMatchObject({
+      category: "restaurante",
+      extra_categories: ["praia", "passeio"],
+    });
+    expect(toUpdatePatch(values)).toMatchObject({
+      category: "restaurante",
+      extra_categories: ["praia", "passeio"],
+    });
+  });
+
+  it("defaults to no extras and clears them on Automática", () => {
+    expect(toCreateInput(formValues({ category: "bar" }), 0).extra_categories).toEqual([]);
+    expect(toUpdatePatch(formValues({ category: "", extra_categories: ["praia"] })).extra_categories).toEqual([]);
+  });
+
+  it("drops invalid, duplicate and main-equal extras and caps at 3", () => {
+    const patch = toUpdatePatch(
+      formValues({
+        category: "bar",
+        extra_categories: ["bar", "x", "praia", "praia", "museu", "evento", "passeio"],
+      })
+    );
+    expect(patch.extra_categories).toEqual(["praia", "museu", "evento"]);
+  });
+});
+
+describe("view modal lists all categories", () => {
+  it("renders a chip per category, main first", () => {
+    const view = createViewModal({ onEdit: vi.fn(), onSchedule: vi.fn(), onMarkDone: vi.fn(), onDelete: vi.fn() });
+    document.body.appendChild(view.element);
+    view.open(row({ category: "restaurante", extra_categories: ["praia", "passeio"] }));
+    const chips = [...view.element.querySelectorAll(".links-detail__chip--category")].map(
+      (c) => c.textContent
+    );
+    expect(chips).toEqual(["Restaurante", "Praia", "Passeio"]);
   });
 });
 
@@ -870,6 +1014,87 @@ describe("pose references", () => {
     expect(q<HTMLInputElement>("#links-form-pose-1-note").value).toBe("so nota");
     modal.openCreate({ url: "" });
     expect(items()).toHaveLength(0);
+  });
+
+  it("maps sources to the payload, dropping blank rows", () => {
+    expect(
+      toCreateInput(
+        formValues({
+          sources: [
+            { title: " Guia ", url: "example.com/a" },
+            { title: "", url: "" },
+          ],
+        }),
+        1
+      )
+    ).toMatchObject({ sources: [{ title: "Guia", url: "https://example.com/a" }] });
+    expect(toUpdatePatch(formValues())).toMatchObject({ sources: [] });
+    expect(() => toCreateInput(formValues({ sources: [{ title: "", url: "https://example.com" }] }), 1)).toThrow(
+      /Fonte 1/
+    );
+  });
+
+  it("adds and removes source rows; blank rows are dropped on submit", () => {
+    const onSubmit = vi.fn();
+    const { click, type, submit, q } = setup(onSubmit);
+    click("Adicionar fonte");
+    click("Adicionar fonte");
+    click("Adicionar fonte");
+    type("links-form-source-0-title", "Guia");
+    type("links-form-source-0-url", "https://example.com/g");
+    type("links-form-source-1-title", "Notícia");
+    type("links-form-source-1-url", "https://example.com/n");
+    click("Remover fonte 3");
+    expect(modalSourceRows(q)).toBe(2);
+    submit();
+    const values = onSubmit.mock.calls[0]![0] as LinkFormValues;
+    expect(values.sources).toEqual([
+      { title: "Guia", url: "https://example.com/g" },
+      { title: "Notícia", url: "https://example.com/n" },
+    ]);
+  });
+
+  it("blocks submit on a half-filled source row", () => {
+    const onSubmit = vi.fn();
+    const { click, type, submit } = setup(onSubmit);
+    click("Adicionar fonte");
+    type("links-form-source-0-title", "Só título");
+    submit();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("round-trips stored sources on edit and resets on create", () => {
+    const { modal, q } = setup();
+    modal.openEdit(row({ sources: [{ title: "Guia", url: "https://example.com/g" }] }));
+    expect(q<HTMLDetailsElement>("details.links-admin-form__more").open).toBe(true);
+    expect(q<HTMLInputElement>("#links-form-source-0-title").value).toBe("Guia");
+    expect(q<HTMLInputElement>("#links-form-source-0-url").value).toBe("https://example.com/g");
+    modal.openCreate({ url: "" });
+    expect(modalSourceRows(q)).toBe(0);
+  });
+
+  it("detail lists sources as safe new-tab links with text titles, hidden when empty", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    modal.open(
+      row({
+        sources: [
+          { title: "<b>Guia</b>", url: "https://example.com/g" },
+          { title: "Ruim", url: "javascript:alert(1)" },
+        ],
+      })
+    );
+    const wrap = modal.element.querySelector<HTMLElement>("[data-field='sources']")!;
+    expect(wrap.hidden).toBe(false);
+    const links = [...wrap.querySelectorAll("a")];
+    expect(links).toHaveLength(1);
+    expect(links[0]!.getAttribute("href")).toBe("https://example.com/g");
+    expect(links[0]!.target).toBe("_blank");
+    expect(links[0]!.rel).toBe("noopener noreferrer");
+    expect(links[0]!.textContent).toContain("<b>Guia</b>");
+    expect(links[0]!.querySelector("b")).toBeNull();
+    modal.open(row());
+    expect(wrap.hidden).toBe(true);
   });
 
   it("detail lists poses in order with safe new-tab links, hidden when empty", () => {

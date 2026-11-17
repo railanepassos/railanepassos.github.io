@@ -6,7 +6,11 @@ import {
   inferCategory,
   isCategory,
   resolveCategory,
+  allCategories,
   categoryLabel,
+  MAX_CATEGORIES,
+  normalizeExtraCategories,
+  togglePickedCategory,
   type Category,
 } from "./category";
 import {
@@ -39,6 +43,17 @@ import {
   readPoseRefs,
   type PoseDraft,
 } from "./poses";
+import {
+  MAX_SOURCES,
+  SOURCE_TITLE_MAX,
+  draftsToSources,
+  mergeSources,
+  readSources,
+  sourceDraftsFromSources,
+  sourcesError,
+  type Source,
+  type SourceDraft,
+} from "./sources";
 import { readLessons } from "./lessons";
 import {
   PLAN_LISTS,
@@ -269,8 +284,10 @@ export type CreatePrefill = Partial<
     | "image_url"
     | "source_url"
     | "category"
+    | "extra_categories"
     | "tags"
     | "people"
+    | "sources"
     | "cost_text"
     | "city"
     | "address"
@@ -289,8 +306,12 @@ export type LinkFormValues = MoreTextValues & {
   source_url: string;
   /** Photo-pose references, in display order (blank rows are dropped on save). */
   pose_refs: PoseDraft[];
+  /** Fontes (title + https link rows); blank rows are dropped on save. */
+  sources?: SourceDraft[];
   /** Picked category; "" = infer from text (Automática). */
   category: string;
+  /** Extra categories after the main one (up to 3); only used with a picked main. */
+  extra_categories?: string[];
   /** Free tags (display form, no `#`). */
   tags: string[];
   /** People (display form, no `@`). */
@@ -1061,41 +1082,58 @@ export function createLinkFormModal(
   labelField.wrapper.classList.add("links-admin-form__field--grow");
   preview.append(previewImg, labelField.wrapper);
 
-  // Category: one-tap chips. "" = Automática (inferred on save).
-  let pickedCategory = "";
+  // Category: multi-select chips. Tap order = priority: the first picked is the
+  // main category (marker "principal"). "" = Automática (inferred on save).
+  let pickedCategories: string[] = [];
   const categoryField = document.createElement("div");
   categoryField.className = "links-admin-form__field";
   const categoryLabelEl = document.createElement("span");
   categoryLabelEl.className = "links-admin-form__label";
   categoryLabelEl.id = "links-form-category-label";
-  categoryLabelEl.textContent = "Categoria";
+  categoryLabelEl.textContent = "Categorias";
   const categoryChips = document.createElement("div");
   categoryChips.className = "links-chips links-chips--wrap";
   categoryChips.setAttribute("role", "group");
   categoryChips.setAttribute("aria-labelledby", "links-form-category-label");
+  categoryChips.setAttribute("aria-describedby", "links-form-category-hint");
+  const categoryHint = document.createElement("p");
+  categoryHint.id = "links-form-category-hint";
+  categoryHint.className = "links-admin-form__hint";
+  categoryHint.setAttribute("aria-live", "polite");
   const chipButtons: HTMLButtonElement[] = [];
   for (const value of ["", ...CATEGORY_OPTIONS]) {
     const chipBtn = document.createElement("button");
     chipBtn.type = "button";
     chipBtn.className = "links-chip";
     chipBtn.dataset.category = value;
-    chipBtn.textContent = value === "" ? "Automática" : categoryLabel(value);
     chipBtn.addEventListener("click", () => {
-      pickedCategory = value;
+      pickedCategories = togglePickedCategory(pickedCategories, value);
       syncCategoryChips();
       syncPreview();
     });
     chipButtons.push(chipBtn);
     categoryChips.appendChild(chipBtn);
   }
-  categoryField.append(categoryLabelEl, categoryChips);
+  categoryField.append(categoryLabelEl, categoryChips, categoryHint);
 
   function syncCategoryChips(): void {
+    const full = pickedCategories.length >= MAX_CATEGORIES;
     for (const btn of chipButtons) {
-      const on = btn.dataset.category === pickedCategory;
+      const value = btn.dataset.category ?? "";
+      const on = value === "" ? pickedCategories.length === 0 : pickedCategories.includes(value);
+      const isMain = value !== "" && pickedCategories[0] === value;
       btn.setAttribute("aria-pressed", on ? "true" : "false");
       btn.classList.toggle("links-chip--active", on);
+      btn.disabled = full && !on && value !== "";
+      if (isMain) btn.dataset.main = "true";
+      else delete btn.dataset.main;
+      const name = value === "" ? "Automática" : categoryLabel(value);
+      btn.textContent = isMain ? `${name} · principal` : name;
     }
+    categoryHint.textContent =
+      pickedCategories.length === 0
+        ? `Automática: a categoria vem do texto. Marque até ${MAX_CATEGORIES}; a primeira é a principal.`
+        : `${pickedCategories.length} de ${MAX_CATEGORIES} categorias; a primeira é a principal (cor e ícone do card).`;
   }
 
   const descField = labelledTextarea(
@@ -1299,6 +1337,94 @@ export function createLinkFormModal(
       ?.focus();
   });
 
+  // Fontes: rows of {title, url}. Same pattern as the poses above (state in
+  // `sourceRows`, re-render on add/remove only so typing keeps focus).
+  let sourceRows: SourceDraft[] = [];
+  const sourcesField = document.createElement("fieldset");
+  sourcesField.className = "links-admin-form__field links-sources";
+  const sourcesLegend = document.createElement("legend");
+  sourcesLegend.className = "links-admin-form__label";
+  sourcesLegend.textContent = "Fontes (opcional)";
+  const sourcesList = document.createElement("ol");
+  sourcesList.className = "links-sources__list";
+  const addSourceBtn = document.createElement("button");
+  addSourceBtn.type = "button";
+  addSourceBtn.className = "links-sources__add";
+  addSourceBtn.setAttribute("aria-label", "Adicionar fonte");
+  addSourceBtn.append(uiIcon("plus", 18), document.createTextNode("Adicionar fonte"));
+  sourcesField.append(sourcesLegend, sourcesList, addSourceBtn);
+  moreBody.appendChild(sourcesField);
+
+  function validateSourceRow(index: number): boolean {
+    const row = sourceRows[index];
+    const err = sourcesList.querySelector<HTMLElement>(`#links-form-source-${index}-error`);
+    const urlInput = sourcesList.querySelector<HTMLInputElement>(`#links-form-source-${index}-url`);
+    const titleInput = sourcesList.querySelector<HTMLInputElement>(`#links-form-source-${index}-title`);
+    if (!row || !err || !urlInput || !titleInput) return true;
+    const message = sourcesError([row]);
+    err.textContent = message ? message.replace(/^Fonte \d+: /, "") : "";
+    err.hidden = message === null;
+    const titleBad = message !== null && /título/.test(message);
+    if (titleBad) titleInput.setAttribute("aria-invalid", "true");
+    else titleInput.removeAttribute("aria-invalid");
+    if (message && !titleBad) urlInput.setAttribute("aria-invalid", "true");
+    else urlInput.removeAttribute("aria-invalid");
+    return message === null;
+  }
+
+  function renderSources(focusAdd = false): void {
+    sourcesList.replaceChildren();
+    sourceRows.forEach((source, i) => {
+      const n = i + 1;
+      const item = document.createElement("li");
+      item.className = "links-sources__item";
+      const titleField = labelledInput(`links-form-source-${i}-title`, `Fonte ${n}: título`, "text");
+      titleField.input.maxLength = SOURCE_TITLE_MAX;
+      titleField.input.autocomplete = "off";
+      titleField.input.value = source.title;
+      const urlField = labelledInput(`links-form-source-${i}-url`, `Fonte ${n}: link`, "url");
+      urlField.input.placeholder = "https://";
+      urlField.input.autocomplete = "off";
+      urlField.input.value = source.url;
+      const err = document.createElement("p");
+      err.id = `links-form-source-${i}-error`;
+      err.className = "links-admin-form__field-error";
+      err.hidden = true;
+      urlField.input.setAttribute("aria-describedby", err.id);
+      urlField.wrapper.appendChild(err);
+      titleField.input.addEventListener("input", () => {
+        source.title = titleField.input.value;
+        validateSourceRow(i);
+      });
+      urlField.input.addEventListener("input", () => {
+        source.url = urlField.input.value;
+        validateSourceRow(i);
+      });
+      normalizeUrlOnBlur(urlField.input);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "links-sources__remove";
+      remove.setAttribute("aria-label", `Remover fonte ${n}`);
+      remove.textContent = "Remover";
+      remove.addEventListener("click", () => {
+        sourceRows = sourceRows.filter((_, j) => j !== i);
+        renderSources(true);
+      });
+      item.append(titleField.wrapper, urlField.wrapper, remove);
+      sourcesList.appendChild(item);
+    });
+    addSourceBtn.disabled = sourceRows.length >= MAX_SOURCES;
+    if (focusAdd) addSourceBtn.focus();
+  }
+  addSourceBtn.addEventListener("click", () => {
+    if (sourceRows.length >= MAX_SOURCES) return;
+    sourceRows.push({ title: "", url: "" });
+    renderSources();
+    sourcesList
+      .querySelector<HTMLInputElement>(`#links-form-source-${sourceRows.length - 1}-title`)
+      ?.focus();
+  });
+
   function readMoreText(): MoreTextValues {
     const out = emptyMoreTextValues();
     for (const f of moreText) out[f.key] = f.input.value.trim();
@@ -1324,7 +1450,10 @@ export function createLinkFormModal(
     validateSource();
     poses = poseDraftsFromRefs(readPoseRefs(link?.pose_refs));
     renderPoses();
-    more.open = any || sourceField.input.value !== "" || poses.length > 0;
+    sourceRows = sourceDraftsFromSources(readSources(link?.sources));
+    renderSources();
+    more.open =
+      any || sourceField.input.value !== "" || poses.length > 0 || sourceRows.length > 0;
     syncMoreHeights();
   }
 
@@ -1349,8 +1478,8 @@ export function createLinkFormModal(
   }
 
   function syncPreview(): void {
-    const category = isCategory(pickedCategory)
-      ? pickedCategory
+    const category = isCategory(pickedCategories[0] ?? "")
+      ? (pickedCategories[0] as Category)
       : inferCategory({
           label: labelField.input.value,
           description: descField.input.value,
@@ -1448,7 +1577,10 @@ export function createLinkFormModal(
     descField.input.value = prefill?.description ?? "";
     imageField.input.value = prefill?.image_url ?? "";
     holdDraftImage(Boolean(prefill?.image_url));
-    pickedCategory = prefill?.category && isCategory(prefill.category) ? prefill.category : "";
+    pickedCategories =
+      prefill?.category && isCategory(prefill.category)
+        ? [prefill.category, ...normalizeExtraCategories(prefill.extra_categories, prefill.category)]
+        : [];
     writeMoreText(prefill ?? null);
     syncCategoryChips();
     syncPreview();
@@ -1462,6 +1594,10 @@ export function createLinkFormModal(
   function openEdit(current: LinkRow, proposed?: CreatePrefill): void {
     const changes = proposed ? withoutEmptyProposals(proposed) : undefined;
     const link: LinkRow = changes ? { ...current, ...changes } : current;
+    // Proposed Fontes are appended to the current ones (deduped by URL, capped), never replace them.
+    if (changes?.sources) {
+      link.sources = mergeSources(readSources(current.sources), changes.sources);
+    }
     editingId = link.id;
     title.textContent = "Editar experiência";
     urlField.input.value = link.url;
@@ -1471,7 +1607,8 @@ export function createLinkFormModal(
     holdDraftImage(Boolean(changes?.image_url));
     memoryField.input.value = link.note ?? "";
     writeMoreText(link);
-    pickedCategory = link.category && isCategory(link.category) ? link.category : "";
+    pickedCategories =
+      link.category && isCategory(link.category) ? allCategories(link) : [];
     syncCategoryChips();
     syncPreview();
     descField.syncHeight();
@@ -1496,6 +1633,18 @@ export function createLinkFormModal(
       posesList.querySelector<HTMLInputElement>(`#links-form-pose-${badPose}-url`)?.focus();
       return;
     }
+    const badSource = sourceRows.findIndex((_, i) => !validateSourceRow(i));
+    if (badSource >= 0) {
+      more.open = true;
+      const badTitle = sourcesList.querySelector<HTMLInputElement>(
+        `#links-form-source-${badSource}-title`
+      );
+      (badTitle?.getAttribute("aria-invalid") === "true"
+        ? badTitle
+        : sourcesList.querySelector<HTMLInputElement>(`#links-form-source-${badSource}-url`)
+      )?.focus();
+      return;
+    }
     onSubmit(
       {
         tags: tagsInput.getValues(),
@@ -1507,7 +1656,9 @@ export function createLinkFormModal(
         note: memoryField.input.value.trim(),
         source_url: normalizeUrlInput(sourceField.input.value),
         pose_refs: poses.map((p) => ({ url: normalizeUrlInput(p.url), note: p.note.trim() })),
-        category: pickedCategory,
+        sources: sourceRows.map((s) => ({ title: s.title.trim(), url: normalizeUrlInput(s.url) })),
+        category: pickedCategories[0] ?? "",
+        extra_categories: pickedCategories.slice(1),
         ...readMoreText(),
       },
       editingId
@@ -1897,6 +2048,22 @@ function renderPoseItem(ref: { url?: string; note?: string }, index: number): HT
   return li;
 }
 
+/** One fonte in the detail list: title as text in a new-tab https link. */
+function renderSourceItem(source: Source): HTMLElement {
+  const li = document.createElement("li");
+  li.className = "links-detail__source";
+  const a = document.createElement("a");
+  a.className = "links-detail__source-link";
+  a.href = source.url;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  const label = document.createElement("span");
+  label.textContent = source.title;
+  a.append(label, uiIcon("external", 16));
+  li.appendChild(a);
+  return li;
+}
+
 const PLAN_SAVE_ERROR = "Não foi possível salvar o plano. Tente de novo.";
 const PLAN_SHARE_ERROR = "Não foi possível compartilhar o plano. Tente de novo.";
 
@@ -2250,7 +2417,14 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   const posesOl = document.createElement("ol");
   posesOl.className = "links-detail__poses";
   posesRow.value.appendChild(posesOl);
-  info.append(posesRow.row, linkRow.row);
+  // Fontes: public links the dossier/itinerary came from (new tab, titles as text).
+  const sourcesRow = infoRow("external", "Fontes");
+  sourcesRow.row.dataset.field = "sources";
+  sourcesRow.row.classList.add("links-detail__row--long");
+  const sourcesUl = document.createElement("ul");
+  sourcesUl.className = "links-detail__sources";
+  sourcesRow.value.appendChild(sourcesUl);
+  info.append(posesRow.row, linkRow.row, sourcesRow.row);
 
   body.append(chips, title, info);
 
@@ -2314,7 +2488,9 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     if (src) heroImg.src = src;
     else heroImg.removeAttribute("src");
 
-    chips.replaceChildren(chip(categoryLabel(category), "category"));
+    chips.replaceChildren(
+      ...allCategories(link).map((c) => chip(categoryLabel(c), "category"))
+    );
     const hasSchedule = Boolean(link.scheduled_start && link.scheduled_end);
     if (hasSchedule) chips.appendChild(chip("Agendado", "schedule"));
     if (link.status === "done") chips.appendChild(chip("Feito", "done"));
@@ -2368,6 +2544,10 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     const poseRefs = readPoseRefs(link.pose_refs);
     posesRow.row.hidden = poseRefs.length === 0;
     posesOl.replaceChildren(...poseRefs.map(renderPoseItem));
+
+    const sources = readSources(link.sources);
+    sourcesRow.row.hidden = sources.length === 0;
+    sourcesUl.replaceChildren(...sources.map(renderSourceItem));
 
     planError.hidden = true;
     renderPlan();
@@ -2705,11 +2885,13 @@ export function toCreateInput(values: LinkFormValues, sortOrder: number): Create
     icon_preset: inferIconPreset(resolved.url),
     icon_url: null,
     category: pickCategory(resolved),
+    extra_categories: pickExtraCategories(resolved),
     sort_order: sortOrder,
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
     source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
     pose_refs: draftsToPoseRefs(resolved.pose_refs),
+    sources: draftsToSources(resolved.sources ?? []),
     ...moreTextPayload(resolved),
     tags: tagsPayload(resolved),
     people: peoplePayload(resolved),
@@ -2726,10 +2908,12 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
     icon_preset: inferIconPreset(resolved.url),
     icon_url: null,
     category: pickCategory(resolved),
+    extra_categories: pickExtraCategories(resolved),
     image_url: resolved.image_url.length > 0 ? resolved.image_url : null,
     note: resolved.note.length > 0 ? resolved.note : null,
     source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
     pose_refs: draftsToPoseRefs(resolved.pose_refs),
+    sources: draftsToSources(resolved.sources ?? []),
     ...moreTextPayload(resolved),
     tags: tagsPayload(resolved),
     people: peoplePayload(resolved),
@@ -2765,6 +2949,12 @@ function pickCategory(values: LinkFormValues): Category {
     : inferCategory(values);
 }
 
+/** Extras only count with an explicit main; Automática stores none. */
+function pickExtraCategories(values: LinkFormValues): Category[] {
+  if (!values.category || !isCategory(values.category)) return [];
+  return normalizeExtraCategories(values.extra_categories, values.category);
+}
+
 /** Blank Nome falls back to the URL's hostname so quick-add can skip typing one. */
 function withResolvedLabel(values: LinkFormValues): LinkFormValues {
   const label = values.label.trim();
@@ -2792,6 +2982,8 @@ function assertFormValues(values: LinkFormValues): void {
   if (!isOptionalHttpsUrl(values.source_url)) throw new Error(`${SOURCE_TERM} inválido.`);
   const poseError = poseRefsError(values.pose_refs);
   if (poseError) throw new Error(poseError);
+  const sourcesProblem = sourcesError(values.sources ?? []);
+  if (sourcesProblem) throw new Error(sourcesProblem);
   for (const field of MORE_TEXT_FIELDS) {
     if (values[field.key].length > field.max) {
       throw new Error(`${field.term} deve ter no máximo ${field.max} caracteres.`);

@@ -41,6 +41,7 @@ export const DRAFT_LIMITS = {
     dossier: 5000,
     itinerary: 5000,
   } as Record<TextKey, number>,
+  maxCategories: 4,
   maxUrlLength: 2000,
   maxTags: 30,
   maxTagLength: 40,
@@ -48,7 +49,13 @@ export const DRAFT_LIMITS = {
   maxPersonLength: 80,
   maxPlanItems: 60,
   planTextMax: 200,
+  maxSources: 10,
+  sourceTitleMax: 120,
+  sourceUrlMax: 2000,
 };
+
+/** A Fonte (same shape as `Source` in sources.ts; duplicated to stay import-free). */
+export type DraftSource = { title: string; url: string };
 
 export type DraftFields = {
   url?: string;
@@ -56,8 +63,12 @@ export type DraftFields = {
   description?: string;
   source_url?: string;
   category?: string;
+  /** 1-4 distinct allowed values, first = main. Mutually exclusive with `category`. */
+  categories?: string[];
   tags?: string[];
   people?: string[];
+  /** Fontes: up to 10 {title, url}. On an update they are appended to the current ones (dedupe by URL). */
+  sources?: DraftSource[];
   cost_text?: string;
   city?: string;
   address?: string;
@@ -76,7 +87,7 @@ export type ParseDraftResult = { ok: true; draft: Draft } | { ok: false; reason:
 
 const URL_KEYS = ["url", "source_url", "image_url"];
 const TEXT_KEYS = ["label", "description", "cost_text", "city", "address", "dossier", "itinerary"];
-const FIELD_KEYS = [...URL_KEYS, ...TEXT_KEYS, "category", "tags", "people"];
+const FIELD_KEYS = [...URL_KEYS, ...TEXT_KEYS, "category", "categories", "tags", "people", "sources"];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const B64URL_RE = /^[A-Za-z0-9_-]*$/;
 // Encoded size of DRAFT_MAX_BYTES (no padding); anything longer is rejected before decoding.
@@ -95,6 +106,18 @@ export function withoutEmptyProposals<T extends object>(fields: T): Partial<T> {
     out[key] = value;
   }
   return out;
+}
+
+/**
+ * Draft fields -> what the form takes: `categories` becomes `category` (main)
+ * + `extra_categories`. Empty list is left as is (update drafts drop it).
+ */
+export function draftPrefill(fields: DraftFields): Omit<DraftFields, "categories"> & {
+  extra_categories?: string[];
+} {
+  const { categories, ...rest } = fields;
+  if (!categories || categories.length === 0) return rest;
+  return { ...rest, category: categories[0], extra_categories: categories.slice(1) };
 }
 
 export function isDraftFragment(hash: string): boolean {
@@ -160,6 +183,20 @@ function fieldsError(raw: unknown, requireUrl: boolean): string | null {
       if (v.length > max) return `O campo ${key} passa de ${max} caracteres.`;
     }
   }
+  if (raw.categories !== undefined) {
+    if (raw.category !== undefined) return "Use category ou categories, não os dois.";
+    const v = raw.categories;
+    if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) {
+      return "O campo categories deve ser uma lista de textos.";
+    }
+    const max = DRAFT_LIMITS.maxCategories;
+    if (v.length > max) return `O campo categories passa de ${max} itens.`;
+    if (v.some((x: string) => !DRAFT_LIMITS.categories.includes(x))) {
+      return "O campo categories tem valor desconhecido.";
+    }
+    if (v.length === 0) return "O campo categories precisa de 1 a 4 itens.";
+    if (new Set(v).size !== v.length) return "O campo categories tem valores repetidos.";
+  }
   for (const [key, maxCount, maxLen] of [
     ["tags", DRAFT_LIMITS.maxTags, DRAFT_LIMITS.maxTagLength],
     ["people", DRAFT_LIMITS.maxPeople, DRAFT_LIMITS.maxPersonLength],
@@ -173,6 +210,34 @@ function fieldsError(raw: unknown, requireUrl: boolean): string | null {
     if (v.some((x: string) => x.length > maxLen)) {
       return `O campo ${key} tem item com mais de ${maxLen} caracteres.`;
     }
+  }
+  if (raw.sources !== undefined) {
+    const problem = draftSourcesError(raw.sources);
+    if (problem) return problem;
+  }
+  return null;
+}
+
+function draftSourcesError(raw: unknown): string | null {
+  if (!Array.isArray(raw)) return "O campo sources deve ser uma lista.";
+  if (raw.length > DRAFT_LIMITS.maxSources) {
+    return `O campo sources passa de ${DRAFT_LIMITS.maxSources} itens.`;
+  }
+  for (let i = 0; i < raw.length; i++) {
+    const item: unknown = raw[i];
+    const at = `sources, item ${i + 1}`;
+    if (!isRecord(item)) return `${at}: deve ser um objeto.`;
+    for (const key of Object.keys(item)) {
+      if (key !== "title" && key !== "url") return `${at}: chave não permitida: ${key}.`;
+    }
+    const { title, url } = item;
+    if (typeof title !== "string" || title.trim() === "") return `${at}: title não pode ficar em branco.`;
+    if (title.trim().length > DRAFT_LIMITS.sourceTitleMax) {
+      return `${at}: title passa de ${DRAFT_LIMITS.sourceTitleMax} caracteres.`;
+    }
+    if (typeof url !== "string") return `${at}: url deve ser texto.`;
+    if (url.length > DRAFT_LIMITS.sourceUrlMax) return `${at}: url é longo demais.`;
+    if (/\s/.test(url) || !isHttps(url)) return `${at}: url deve ser um link https válido.`;
   }
   return null;
 }
