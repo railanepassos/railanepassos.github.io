@@ -1908,7 +1908,8 @@ body.links-screen-open {
   margin-top: 8px;
 }
 
-.links-detail__share-btn {
+/* Two classes: `.page-links-admin button { font: inherit }` would reset the size. */
+.links-detail__share .links-detail__share-btn {
   min-width: 44px;
   min-height: 44px;
   padding: 8px 14px;
@@ -1922,7 +1923,7 @@ body.links-screen-open {
   cursor: pointer;
 }
 
-.links-detail__share-btn:disabled {
+.links-detail__share .links-detail__share-btn:disabled {
   opacity: 0.6;
   cursor: default;
 }
