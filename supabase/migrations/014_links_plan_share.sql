@@ -48,14 +48,19 @@ begin
 end;
 $$;
 
--- Editor: turn the link off (the old token stops working at once).
+-- Editor: turn the link off (the old token stops working at once). Returns true
+-- when a row was changed, false when none was (unknown id, or hidden by RLS), so
+-- the UI never reports "off" for a link that is still on.
 create or replace function public.links_plan_share_disable(link_id uuid)
-returns void
+returns boolean
 language sql
 security invoker
 set search_path = ''
 as $$
-  update public.links set plan_share_token = null where id = link_id;
+  with changed as (
+    update public.links set plan_share_token = null where id = link_id returning 1
+  )
+  select exists (select 1 from changed);
 $$;
 
 -- Public: read the shared plan. SECURITY DEFINER because anon cannot read the

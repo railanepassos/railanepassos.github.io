@@ -1,4 +1,4 @@
-import { PLAN_LISTS, planProgress, readPlanItems, type PlanList } from "./plan";
+import { PLAN_LISTS, filled, planProgress, readPlanItems, type PlanList } from "./plan";
 import { formatScheduleLabel } from "./schedule";
 
 /**
@@ -35,22 +35,29 @@ export function planShareUrl(origin: string, token: string): string {
 export const SHARED_PLAN_CONFLICT = "O plano mudou, recarregamos para você";
 export const SHARED_PLAN_SAVE_ERROR = "Não foi possível salvar. Tente de novo.";
 
-export type PlanWriteError = "inactive" | "conflict" | "error";
+export const SHARED_PLAN_INVALID = "Não foi possível salvar: escolha um nome da lista.";
+/** Editor: a save was refused because the plan changed on the server (a participant ticked). */
+export const PLAN_STALE_NOTICE =
+  "O plano mudou (alguém atualizou pelo link). Recarregamos para você — confira e tente de novo.";
+
+export type PlanWriteError = "inactive" | "conflict" | "invalid" | "error";
 
 /**
- * Failed links_shared_plan_set_done -> kind. The function raises 'inactive' or
- * 'conflict' as the message of a 400; anything else (invalid, 5xx, network)
- * is a generic error.
+ * Failed shared plan write -> kind. The functions raise 'inactive', 'conflict'
+ * or 'invalid' as the message of a 400; anything else (5xx, network) is generic.
  */
 export function classifyPlanWriteError(status: number, body: unknown): PlanWriteError {
   if (status !== 400 || typeof body !== "object" || body === null) return "error";
   const message = (body as Record<string, unknown>).message;
-  return message === "inactive" || message === "conflict" ? message : "error";
+  return message === "inactive" || message === "conflict" || message === "invalid"
+    ? message
+    : "error";
 }
 
 export function planWriteErrorMessage(kind: PlanWriteError): string {
   if (kind === "conflict") return SHARED_PLAN_CONFLICT;
   if (kind === "inactive") return SHARED_PLAN_INACTIVE;
+  if (kind === "invalid") return SHARED_PLAN_INVALID;
   return SHARED_PLAN_SAVE_ERROR;
 }
 
@@ -72,10 +79,6 @@ export type SharedPlanView = {
   people: string[];
   lists: SharedPlanList[];
 };
-
-function filled(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
 
 /** Payload of links_shared_plan_get -> what the page shows. Null when it is not a plan. */
 export function buildSharedPlanView(raw: unknown): SharedPlanView | null {

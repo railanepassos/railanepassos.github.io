@@ -45,14 +45,23 @@ export type Writes = {
   patched: Record<string, unknown> | null;
   /** Every PATCH body, in order (a flow can write more than once). */
   allPatched: Array<Record<string, unknown>>;
+  /**
+   * The mocked server rows (live: mutate them to simulate someone else saving).
+   * PATCHes honour `updated_at=eq.<value>` like PostgREST: no match -> `[]`.
+   */
+  rows: Array<Record<string, unknown>>;
 };
+
+let stamp = 0;
 
 /** Opens /p/a8f3k2/ with a fake session. GET returns `rows`; POST/PATCH are captured. */
 export async function openAuthedWith(
   page: Page,
-  rows: Array<Record<string, unknown>>
+  initialRows: Array<Record<string, unknown>>
 ): Promise<Writes> {
-  const writes: Writes = { created: null, patched: null, allPatched: [] };
+  // Own copies: the mock "server" mutates its rows, shared fixtures must stay pristine.
+  const rows = initialRows.map((row) => ({ ...row }));
+  const writes: Writes = { created: null, patched: null, allPatched: [], rows };
   await page.addInitScript(
     ([key, value]) => {
       localStorage.setItem(key, value);
@@ -63,8 +72,16 @@ export async function openAuthedWith(
   await page.route(`${SUPABASE}/rest/v1/links**`, async (route) => {
     const request = route.request();
     const method = request.method();
+    const params = new URL(request.url()).searchParams;
+    const idFilter = params.get("id")?.replace(/^eq\./, "");
     if (method === "GET") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rows) });
+      const single = (request.headers().accept ?? "").includes("vnd.pgrst.object");
+      const found = idFilter ? rows.filter((r) => r.id === idFilter) : rows;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(single ? (found[0] ?? null) : found),
+      });
     } else if (method === "POST") {
       writes.created = request.postDataJSON();
       await route.fulfill({
@@ -75,7 +92,19 @@ export async function openAuthedWith(
     } else if (method === "PATCH") {
       writes.patched = request.postDataJSON();
       writes.allPatched.push(writes.patched!);
-      await route.fulfill({ status: 204, body: "" });
+      const row = rows.find((r) => r.id === idFilter);
+      const expected = params.get("updated_at")?.replace(/^eq\./, "");
+      if (!row || (expected !== undefined && row.updated_at !== expected)) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      } else {
+        stamp += 1;
+        Object.assign(row, writes.patched, { updated_at: `2026-11-17T12:00:${String(stamp % 60).padStart(2, "0")}.${String(stamp).padStart(6, "0")}+00:00` });
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([{ updated_at: row.updated_at }]),
+        });
+      }
     } else {
       await route.fulfill({ status: 204, body: "" });
     }

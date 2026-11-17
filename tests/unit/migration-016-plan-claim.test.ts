@@ -143,6 +143,16 @@ describe("links_shared_plan_set_who", () => {
     expect(((await row(id)).plan_items as Array<{ who?: string }>)[1]!.who).toBe("Alana");
   });
 
+  it("matches trimmed people entries and stores the entry's exact form", async () => {
+    const { id, token } = await insertShared();
+    await db.query("update public.links set people = $2 where id = $1", [
+      id,
+      ["  Alana ", "Bia Teste"],
+    ]);
+    await setWho("anon", token, 1, "Biscoitos", "Alana");
+    expect(((await row(id)).plan_items as Array<{ who?: string }>)[1]!.who).toBe("  Alana ");
+  });
+
   it.each([
     ["not a participant", "Carlos"],
     ["different case", "alana"],

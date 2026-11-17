@@ -3,9 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 import { getSupabaseConfig, isSupabaseConfigured, isBrowserSafeAnonKey } from "./config";
 import { createAuth, type Auth } from "./auth";
 import { createAuthStorage, setRememberMe } from "./session-storage";
-import { isPlanShareFragment } from "./plan-share";
+import { PLAN_STALE_NOTICE, isPlanShareFragment } from "./plan-share";
 import { bootSharedPlan } from "./shared-plan-boot";
-import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
+import { StaleLinkError, createLinksRepo, type LinksRepo, type LinkRow, type UpdateLinkPatch } from "./links-repo";
 import { renderGuestGate } from "./render";
 import { collectTags } from "./tags";
 import { collectLessons } from "./lesson-suggestions";
@@ -225,19 +225,27 @@ function bootDynamic(
     onEditReview: (l) => openReview(l, "edit"),
     onEditPlan: (l) => openPlan(l),
     onSavePlanItems: async (l, items) => {
-      await repo.updateLink(l.id, { plan_items: items });
-      links = links.map((row) => (row.id === l.id ? { ...row, plan_items: items } : row));
+      // Each save is conditioned on the updated_at we last saw: the queued saves of
+      // the detail run one after another, so each one picks up the previous result.
+      const loaded = findLink(l.id) ?? l;
+      const saved = await repo.updateLinkIfUnchanged(l.id, { plan_items: items }, loaded.updated_at);
+      if (saved === null) throw new StaleLinkError(await adoptServerRow(l.id));
+      links = links.map((row) =>
+        row.id === l.id ? { ...row, plan_items: items, updated_at: saved.updated_at ?? row.updated_at } : row
+      );
       renderList();
       deckScreen.refresh(links);
     },
     onPlanShareEnable: async (l) => {
       const token = await repo.enablePlanShare(l.id);
       links = links.map((row) => (row.id === l.id ? { ...row, plan_share_token: token } : row));
+      await resyncAfterShareChange(l.id);
       return token;
     },
     onPlanShareDisable: async (l) => {
-      await repo.disablePlanShare(l.id);
+      if (!(await repo.disablePlanShare(l.id))) throw new Error("plan share was not disabled");
       links = links.map((row) => (row.id === l.id ? { ...row, plan_share_token: null } : row));
+      await resyncAfterShareChange(l.id);
     },
     onDelete: (l) => void deleteLink(l),
     onTag: (tag) => toggleTagFilter(tag),
@@ -328,7 +336,7 @@ function bootDynamic(
 
   async function submitEdit(id: string, values: LinkFormValues): Promise<void> {
     const patch = toUpdatePatch(values);
-    await repo.updateLink(id, patch);
+    await saveLink(id, patch);
     links = links.map((l) => (l.id === id ? { ...l, ...patch } : l));
     links = sortLinks(links);
     renderList();
@@ -352,7 +360,7 @@ function bootDynamic(
     deckScreen.setBusy(true);
     try {
       const completed_at = new Date().toISOString();
-      await repo.updateLink(link.id, { status: "done", completed_at });
+      await saveLink(link.id, { status: "done", completed_at });
       links = sortLinks(
         links.map((row) =>
           row.id === link.id
@@ -375,7 +383,7 @@ function bootDynamic(
   async function unmarkDone(link: LinkRow): Promise<void> {
     deckScreen.setBusy(true);
     try {
-      await repo.updateLink(link.id, { ...UNMARK_DONE_PATCH });
+      await saveLink(link.id, { ...UNMARK_DONE_PATCH });
       links = sortLinks(
         links.map((row) => (row.id === link.id ? { ...row, ...UNMARK_DONE_PATCH } : row))
       );
@@ -412,7 +420,7 @@ function bootDynamic(
         reviewSheet.setBusy(true);
         try {
           const patch = reviewToPatch(values);
-          await repo.updateLink(link.id, patch);
+          await saveLink(link.id, patch);
           links = sortLinks(links.map((row) => (row.id === link.id ? { ...row, ...patch } : row)));
           renderList();
           deckScreen.refresh(links);
@@ -446,8 +454,27 @@ function bootDynamic(
         planSheet.setBusy(true);
         try {
           const patch = planToPatch(values);
-          await repo.updateLink(link.id, patch);
-          links = sortLinks(links.map((row) => (row.id === link.id ? { ...row, ...patch } : row)));
+          // Conditioned on the updated_at we loaded: a participant may have ticked meanwhile.
+          const loaded = findLink(link.id) ?? link;
+          const saved = await repo.updateLinkIfUnchanged(link.id, patch, loaded.updated_at);
+          if (saved === null) {
+            // Nothing is overwritten: show the fresh plan (the editor's edits in the sheet are replaced, and told so).
+            const fresh = await adoptServerRow(link.id);
+            if (fresh) {
+              renderList();
+              deckScreen.refresh(links);
+              openPlan(fresh);
+              planSheet.setError(PLAN_STALE_NOTICE);
+            } else {
+              planSheet.setError(PLAN_SAVE_ERROR);
+            }
+            return;
+          }
+          links = sortLinks(
+            links.map((row) =>
+              row.id === link.id ? { ...row, ...patch, updated_at: saved.updated_at ?? row.updated_at } : row
+            )
+          );
           renderList();
           deckScreen.refresh(links);
           planSheet.close();
@@ -465,7 +492,7 @@ function bootDynamic(
     deckScreen.setBusy(true);
     try {
       const priority = nextPriority(links.filter((l) => l.status !== "done"));
-      await repo.updateLink(link.id, { priority });
+      await saveLink(link.id, { priority });
       links = sortLinks(
         links.map((row) => (row.id === link.id ? { ...row, priority } : row))
       );
@@ -481,7 +508,7 @@ function bootDynamic(
   async function wantAgain(link: LinkRow): Promise<void> {
     deckScreen.setBusy(true);
     try {
-      await repo.updateLink(link.id, { want_again: true });
+      await saveLink(link.id, { want_again: true });
       links = sortLinks(
         links.map((row) =>
           row.id === link.id ? { ...row, want_again: true } : row
@@ -495,6 +522,57 @@ function bootDynamic(
       deckScreen.setBusy(false);
     }
   }
+
+  /** Same as repo.updateLink, and keeps the loaded updated_at in step with the server. */
+  async function saveLink(id: string, patch: UpdateLinkPatch): Promise<void> {
+    const updatedAt = await repo.updateLink(id, patch);
+    if (updatedAt) links = links.map((row) => (row.id === id ? { ...row, updated_at: updatedAt } : row));
+  }
+
+  /** Refetches one row and replaces it in `links`; null when it no longer exists. */
+  async function adoptServerRow(id: string): Promise<LinkRow | null> {
+    const fresh = await repo.getLink(id);
+    if (fresh) links = sortLinks(links.map((row) => (row.id === id ? fresh : row)));
+    return fresh;
+  }
+
+  /**
+   * Turning the link on/off/rotating it updates the row, so its updated_at moved. Take the
+   * fresh row (and show it) so the next tick is checked against what the server really has.
+   */
+  async function resyncAfterShareChange(id: string): Promise<void> {
+    try {
+      const fresh = await adoptServerRow(id);
+      if (fresh) viewModal.refresh(fresh);
+    } catch {
+      // the next plan save will notice the difference and reload
+    }
+  }
+
+  /**
+   * Back on the page (tab visible again / restored from cache): the open detail
+   * shows what participants ticked through the plan link meanwhile.
+   */
+  async function refreshOpenDetail(): Promise<void> {
+    const id = viewModal.currentId();
+    if (!authenticated || !id) return;
+    try {
+      const fresh = await adoptServerRow(id);
+      if (fresh && viewModal.currentId() === id) {
+        viewModal.refresh(fresh);
+        renderList();
+        deckScreen.refresh(links);
+      }
+    } catch {
+      // keep what is on screen
+    }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void refreshOpenDetail();
+  });
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) void refreshOpenDetail();
+  });
 
   function findLink(id: string): LinkRow | undefined {
     return links.find((l) => l.id === id);
@@ -540,7 +618,7 @@ function bootDynamic(
       onRemove: async () => {
         scheduleSheet.setBusy(true);
         try {
-          await repo.updateLink(link.id, {
+          await saveLink(link.id, {
             scheduled_start: null,
             scheduled_end: null,
           });
@@ -581,7 +659,7 @@ function bootDynamic(
           const undoStart = findLink(link.id)?.scheduled_start ?? previousStart;
           const undoEnd = findLink(link.id)?.scheduled_end ?? previousEnd;
 
-          await repo.updateLink(link.id, {
+          await saveLink(link.id, {
             scheduled_start: startIso,
             scheduled_end: endIso,
           });
@@ -597,7 +675,7 @@ function bootDynamic(
           scheduleSheet.showSuccess("Agendamento salvo.", async () => {
             scheduleSheet.setBusy(true);
             try {
-              await repo.updateLink(link.id, {
+              await saveLink(link.id, {
                 scheduled_start: undoStart,
                 scheduled_end: undoEnd,
               });

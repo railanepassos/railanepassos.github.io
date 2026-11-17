@@ -1,4 +1,4 @@
-import type { LinkRow, CreateLinkInput, UpdateLinkPatch } from "./links-repo";
+import { StaleLinkError, type LinkRow, type CreateLinkInput, type UpdateLinkPatch } from "./links-repo";
 import { toolButton } from "./tool-button";
 import { inferIconPreset } from "./icons";
 import {
@@ -48,7 +48,7 @@ import {
   type PlanItem,
 } from "./plan";
 import { buildPlanMessage, hasPlanToShare, whatsappUrl } from "./plan-message";
-import { planShareUrl } from "./plan-share";
+import { PLAN_STALE_NOTICE, planShareUrl } from "./plan-share";
 import {
   MORE_TEXT_FIELDS,
   emptyMoreTextValues,
@@ -1813,6 +1813,8 @@ export type ViewModalHandle = {
   open: (link: LinkRow) => void;
   close: () => void;
   currentId: () => string | null;
+  /** Re-render the open detail from fresh server data (no-op if another place is open or ticks are still saving). */
+  refresh: (link: LinkRow) => void;
 };
 
 /** One pose in the detail list: optional https link (new tab) + plain-text note. */
@@ -2563,7 +2565,18 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
       try {
         await save(link, sending);
         state.confirmed = sending;
-      } catch {
+      } catch (err) {
+        if (err instanceof StaleLinkError && err.fresh) {
+          // The plan changed on the server: show it, drop our optimistic ticks, say so.
+          state.confirmed = readPlanItems(err.fresh.plan_items);
+          state.local = state.confirmed;
+          if (current?.id === link.id) {
+            open(err.fresh);
+            planError.textContent = PLAN_STALE_NOTICE;
+            planError.hidden = false;
+          }
+          return;
+        }
         state.local = state.confirmed;
         if (current?.id === link.id) {
           current = { ...current, plan_items: state.confirmed };
@@ -2613,6 +2626,12 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     open,
     close,
     currentId: () => current?.id ?? null,
+    refresh: (link) => {
+      if (!current || current.id !== link.id) return;
+      const state = planSync.get(link.id);
+      if (state && state.pending > 0) return;
+      open(link);
+    },
   };
 }
 

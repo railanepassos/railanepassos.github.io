@@ -31,6 +31,11 @@ function isPlanList(value: unknown): value is PlanList {
   return value === "checklist" || value === "compras";
 }
 
+/** Trimmed string, or "" for anything that is not a string (null, undefined, numbers...). */
+export function filled(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 /** Drafts -> payload. Trimmed, blank rows dropped, order kept; nothing left -> null. */
 export function normalizePlan(drafts: readonly PlanDraft[]): PlanItem[] | null {
   const out: PlanItem[] = [];

@@ -7,6 +7,7 @@
 -- Errors are distinguishable by message (PostgREST returns it in the body):
 --   inactive  null, malformed, unknown or switched-off token
 --   invalid   who is not null and (after trimming) not exactly one of `people`
+--             (people entries are trimmed too; the entry is stored in its own form)
 --   conflict  idx out of range, plan missing, or plan_items[idx].text differs
 --             from expected_text (the plan changed since the client loaded it)
 -- who = null releases the item (the `who` key is removed).
@@ -27,6 +28,7 @@ declare
   items jsonb;
   participants text[];
   chosen text;
+  wanted text;
 begin
   if token is null or token operator(pg_catalog.!~) '^[0-9a-f]{32,64}$' then
     raise exception 'inactive' using errcode = 'P0001';
@@ -44,8 +46,13 @@ begin
   end if;
 
   if who is not null then
-    chosen := pg_catalog.regexp_replace(who, '^\s+|\s+$', '', 'g');
-    if participants is null or not (chosen = any (participants)) then
+    wanted := pg_catalog.regexp_replace(who, '^\s+|\s+$', '', 'g');
+    select p
+      into chosen
+      from pg_catalog.unnest(participants) as p
+     where pg_catalog.regexp_replace(p, '^\s+|\s+$', '', 'g') = wanted
+     limit 1;
+    if chosen is null then
       raise exception 'invalid' using errcode = 'P0001';
     end if;
   end if;

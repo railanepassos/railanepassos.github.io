@@ -79,7 +79,7 @@ test.describe("editor: Link do plano", () => {
     let next = TOKEN;
     const calls = await mockRpc(page, {
       links_plan_share_enable: () => next,
-      links_plan_share_disable: () => null,
+      links_plan_share_disable: () => true,
     });
     await openAuthedWith(page, [ROW]);
     await openEditorDetail(page);
@@ -119,6 +119,18 @@ test.describe("editor: Link do plano", () => {
       name: "links_plan_share_disable",
       body: { link_id: ROW.id },
     });
+  });
+
+  test("turning off reports an error when no row was changed", async ({ page }) => {
+    await mockRpc(page, { links_plan_share_disable: () => false });
+    await openAuthedWith(page, [{ ...ROW, plan_share_token: TOKEN }]);
+    await openEditorDetail(page);
+    page.once("dialog", (d) => void d.accept());
+    await block(page).getByRole("button", { name: "Desligar" }).click();
+    await expect(block(page).getByRole("status")).toHaveText(
+      "Não foi possível desligar o link. Tente de novo."
+    );
+    await expect(block(page).locator("input")).toHaveValue(new RegExp(`#plano=${TOKEN}$`));
   });
 
   test("shows an already enabled link and its controls meet size rules", async ({ page }) => {

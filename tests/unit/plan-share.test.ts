@@ -169,10 +169,10 @@ describe("classifyPlanWriteError", () => {
   it("reads the server message", () => {
     expect(classifyPlanWriteError(400, { message: "conflict" })).toBe("conflict");
     expect(classifyPlanWriteError(400, { message: "inactive" })).toBe("inactive");
+    expect(classifyPlanWriteError(400, { message: "invalid" })).toBe("invalid");
   });
 
   it.each([
-    ["invalid message", 400, { message: "invalid" }],
     ["unknown message", 400, { message: "boom" }],
     ["server error", 500, { message: "conflict-ish" }],
     ["no body", 400, null],
@@ -189,6 +189,9 @@ describe("planWriteErrorMessage", () => {
     expect(planWriteErrorMessage("conflict")).toBe(SHARED_PLAN_CONFLICT);
     expect(planWriteErrorMessage("inactive")).toBe(SHARED_PLAN_INACTIVE);
     expect(planWriteErrorMessage("error")).toBe(SHARED_PLAN_SAVE_ERROR);
+    expect(planWriteErrorMessage("invalid")).toBe(
+      "Não foi possível salvar: escolha um nome da lista."
+    );
     expect(SHARED_PLAN_SAVE_ERROR).toBe("Não foi possível salvar. Tente de novo.");
   });
 });

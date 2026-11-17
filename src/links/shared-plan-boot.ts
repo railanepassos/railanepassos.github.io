@@ -1,3 +1,4 @@
+import { planProgress } from "./plan";
 import { getSupabaseConfig, isSupabaseConfigured } from "./config";
 import {
   SHARED_PLAN_INACTIVE,
@@ -5,6 +6,7 @@ import {
   buildSharedPlanView,
   parsePlanFragment,
   planWriteErrorMessage,
+  type PlanWriteError,
   type SharedPlanView,
 } from "./plan-share";
 import { SharedPlanWriteFailure, fetchSharedPlan, setSharedPlanDone, setSharedPlanWho } from "./shared-plan-api";
@@ -41,7 +43,11 @@ export async function bootSharedPlan(hash: string): Promise<void> {
     renderSharedPlanMessage(root, SHARED_PLAN_INACTIVE);
     return;
   }
-  const planToken: string = token;
+  await runSharedPlan(root, token);
+}
+
+/** Loads the plan for a valid token and wires ticks, claims and refreshes. */
+async function runSharedPlan(root: HTMLElement, token: string): Promise<void> {
   const config = getSupabaseConfig();
   if (!isSupabaseConfigured(config)) {
     renderSharedPlanMessage(root, SHARED_PLAN_LOAD_ERROR, "alert");
@@ -63,7 +69,7 @@ export async function bootSharedPlan(hash: string): Promise<void> {
   };
 
   const load = async (): Promise<void> => {
-    const next = buildSharedPlanView(await fetchSharedPlan(config, planToken));
+    const next = buildSharedPlanView(await fetchSharedPlan(config, token));
     if (next === null) {
       view = null;
       renderSharedPlanMessage(root, SHARED_PLAN_INACTIVE);
@@ -73,7 +79,7 @@ export async function bootSharedPlan(hash: string): Promise<void> {
     }
   };
 
-  const recover = async (kind: "inactive" | "conflict" | "error"): Promise<void> => {
+  const recover = async (kind: PlanWriteError): Promise<void> => {
     epoch += 1;
     if (kind === "inactive") {
       view = null;
@@ -115,30 +121,73 @@ export async function bootSharedPlan(hash: string): Promise<void> {
     });
   }
 
-  function onToggle(idx: number, text: string, done: boolean): void {
+  /** Applies a change to the shown plan right away, then queues the matching write. */
+  function change(
+    apply: (item: { idx: number; done: boolean; who: string | null }) => void,
+    idx: number,
+    write: () => Promise<unknown>
+  ): void {
     if (!view) return;
     notice = null;
     for (const list of view.lists) {
-      for (const item of list.items) if (item.idx === idx) item.done = done;
-    }
-    // Optimistic: progress labels follow the new state.
-    for (const list of view.lists) {
-      const doneCount = list.items.filter((i) => i.done).length;
-      list.progress = `${doneCount} de ${list.items.length}`;
+      for (const item of list.items) if (item.idx === idx) apply(item);
+      // Optimistic: progress labels follow the new state.
+      const items = list.items.map((i) => ({ text: i.text, list: list.key, done: i.done }));
+      list.progress = planProgress(items, list.key).label;
     }
     show();
-    enqueue(() => setSharedPlanDone(config, { token: planToken, idx, expectedText: text, done }));
+    enqueue(write);
+  }
+
+  function onToggle(idx: number, text: string, done: boolean): void {
+    change(
+      (item) => {
+        item.done = done;
+      },
+      idx,
+      () => setSharedPlanDone(config, { token, idx, expectedText: text, done })
+    );
   }
 
   function onClaim(idx: number, text: string, who: string | null): void {
-    if (!view) return;
-    notice = null;
-    for (const list of view.lists) {
-      for (const item of list.items) if (item.idx === idx) item.who = who;
-    }
-    show();
-    enqueue(() => setSharedPlanWho(config, { token: planToken, idx, expectedText: text, who }));
+    change(
+      (item) => {
+        item.who = who;
+      },
+      idx,
+      () => setSharedPlanWho(config, { token, idx, expectedText: text, who })
+    );
   }
+
+  /**
+   * Story 13: coming back to the page (tab visible again, or restored from the
+   * back/forward cache) shows what the others ticked meanwhile. Silent on network
+   * errors, and skipped while own writes are pending (their answer will refresh).
+   */
+  async function refresh(): Promise<void> {
+    if (inFlight > 0) return;
+    const myEpoch = epoch;
+    try {
+      const next = buildSharedPlanView(await fetchSharedPlan(config, token));
+      if (inFlight > 0 || myEpoch !== epoch) return;
+      if (next === null) {
+        view = null;
+        renderSharedPlanMessage(root, SHARED_PLAN_INACTIVE);
+      } else {
+        view = next;
+        show();
+      }
+    } catch {
+      // keep what is on screen
+    }
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void refresh();
+  });
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) void refresh();
+  });
 
   try {
     await load();

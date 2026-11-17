@@ -295,7 +295,7 @@ describe("Phase 2 fields", () => {
     const repo = createLinksRepo(makeFakeClient());
     await expect(repo.createLink({ ...base, dossier: "x".repeat(5001) })).rejects.toThrow(/dossier/);
     await expect(repo.updateLink("1", { itinerary: "x".repeat(5001) })).rejects.toThrow(/itinerary/);
-    await expect(repo.updateLink("1", { dossier: "x".repeat(5000) })).resolves.toBeUndefined();
+    await expect(repo.updateLink("1", { dossier: "x".repeat(5000) })).resolves.toBeNull();
   });
 
   it("rejects a non-https source_url", async () => {
@@ -311,8 +311,8 @@ describe("Phase 2 fields", () => {
     await expect(
       repo.updateLink("1", { memory_url: `https://x.com/${"a".repeat(2000)}` })
     ).rejects.toThrow(/memory_url/);
-    await expect(repo.updateLink("1", { memory_url: "https://youtu.be/dQw4w9WgXcQ" })).resolves.toBeUndefined();
-    await expect(repo.updateLink("1", { memory_url: null })).resolves.toBeUndefined();
+    await expect(repo.updateLink("1", { memory_url: "https://youtu.be/dQw4w9WgXcQ" })).resolves.toBeNull();
+    await expect(repo.updateLink("1", { memory_url: null })).resolves.toBeNull();
   });
 
   it("rejects invalid pose_refs and accepts valid ones", async () => {
@@ -325,7 +325,7 @@ describe("Phase 2 fields", () => {
     ).rejects.toThrow(/pose_refs/);
     await expect(
       repo.updateLink("1", { pose_refs: [{ url: "https://example.com/a", note: "n" }] })
-    ).resolves.toBeUndefined();
+    ).resolves.toBeNull();
   });
 
   it("rejects impressions and lessons beyond the DB limits, accepts valid ones", async () => {
@@ -341,8 +341,8 @@ describe("Phase 2 fields", () => {
     ).rejects.toThrow(/lessons/);
     await expect(
       repo.updateLink("1", { impressions: "Gostei.\nCaro.", lessons: ["levar lanche"] })
-    ).resolves.toBeUndefined();
-    await expect(repo.updateLink("1", { impressions: null, lessons: null })).resolves.toBeUndefined();
+    ).resolves.toBeNull();
+    await expect(repo.updateLink("1", { impressions: null, lessons: null })).resolves.toBeNull();
   });
 
   it("rejects too many or over-long tags", async () => {
@@ -350,7 +350,7 @@ describe("Phase 2 fields", () => {
     const many = Array.from({ length: 31 }, (_, i) => `t${i}`);
     await expect(repo.createLink({ ...base, tags: many })).rejects.toThrow(/tags/);
     await expect(repo.updateLink("1", { tags: ["x".repeat(41)] })).rejects.toThrow(/tags/);
-    await expect(repo.updateLink("1", { tags: ["praia"] })).resolves.toBeUndefined();
+    await expect(repo.updateLink("1", { tags: ["praia"] })).resolves.toBeNull();
   });
 
   it("rejects too many or over-long people names", async () => {
@@ -358,7 +358,7 @@ describe("Phase 2 fields", () => {
     const many = Array.from({ length: 31 }, (_, i) => `Pessoa ${i}`);
     await expect(repo.createLink({ ...base, people: many })).rejects.toThrow(/people/);
     await expect(repo.updateLink("1", { people: ["x".repeat(81)] })).rejects.toThrow(/people/);
-    await expect(repo.updateLink("1", { people: ["Maria Clara"] })).resolves.toBeUndefined();
+    await expect(repo.updateLink("1", { people: ["Maria Clara"] })).resolves.toBeNull();
   });
 });
 
@@ -393,8 +393,8 @@ describe("Phase 3 fields", () => {
     await expect(repo.createLink({ ...base, rating: 0 })).rejects.toThrow(/rating/);
     await expect(repo.updateLink("1", { rating: 6 })).rejects.toThrow(/rating/);
     await expect(repo.updateLink("1", { rating: 2.5 })).rejects.toThrow(/rating/);
-    await expect(repo.updateLink("1", { rating: 5 })).resolves.toBeUndefined();
-    await expect(repo.updateLink("1", { rating: null })).resolves.toBeUndefined();
+    await expect(repo.updateLink("1", { rating: 5 })).resolves.toBeNull();
+    await expect(repo.updateLink("1", { rating: null })).resolves.toBeNull();
   });
 });
 
@@ -447,7 +447,7 @@ describe("Phase 4 plan_items", () => {
         people: ["Alana"],
         plan_items: [{ text: "Ingressos", list: "checklist", who: "Alana", done: false }],
       })
-    ).resolves.toBeUndefined();
-    await expect(repo.updateLink("1", { plan_items: null })).resolves.toBeUndefined();
+    ).resolves.toBeNull();
+    await expect(repo.updateLink("1", { plan_items: null })).resolves.toBeNull();
   });
 });

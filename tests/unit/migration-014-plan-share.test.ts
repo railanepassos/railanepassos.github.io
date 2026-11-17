@@ -161,6 +161,19 @@ describe("migration 014: plan share token", () => {
     expect(await getShared("anon", token)).toBeNull();
   });
 
+  it("disable reports whether a row changed", async () => {
+    const id = await insertLink();
+    await enable(id);
+    const run = (target: string) =>
+      asRole("authenticated", () =>
+        db.query<{ ok: boolean }>("select public.links_plan_share_disable($1) as ok", [target])
+      );
+    expect((await run(id)).rows[0]!.ok).toBe(true);
+    expect(
+      (await run("00000000-0000-4000-8000-0000000000ff")).rows[0]!.ok
+    ).toBe(false);
+  });
+
   it("rejects a malformed or duplicated token at the table", async () => {
     const a = await insertLink();
     const b = await insertLink();

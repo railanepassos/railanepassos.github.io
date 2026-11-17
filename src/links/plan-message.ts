@@ -1,4 +1,4 @@
-import { planByPerson, PLAN_LISTS, readPlanItems, type PlanItem } from "./plan";
+import { filled, planByPerson, PLAN_LISTS, readPlanItems, type PlanItem } from "./plan";
 import { planShareUrl } from "./plan-share";
 import { formatScheduleLabel } from "./schedule";
 
@@ -24,10 +24,6 @@ const PENDING = "☐";
 
 function mark(item: PlanItem): string {
   return item.done ? DONE : PENDING;
-}
-
-function filled(value: string | null | undefined): string {
-  return (value ?? "").trim();
 }
 
 /** True when the place has anything worth sharing beyond its name. */
