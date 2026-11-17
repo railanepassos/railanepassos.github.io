@@ -6,6 +6,7 @@ import { MAX_TAGS, MAX_TAG_LENGTH } from "./tags";
 import { normalizeRating, reviewColumnsError, type ReviewColumns } from "./review";
 import { readPlanItems, storedPlanError, type PlanItem } from "./plan";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH } from "./people";
+import { parsePlanFragment, PLAN_FRAGMENT_PREFIX } from "./plan-share";
 
 export type LinkStatus = "wishlist" | "done";
 
@@ -36,6 +37,8 @@ export type LinkRow = {
   tags?: string[] | null;
   people?: string[] | null;
   plan_items?: PlanItem[] | null;
+  /** Plan share link (migration 014): null = off. Only ever written by the rpc functions. */
+  plan_share_token?: string | null;
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -127,6 +130,7 @@ export function normalizeLinkRow(
     tags: row.tags ?? null,
     people: row.people ?? null,
     plan_items: row.plan_items == null ? null : readPlanItems(row.plan_items),
+    plan_share_token: row.plan_share_token ?? null,
     rating: normalizeRating(row.rating),
     impressions: row.impressions ?? null,
     lessons: row.lessons ?? null,
@@ -238,11 +242,63 @@ function validateLinkFields(fields: {
   }
 }
 
+function validatePatch(patch: UpdateLinkPatch): UpdateLinkPatch {
+  validateLinkFields({
+    url: patch.url,
+    label: patch.label,
+    description: patch.description,
+    icon_url: patch.icon_url,
+    image_url: patch.image_url,
+    note: patch.note,
+    cost_text: patch.cost_text,
+    city: patch.city,
+    address: patch.address,
+    dossier: patch.dossier,
+    itinerary: patch.itinerary,
+    source_url: patch.source_url,
+    pose_refs: patch.pose_refs,
+    tags: patch.tags,
+    people: patch.people,
+    plan_items: patch.plan_items,
+    rating: patch.rating,
+    impressions: patch.impressions,
+    lessons: patch.lessons,
+    memory_url: patch.memory_url,
+  });
+
+  return patch.label !== undefined ? { ...patch, label: patch.label.trim() } : patch;
+}
+
+/** An editor write lost the race: the row changed after it was loaded. `fresh` is the current row. */
+export class StaleLinkError extends Error {
+  constructor(readonly fresh: LinkRow | null) {
+    super("link changed since it was loaded");
+  }
+}
+
 export interface LinksRepo {
   listLinks(): Promise<LinkRow[]>;
   createLink(input: CreateLinkInput): Promise<LinkRow>;
-  updateLink(id: string, patch: UpdateLinkPatch): Promise<void>;
+  /** Resolves with the row's new updated_at (null when the server did not say). */
+  updateLink(id: string, patch: UpdateLinkPatch): Promise<string | null>;
   deleteLink(id: string): Promise<void>;
+  /** One row, fresh from the server (null when it no longer exists). */
+  getLink(id: string): Promise<LinkRow | null>;
+  /**
+   * Optimistic concurrency for editor writes of the plan: updates only while the
+   * row still has the `updated_at` the editor loaded. Resolves with the new
+   * updated_at, or null when nothing matched (a participant or another editor
+   * saved in between). With no expected value the write is unconditional.
+   */
+  updateLinkIfUnchanged(
+    id: string,
+    patch: UpdateLinkPatch,
+    expectedUpdatedAt: string | null | undefined
+  ): Promise<{ updated_at: string | null } | null>;
+  /** Turn the plan share link on, or rotate it. Resolves with the new token. */
+  enablePlanShare(id: string): Promise<string>;
+  /** Turn the plan share link off (the old token stops working). */
+  disablePlanShare(id: string): Promise<boolean>;
 }
 
 export function createLinksRepo(client: SupabaseClient): LinksRepo {
@@ -299,44 +355,46 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
       return normalizeLinkRow(result.data!);
     },
 
-    async updateLink(id: string, patch: UpdateLinkPatch): Promise<void> {
-      validateLinkFields({
-        url: patch.url,
-        label: patch.label,
-        description: patch.description,
-        icon_url: patch.icon_url,
-        image_url: patch.image_url,
-        note: patch.note,
-        cost_text: patch.cost_text,
-        city: patch.city,
-        address: patch.address,
-        dossier: patch.dossier,
-        itinerary: patch.itinerary,
-        source_url: patch.source_url,
-        pose_refs: patch.pose_refs,
-        tags: patch.tags,
-        people: patch.people,
-        plan_items: patch.plan_items,
-        rating: patch.rating,
-        impressions: patch.impressions,
-        lessons: patch.lessons,
-        memory_url: patch.memory_url,
-      });
-
-      const sanitized =
-        patch.label !== undefined
-          ? { ...patch, label: patch.label.trim() }
-          : patch;
+    async updateLink(id: string, patch: UpdateLinkPatch): Promise<string | null> {
+      const sanitized = validatePatch(patch);
 
       const result = await (client
         .from("links")
         .update(sanitized)
-        .eq("id", id) as unknown as Promise<{
-        data: unknown;
+        .eq("id", id)
+        .select("updated_at") as unknown as Promise<{
+        data: Array<{ updated_at?: string | null }> | null;
         error: { message: string } | null;
       }>);
 
       if (result.error) throw new Error(result.error.message);
+      return result.data?.[0]?.updated_at ?? null;
+    },
+
+    async getLink(id: string): Promise<LinkRow | null> {
+      const result = await (client
+        .from("links")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle() as unknown as Promise<{
+        data: (Partial<LinkRow> & Pick<LinkRow, "id" | "url" | "label">) | null;
+        error: { message: string } | null;
+      }>);
+      if (result.error) throw new Error(result.error.message);
+      return result.data ? normalizeLinkRow(result.data) : null;
+    },
+
+    async updateLinkIfUnchanged(id, patch, expectedUpdatedAt) {
+      const sanitized = validatePatch(patch);
+      let query = client.from("links").update(sanitized).eq("id", id);
+      if (expectedUpdatedAt) query = query.eq("updated_at", expectedUpdatedAt);
+      const result = await (query.select("updated_at") as unknown as Promise<{
+        data: Array<{ updated_at?: string | null }> | null;
+        error: { message: string } | null;
+      }>);
+      if (result.error) throw new Error(result.error.message);
+      const row = result.data?.[0];
+      return row ? { updated_at: row.updated_at ?? null } : null;
     },
 
     async deleteLink(id: string): Promise<void> {
@@ -349,6 +407,22 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
       }>);
 
       if (result.error) throw new Error(result.error.message);
+    },
+
+    async enablePlanShare(id: string): Promise<string> {
+      const result = await client.rpc("links_plan_share_enable", { link_id: id });
+      if (result.error) throw new Error(result.error.message);
+      const token = typeof result.data === "string" ? result.data : "";
+      if (parsePlanFragment(PLAN_FRAGMENT_PREFIX + token) === null) {
+        throw new Error("invalid plan share token");
+      }
+      return token;
+    },
+
+    async disablePlanShare(id: string): Promise<boolean> {
+      const result = await client.rpc("links_plan_share_disable", { link_id: id });
+      if (result.error) throw new Error(result.error.message);
+      return result.data === true;
     },
   };
 }

@@ -43,6 +43,8 @@ beforeAll(async () => {
     create role service_role nologin;
     create schema auth;
     create table auth.users (id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as
+      $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   `);
   const files = readdirSync(MIGRATIONS)
     .filter((f: string) => f.endsWith(".sql"))

@@ -1,4 +1,5 @@
-import { planByPerson, PLAN_LISTS, readPlanItems, type PlanItem } from "./plan";
+import { filled, planByPerson, PLAN_LISTS, readPlanItems, type PlanItem } from "./plan";
+import { planShareUrl } from "./plan-share";
 import { formatScheduleLabel } from "./schedule";
 
 /**
@@ -15,6 +16,7 @@ export type PlanMessageInput = {
   scheduled_end?: string | null;
   people?: readonly string[] | null;
   plan_items?: unknown;
+  plan_share_token?: string | null;
 };
 
 const DONE = "✓";
@@ -24,17 +26,16 @@ function mark(item: PlanItem): string {
   return item.done ? DONE : PENDING;
 }
 
-function filled(value: string | null | undefined): string {
-  return (value ?? "").trim();
-}
-
 /** True when the place has anything worth sharing beyond its name. */
 export function hasPlanToShare(link: Pick<PlanMessageInput, "people" | "plan_items">): boolean {
   return (link.people ?? []).length > 0 || readPlanItems(link.plan_items).length > 0;
 }
 
-/** Message text; sections without content are left out. */
-export function buildPlanMessage(link: PlanMessageInput): string {
+/**
+ * Message text; sections without content are left out. With a share token and an
+ * origin, a final "Plano: <url>" line carries the public plan link.
+ */
+export function buildPlanMessage(link: PlanMessageInput, origin?: string): string {
   const sections: string[][] = [];
 
   const head = [link.label.trim()];
@@ -69,6 +70,9 @@ export function buildPlanMessage(link: PlanMessageInput): string {
       ...own.map((i) => `${mark(i)} ${i.text}${i.who ? ` (${i.who})` : ""}`),
     ]);
   }
+
+  const token = filled(link.plan_share_token);
+  if (token !== "" && origin) sections.push([`Plano: ${planShareUrl(origin, token)}`]);
 
   return sections.map((s) => s.join("\n")).join("\n\n");
 }

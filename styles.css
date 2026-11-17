@@ -1880,6 +1880,132 @@ body.links-screen-open {
   overflow-wrap: anywhere;
 }
 
+/* Link do plano (Phase 4.1): editor block + public read-only view */
+.links-detail__share[hidden],
+.links-detail__share-url[hidden],
+.links-detail__share-btn[hidden] {
+  display: none;
+}
+
+.links-detail__share-url {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border: 1px solid var(--app-line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+}
+
+.links-detail__share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Two classes: `.page-links-admin button { font: inherit }` would reset the size. */
+.links-detail__share .links-detail__share-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--app-line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--app-accent);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.links-detail__share .links-detail__share-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.links-detail__share-status {
+  min-height: 1.2em;
+  margin: 6px 0 0;
+  color: var(--app-muted);
+  font-size: 14px;
+}
+
+.links-public-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 16px;
+  font-size: 16px;
+}
+
+.links-public-plan__title {
+  margin: 0;
+  font-size: 1.4rem;
+  overflow-wrap: anywhere;
+}
+
+.links-public-plan__meta,
+.links-public-plan__text {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.links-public-plan__text {
+  white-space: pre-wrap;
+}
+
+.links-public-plan__item {
+  align-items: center;
+  min-height: 44px;
+}
+
+.links-public-plan__row {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.links-public-plan__check {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  accent-color: var(--app-accent, currentColor);
+}
+
+.links-public-plan__claim {
+  flex: none;
+  min-height: 48px;
+  max-width: 100%;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 16px;
+}
+
+.links-public-plan__notice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--app-surface-2, rgb(0 0 0 / 6%));
+  font-size: 16px;
+}
+
+.links-public-plan__message {
+  padding: 24px 16px;
+  font-size: 16px;
+  text-align: center;
+}
+
 .links-detail__memory {
   display: grid;
   justify-items: start;

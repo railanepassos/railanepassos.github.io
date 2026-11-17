@@ -1,4 +1,4 @@
-import type { LinkRow, CreateLinkInput, UpdateLinkPatch } from "./links-repo";
+import { StaleLinkError, type LinkRow, type CreateLinkInput, type UpdateLinkPatch } from "./links-repo";
 import { toolButton } from "./tool-button";
 import { inferIconPreset } from "./icons";
 import {
@@ -48,6 +48,7 @@ import {
   type PlanItem,
 } from "./plan";
 import { buildPlanMessage, hasPlanToShare, whatsappUrl } from "./plan-message";
+import { PLAN_STALE_NOTICE, planShareUrl } from "./plan-share";
 import {
   MORE_TEXT_FIELDS,
   emptyMoreTextValues,
@@ -1792,6 +1793,13 @@ export type ViewModalCallbacks = {
    * Rejects when the save fails; the detail then rolls the tick back.
    */
   onSavePlanItems?: (link: LinkRow, items: PlanItem[]) => Promise<void>;
+  /**
+   * Plan share link (Phase 4.1): turn on or rotate the link. Resolves with the new
+   * token. Without this and onPlanShareDisable the "Link do plano" block is hidden.
+   */
+  onPlanShareEnable?: (link: LinkRow) => Promise<string>;
+  /** Plan share link: turn it off. */
+  onPlanShareDisable?: (link: LinkRow) => Promise<void>;
   /** Tap on a tag chip: close the detail and filter the feed by that tag. */
   onTag?: (tag: string) => void;
   /** Tap on a person chip: close the detail and filter the feed by that person. */
@@ -1805,6 +1813,8 @@ export type ViewModalHandle = {
   open: (link: LinkRow) => void;
   close: () => void;
   currentId: () => string | null;
+  /** Re-render the open detail from fresh server data (no-op if another place is open or ticks are still saving). */
+  refresh: (link: LinkRow) => void;
 };
 
 /** One pose in the detail list: optional https link (new tab) + plain-text note. */
@@ -2115,7 +2125,66 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   planShareWrap.className = "links-detail__plan-action";
   planShareWrap.dataset.field = "plan-share";
   planShareWrap.appendChild(planShare);
-  planRow.value.append(planEditWrap, planShareWrap);
+
+  // "Link do plano" (Phase 4.1): the editor turns the public read-only link on/off.
+  const planLinkWrap = document.createElement("div");
+  planLinkWrap.className = "links-detail__plan-action links-detail__share";
+  planLinkWrap.dataset.field = "plan-link";
+  const planLinkTitle = document.createElement("p");
+  planLinkTitle.className = "links-detail__plan-title";
+  planLinkTitle.dataset.planLinkTitle = "";
+  planLinkTitle.textContent = "Link do plano";
+  const planLinkHint = document.createElement("p");
+  planLinkHint.className = "links-detail__plan-who-line";
+  const planLinkInput = document.createElement("input");
+  planLinkInput.type = "text";
+  planLinkInput.readOnly = true;
+  planLinkInput.className = "links-detail__share-url";
+  planLinkInput.setAttribute("aria-label", "Link do plano");
+  planLinkInput.addEventListener("focus", () => planLinkInput.select());
+  const planLinkButtons = document.createElement("div");
+  planLinkButtons.className = "links-detail__share-actions";
+  const planLinkBtn = (action: string, text: string): HTMLButtonElement => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "links-detail__share-btn";
+    b.dataset.action = action;
+    b.textContent = text;
+    planLinkButtons.appendChild(b);
+    return b;
+  };
+  const planLinkEnable = planLinkBtn("plan-link-enable", "Gerar link");
+  const planLinkCopy = planLinkBtn("plan-link-copy", "Copiar");
+  const planLinkRotate = planLinkBtn("plan-link-rotate", "Trocar link");
+  const planLinkDisable = planLinkBtn("plan-link-disable", "Desligar");
+  const planLinkStatus = document.createElement("p");
+  planLinkStatus.className = "links-detail__share-status";
+  planLinkStatus.setAttribute("role", "status");
+  planLinkWrap.append(
+    planLinkTitle,
+    planLinkHint,
+    planLinkInput,
+    planLinkButtons,
+    planLinkStatus
+  );
+  planLinkEnable.addEventListener("click", () => void changePlanShare("enable"));
+  planLinkRotate.addEventListener("click", () => {
+    if (
+      window.confirm(
+        "Trocar o link? O link atual deixa de funcionar e você precisará enviar o novo."
+      )
+    ) {
+      void changePlanShare("enable");
+    }
+  });
+  planLinkDisable.addEventListener("click", () => {
+    if (window.confirm("Desligar o link? Quem tem o link não verá mais o plano.")) {
+      void changePlanShare("disable");
+    }
+  });
+  planLinkCopy.addEventListener("click", () => void copyPlanLink());
+
+  planRow.value.append(planEditWrap, planShareWrap, planLinkWrap);
   info.append(planRow.row);
 
   // Photo poses: ordered list, each with an optional new-tab link and note.
@@ -2249,14 +2318,16 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     // Inside the Plano section when it shows; a bare place (empty section) keeps
     // "Editar plano" as a standalone action row so a plan can still be started.
     const standalone = planRow.row.hidden;
-    (standalone ? info : planRow.value).append(planEditWrap, planShareWrap);
-    for (const wrap of [planEditWrap, planShareWrap]) {
+    (standalone ? info : planRow.value).append(planEditWrap, planShareWrap, planLinkWrap);
+    for (const wrap of [planEditWrap, planShareWrap, planLinkWrap]) {
       wrap.classList.toggle("links-detail__row", standalone);
       wrap.classList.toggle("links-detail__row--action", standalone);
       wrap.classList.toggle("links-detail__plan-action", !standalone);
     }
     planEditWrap.hidden = !cb.onEditPlan;
     planShareWrap.hidden = !hasPlanToShare(link);
+    planLinkStatus.textContent = "";
+    renderPlanLink();
 
     domainText.textContent = linkDomain(link.url);
     original.href = link.url;
@@ -2312,6 +2383,67 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     backBtn.focus({ preventScroll: true });
   }
 
+  function renderPlanLink(): void {
+    if (!current) return;
+    const available = Boolean(cb.onPlanShareEnable && cb.onPlanShareDisable);
+    const token = current.plan_share_token ?? null;
+    planLinkWrap.hidden = !available || !(token !== null || hasPlanToShare(current));
+    const on = token !== null;
+    planLinkHint.textContent = on
+      ? "Ligado: quem tiver este link vê o plano (nomes e itens), sem login."
+      : "Desligado: ninguém acessa o plano por link.";
+    planLinkInput.hidden = !on;
+    planLinkInput.value = on ? planShareUrl(window.location.origin, token) : "";
+    planLinkEnable.hidden = on;
+    planLinkCopy.hidden = !on;
+    planLinkRotate.hidden = !on;
+    planLinkDisable.hidden = !on;
+  }
+
+  function setPlanLinkBusy(busy: boolean): void {
+    for (const b of [planLinkEnable, planLinkCopy, planLinkRotate, planLinkDisable]) {
+      b.disabled = busy;
+    }
+  }
+
+  async function changePlanShare(kind: "enable" | "disable"): Promise<void> {
+    const link = current;
+    if (!link) return;
+    const call = kind === "enable" ? cb.onPlanShareEnable : cb.onPlanShareDisable;
+    if (!call) return;
+    planLinkStatus.textContent = "";
+    setPlanLinkBusy(true);
+    try {
+      const result = await call(link);
+      const token = kind === "enable" ? (result as string) : null;
+      if (current?.id === link.id) {
+        current = { ...current, plan_share_token: token };
+        renderPlanLink();
+        planLinkStatus.textContent = kind === "enable" ? "Link pronto" : "Link desligado";
+      }
+    } catch {
+      planLinkStatus.textContent =
+        kind === "enable"
+          ? "Não foi possível gerar o link. Tente de novo."
+          : "Não foi possível desligar o link. Tente de novo.";
+    } finally {
+      setPlanLinkBusy(false);
+    }
+  }
+
+  async function copyPlanLink(): Promise<void> {
+    const url = planLinkInput.value;
+    if (url === "") return;
+    try {
+      if (!navigator.clipboard) throw new Error("no clipboard");
+      await navigator.clipboard.writeText(url);
+      planLinkStatus.textContent = "Link copiado";
+    } catch {
+      planLinkInput.select();
+      planLinkStatus.textContent = "Selecione o link e copie";
+    }
+  }
+
   /**
    * Share the plan as text. wa.me only when native share is unavailable: after an
    * awaited share() rejection the click's user activation is gone, so window.open
@@ -2319,7 +2451,7 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
    */
   async function sharePlan(): Promise<void> {
     if (!current) return;
-    const text = buildPlanMessage(current);
+    const text = buildPlanMessage(current, window.location.origin);
     const canNativeShare =
       typeof navigator.share === "function" && navigator.canShare?.({ text }) !== false;
     if (!canNativeShare) {
@@ -2433,7 +2565,18 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
       try {
         await save(link, sending);
         state.confirmed = sending;
-      } catch {
+      } catch (err) {
+        if (err instanceof StaleLinkError && err.fresh) {
+          // The plan changed on the server: show it, drop our optimistic ticks, say so.
+          state.confirmed = readPlanItems(err.fresh.plan_items);
+          state.local = state.confirmed;
+          if (current?.id === link.id) {
+            open(err.fresh);
+            planError.textContent = PLAN_STALE_NOTICE;
+            planError.hidden = false;
+          }
+          return;
+        }
         state.local = state.confirmed;
         if (current?.id === link.id) {
           current = { ...current, plan_items: state.confirmed };
@@ -2483,6 +2626,12 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     open,
     close,
     currentId: () => current?.id ?? null,
+    refresh: (link) => {
+      if (!current || current.id !== link.id) return;
+      const state = planSync.get(link.id);
+      if (state && state.pending > 0) return;
+      open(link);
+    },
   };
 }
 

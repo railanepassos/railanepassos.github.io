@@ -82,6 +82,28 @@ test.describe("Enviar plano no WhatsApp", () => {
       .toEqual([{ text: EXPECTED }]);
   });
 
+  test("share text carries the plan link when the row has a token", async ({ page }) => {
+    const token = "0123456789abcdef".repeat(4);
+    await page.addInitScript(() => {
+      (window as unknown as { __shared: { text: string }[] }).__shared = [];
+      Object.defineProperty(navigator, "share", {
+        configurable: true,
+        value: (data: { text: string }) => {
+          (window as unknown as { __shared: { text: string }[] }).__shared.push(data);
+          return Promise.resolve();
+        },
+      });
+    });
+    await openAuthedWith(page, [{ ...PLANNED, plan_share_token: token }, ...LINK_ROWS]);
+    const detail = await openDetail(page, "Lugar Whatsapp");
+    await detail.getByRole("button", { name: "Enviar no WhatsApp" }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as unknown as { __shared: { text: string }[] }).__shared[0]?.text)
+      )
+      .toContain(`#plano=${token}`);
+  });
+
   test("falls back to window.open with the wa.me URL", async ({ page }) => {
     await page.addInitScript(() => {
       // Shadow the prototype's share so the page sees "no Web Share support".
