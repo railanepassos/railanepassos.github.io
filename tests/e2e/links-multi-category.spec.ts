@@ -112,6 +112,7 @@ test.describe("multiple categories per item", () => {
     await openAuthedWith(page, [TRIP, ...LINK_ROWS]);
     await filterScope(page).locator('[data-category="passeio"]').click();
     await page.getByRole("button", { name: "Sortear experiência" }).first().click();
+    await page.locator(".links-draw-filter-sheet").getByRole("button", { name: "Sortear", exact: true }).click();
     const sheet = page.locator(".links-draw-sheet");
     await expect(sheet.locator(".links-draw-sheet__empty")).toBeHidden();
     // The main category of the only candidate shows once the reel settles.

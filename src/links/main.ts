@@ -44,6 +44,8 @@ import {
 } from "./admin-ui";
 import { filterLinksByCategory, type Category } from "./category";
 import { pickRandomItem } from "./pick-random";
+import { applyDrawFilters, hasActiveDrawFilters } from "./draw-filters";
+import { createDrawFilterSheet } from "./draw-sheet";
 import { sortLinksForDisplay, visibleListLinks } from "./sort-links";
 import {
   categoryCounts,
@@ -314,7 +316,7 @@ function bootDynamic(
     onQuery: (q) => setQuery(q),
     onAdd: () => formModal.openCreate(),
     onDeck: () => deckScreen.open(links, "wishlist"),
-    onDraw: () => runDraw(),
+    onDraw: () => drawFilterSheet.open(),
     onSignOut: () => {
       void (async () => {
         try {
@@ -329,6 +331,11 @@ function bootDynamic(
   const drawSheet: DrawSheetHandle = createDrawResultSheet({
     onView: (l) => viewModal.open(l),
     onRedraw: () => runDraw(),
+  });
+
+  const drawFilterSheet = createDrawFilterSheet({
+    getPool: () => filterLinksByCategory(visibleListLinks(links), categoryFilter),
+    onDraw: () => runDraw(),
   });
 
   const deckScreen: DeckHandle = createDeckScreen({
@@ -347,17 +354,21 @@ function bootDynamic(
     scheduleSheet.element,
     reviewSheet.element,
     planSheet.element,
+    drawFilterSheet.element,
     drawSheet.element,
     deckScreen.element
   );
 
   function runDraw(): void {
-    const pool = filterLinksByCategory(visibleListLinks(links), categoryFilter);
+    const categoryPool = filterLinksByCategory(visibleListLinks(links), categoryFilter);
+    const pool = applyDrawFilters(categoryPool, drawFilterSheet.getFilters());
     if (pool.length === 0) {
       drawSheet.openEmpty(
-        categoryFilter.length > 0
-          ? "Nenhuma experiência nas categorias filtradas para sortear."
-          : "Cadastre ao menos uma experiência para sortear."
+        hasActiveDrawFilters(drawFilterSheet.getFilters())
+          ? "Nenhuma experiência com esses filtros para sortear."
+          : categoryFilter.length > 0
+            ? "Nenhuma experiência nas categorias filtradas para sortear."
+            : "Cadastre ao menos uma experiência para sortear."
       );
       return;
     }

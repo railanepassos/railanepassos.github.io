@@ -4489,3 +4489,65 @@ select {
   border-radius: 8px;
   object-fit: cover;
 }
+
+/* --- Sortear filters sheet ------------------------------------------------ */
+.links-draw-filter__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 20px 12px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.links-draw-filter__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.links-draw-filter__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.links-draw-filter__tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--navy);
+  font: inherit;
+  font-size: max(16px, 1rem);
+  cursor: pointer;
+}
+
+.links-draw-filter__tag[aria-pressed="true"] {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+
+.links-draw-filter__count {
+  margin: 0;
+  color: var(--navy);
+  font-size: max(16px, 1rem);
+  font-weight: 600;
+  text-align: center;
+}
+
+.links-draw-filter-sheet .links-admin-button {
+  min-height: 48px;
+  font-size: max(16px, 1rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .links-draw-filter__tag {
+    transition: none;
+  }
+}
