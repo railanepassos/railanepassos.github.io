@@ -179,6 +179,35 @@ test.describe("Plano do passeio", () => {
     await expect(plan.locator("[data-plan-list='compras']")).toContainText("Biscoitos");
   });
 
+  test("two quick ticks where the first save fails: UI matches the last PATCH", async ({ page }) => {
+    await openAuthedWith(page, [PLANNED, ...LINK_ROWS]);
+    const bodies: Array<Record<string, unknown>> = [];
+    await page.route("**/rest/v1/links**", async (route) => {
+      if (route.request().method() === "PATCH") {
+        bodies.push(route.request().postDataJSON());
+      }
+      if (route.request().method() === "PATCH" && bodies.length === 1) {
+        await route.fulfill({ status: 400, contentType: "application/json", body: '{"message":"plan_items invalid: x"}' });
+        return;
+      }
+      await route.fulfill({ status: 204, body: "" });
+    });
+    const detail = await openDetail(page, "Lugar Planejado");
+    const boxes = detail.locator("[data-field='plan'] input[type='checkbox']");
+    // Raw clicks (not check()): Playwright would re-click a box the rollback unticked.
+    await page.evaluate(() => {
+      const box = (i: number) =>
+        document.querySelectorAll<HTMLInputElement>("[data-field='plan'] input[type='checkbox']")[i]!;
+      box(1).click();
+      box(2).click(); // re-queried: the first tick re-rendered the list
+    });
+    await expect(detail.getByRole("alert")).toHaveText("Não foi possível salvar o plano. Tente de novo.");
+    await expect.poll(() => bodies.length).toBeGreaterThanOrEqual(2);
+    const last = bodies.at(-1)!.plan_items as Array<{ done: boolean }>;
+    const ui = await boxes.evaluateAll((els) => els.map((e) => (e as HTMLInputElement).checked));
+    expect(ui).toEqual(last.map((i) => i.done));
+  });
+
   test("marking the place done does not touch the plan", async ({ page }) => {
     const writes = await openAuthedWith(page, [PLANNED, ...LINK_ROWS]);
     await page

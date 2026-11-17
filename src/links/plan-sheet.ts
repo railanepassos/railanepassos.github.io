@@ -1,4 +1,5 @@
 import { createScreenChrome } from "./admin-ui";
+import { toolButton } from "./tool-button";
 import { createChipInput, type ChipInputHandle } from "./chip-input";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH, normalizePerson, personKey } from "./people";
 import {
@@ -93,16 +94,6 @@ function fillOwnerSelect(
   select.value = current === "" || match === undefined ? "" : match;
 }
 
-function toolButton(glyph: string, ariaLabel: string): HTMLButtonElement {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "links-poses__tool";
-  btn.setAttribute("aria-label", ariaLabel);
-  btn.title = ariaLabel;
-  btn.textContent = glyph;
-  return btn;
-}
-
 const ADD_LABEL: Record<PlanList, string> = {
   checklist: "Adicionar item ao checklist",
   compras: "Adicionar item a lanches e compras",
@@ -183,7 +174,6 @@ function createListControl(
         fillOwnerSelect(ownerSelect, getParticipants(), current);
       };
       ownerSelect.addEventListener("focus", refreshOwner);
-      ownerSelect.addEventListener("pointerdown", refreshOwner);
       ownerSelect.addEventListener("change", () => {
         row.who = ownerSelect.value;
       });

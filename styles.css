@@ -1871,6 +1871,15 @@ body.links-screen-open {
   padding-left: 32px;
 }
 
+.links-detail__plan-action {
+  margin-top: 12px;
+}
+
+.links-detail__plan-who-line {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .links-detail__memory {
   display: grid;
   justify-items: start;

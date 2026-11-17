@@ -1073,7 +1073,110 @@ describe("detail: Plano do passeio", () => {
     const boxes = section.querySelectorAll<HTMLInputElement>("input[type='checkbox']");
     expect(boxes).toHaveLength(3);
     expect([...boxes].every((b) => b.disabled)).toBe(true);
-    expect(section.querySelectorAll("button")).toHaveLength(0);
+  });
+
+  it("shows participants inside the section, which appears with participants only", () => {
+    const modal = createViewModal(cb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ people: ["Alana", "Bia"] }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    expect(section.hidden).toBe(false);
+    expect(section.querySelector("[data-plan-people]")!.textContent).toContain("Alana, Bia");
+    expect(section.querySelector<HTMLElement>("[data-plan-list='checklist']")!.hidden).toBe(true);
+  });
+
+  it("keeps Editar plano and Enviar no WhatsApp inside the section", () => {
+    const modal = createViewModal(cb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    expect(section.querySelector("[data-action='edit-plan']")).not.toBeNull();
+    expect(section.querySelector("[data-action='share-plan']")).not.toBeNull();
+  });
+
+  it("serializes tick saves and always sends the latest state", async () => {
+    const resolvers: Array<() => void> = [];
+    const save = vi.fn(() => new Promise<void>((resolve) => resolvers.push(resolve)));
+    const modal = createViewModal({ ...cb(), onSavePlanItems: save });
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    const tick = (i: number) => {
+      const box = section.querySelectorAll<HTMLInputElement>("input[type='checkbox']")[i]!;
+      box.checked = !box.checked;
+      box.dispatchEvent(new Event("change"));
+    };
+    tick(1);
+    tick(2);
+    await Promise.resolve();
+    expect(save).toHaveBeenCalledTimes(1);
+    resolvers[0]!();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(save).toHaveBeenCalledTimes(2);
+    const calls = save.mock.calls as unknown as Array<[unknown, Array<{ done: boolean }>]>;
+    expect(calls[1]![1].map((i) => i.done)).toEqual([true, true, true]);
+  });
+
+  it("rolls back to the last confirmed state when an earlier tick fails", async () => {
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("plan_items invalid: x"))
+      .mockResolvedValue(undefined);
+    const modal = createViewModal({ ...cb(), onSavePlanItems: save });
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const section = modal.element.querySelector<HTMLElement>("[data-field='plan']")!;
+    const tick = (i: number) => {
+      const box = section.querySelectorAll<HTMLInputElement>("input[type='checkbox']")[i]!;
+      box.checked = !box.checked;
+      box.dispatchEvent(new Event("change"));
+    };
+    tick(1);
+    tick(2);
+    await new Promise((r) => setTimeout(r, 0));
+    const boxes = [...section.querySelectorAll<HTMLInputElement>("input[type='checkbox']")];
+    const last = (save.mock.calls.at(-1) as unknown as [unknown, Array<{ done: boolean }>])[1];
+    expect(boxes.map((b) => b.checked)).toEqual(last.map((i) => i.done));
+    expect(boxes.map((b) => b.checked)).toEqual([true, false, false]);
+  });
+
+  it("waits for pending tick saves before opening the plan sheet", async () => {
+    let resolve!: () => void;
+    const save = vi.fn(() => new Promise<void>((r) => (resolve = r)));
+    const callbacks = { ...cb(), onSavePlanItems: save };
+    const modal = createViewModal(callbacks);
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    const box = modal.element.querySelectorAll<HTMLInputElement>("[data-field='plan'] input[type='checkbox']")[1]!;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    modal.element.querySelector<HTMLButtonElement>("[data-action='edit-plan']")!.click();
+    await Promise.resolve();
+    expect(callbacks.onEditPlan).not.toHaveBeenCalled();
+    resolve();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(callbacks.onEditPlan).toHaveBeenCalledTimes(1);
+    const opened = callbacks.onEditPlan.mock.calls[0]![0] as { plan_items: Array<{ done: boolean }> };
+    expect(opened.plan_items[1]!.done).toBe(true);
+  });
+
+  it("does not fall back to wa.me after a failed native share; shows a message", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: () => Promise.reject(new Error("boom")),
+    });
+    const modal = createViewModal(cb());
+    document.body.appendChild(modal.element);
+    modal.open(row({ plan_items: plan }));
+    modal.element.querySelector<HTMLButtonElement>("[data-action='share-plan']")!.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(open).not.toHaveBeenCalled();
+    const alert = modal.element.querySelector<HTMLElement>("[data-field='plan'] [role='alert']")!;
+    expect(alert.hidden).toBe(false);
+    expect(alert.textContent).toBe("Não foi possível compartilhar o plano. Tente de novo.");
+    Object.defineProperty(navigator, "share", { configurable: true, value: undefined });
+    open.mockRestore();
   });
 
   it("ticking saves the whole plan optimistically and updates the progress", async () => {
@@ -1110,7 +1213,7 @@ describe("detail: Plano do passeio", () => {
     expect(section.querySelector("[data-plan-list='checklist']")!.textContent).toContain("1 de 2");
     const alert = section.querySelector<HTMLElement>("[role='alert']")!;
     expect(alert.hidden).toBe(false);
-    expect(alert.textContent).toBe("Sem conexão.");
+    expect(alert.textContent).toBe("Não foi possível salvar o plano. Tente de novo.");
   });
 
   it("hides the section (and an empty list) when there is nothing to show", () => {

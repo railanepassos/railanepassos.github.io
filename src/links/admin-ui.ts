@@ -1,4 +1,5 @@
 import type { LinkRow, CreateLinkInput, UpdateLinkPatch } from "./links-repo";
+import { toolButton } from "./tool-button";
 import { inferIconPreset } from "./icons";
 import {
   CATEGORY_OPTIONS,
@@ -1231,19 +1232,19 @@ export function createLinkFormModal(
 
       const tools = document.createElement("div");
       tools.className = "links-poses__tools";
-      const up = poseToolButton("↑", `Subir pose ${n}`);
+      const up = toolButton("↑", `Subir pose ${n}`);
       up.disabled = i === 0;
       up.addEventListener("click", () => {
         poses = moveItem(poses, i, i - 1);
         renderPoses(`up-${i - 1}`);
       });
-      const down = poseToolButton("↓", `Descer pose ${n}`);
+      const down = toolButton("↓", `Descer pose ${n}`);
       down.disabled = i === poses.length - 1;
       down.addEventListener("click", () => {
         poses = moveItem(poses, i, i + 1);
         renderPoses(`down-${i + 1}`);
       });
-      const remove = poseToolButton("×", `Remover pose ${n}`);
+      const remove = toolButton("×", `Remover pose ${n}`);
       remove.addEventListener("click", () => {
         poses = poses.filter((_, j) => j !== i);
         renderPoses("add");
@@ -1830,15 +1831,8 @@ function renderPoseItem(ref: { url?: string; note?: string }, index: number): HT
   return li;
 }
 
-function poseToolButton(glyph: string, ariaLabel: string): HTMLButtonElement {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "links-poses__tool";
-  btn.setAttribute("aria-label", ariaLabel);
-  btn.title = ariaLabel;
-  btn.textContent = glyph;
-  return btn;
-}
+const PLAN_SAVE_ERROR = "Não foi possível salvar o plano. Tente de novo.";
+const PLAN_SHARE_ERROR = "Não foi possível compartilhar o plano. Tente de novo.";
 
 function infoRow(icon: IconName, term: string): { row: HTMLElement; value: HTMLElement } {
   const row = document.createElement("div");
@@ -2060,6 +2054,16 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   const planRow = infoRow("clipboard", "Plano do passeio");
   planRow.row.dataset.field = "plan";
   planRow.row.classList.add("links-detail__row--long");
+  const planPeople = document.createElement("div");
+  planPeople.className = "links-detail__plan-list";
+  planPeople.dataset.planPeople = "";
+  const planPeopleTitle = document.createElement("p");
+  planPeopleTitle.className = "links-detail__plan-title";
+  planPeopleTitle.textContent = "Quem vai";
+  const planPeopleText = document.createElement("p");
+  planPeopleText.className = "links-detail__plan-who-line";
+  planPeople.append(planPeopleTitle, planPeopleText);
+  planRow.value.appendChild(planPeople);
   const planLists = PLAN_LISTS.map(({ key, title }) => {
     const block = document.createElement("div");
     block.className = "links-detail__plan-list";
@@ -2096,7 +2100,7 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   planEditText.textContent = "Editar plano";
   planEdit.append(uiIcon("edit", 16), planEditText);
   const planEditWrap = document.createElement("div");
-  planEditWrap.className = "links-detail__row links-detail__row--action";
+  planEditWrap.className = "links-detail__plan-action";
   planEditWrap.dataset.field = "plan-edit";
   planEditWrap.appendChild(planEdit);
   const planShare = document.createElement("button");
@@ -2108,10 +2112,11 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   planShare.append(uiIcon("share", 16), planShareText);
   planShare.addEventListener("click", () => void sharePlan());
   const planShareWrap = document.createElement("div");
-  planShareWrap.className = "links-detail__row links-detail__row--action";
+  planShareWrap.className = "links-detail__plan-action";
   planShareWrap.dataset.field = "plan-share";
   planShareWrap.appendChild(planShare);
-  info.append(planRow.row, planEditWrap, planShareWrap);
+  planRow.value.append(planEditWrap, planShareWrap);
+  info.append(planRow.row);
 
   // Photo poses: ordered list, each with an optional new-tab link and note.
   const posesRow = infoRow("clipboard", "Referências de pose");
@@ -2241,6 +2246,15 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
 
     planError.hidden = true;
     renderPlan();
+    // Inside the Plano section when it shows; a bare place (empty section) keeps
+    // "Editar plano" as a standalone action row so a plan can still be started.
+    const standalone = planRow.row.hidden;
+    (standalone ? info : planRow.value).append(planEditWrap, planShareWrap);
+    for (const wrap of [planEditWrap, planShareWrap]) {
+      wrap.classList.toggle("links-detail__row", standalone);
+      wrap.classList.toggle("links-detail__row--action", standalone);
+      wrap.classList.toggle("links-detail__plan-action", !standalone);
+    }
     planEditWrap.hidden = !cb.onEditPlan;
     planShareWrap.hidden = !hasPlanToShare(link);
 
@@ -2298,28 +2312,38 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     backBtn.focus({ preventScroll: true });
   }
 
-  /** Share the plan as text: native share sheet when present, else wa.me in a new tab. */
+  /**
+   * Share the plan as text. wa.me only when native share is unavailable: after an
+   * awaited share() rejection the click's user activation is gone, so window.open
+   * would be popup-blocked; show a message instead.
+   */
   async function sharePlan(): Promise<void> {
     if (!current) return;
     const text = buildPlanMessage(current);
-    if (typeof navigator.share === "function") {
-      try {
-        await navigator.share({ text });
-      } catch (err) {
-        if (!(err instanceof DOMException && err.name === "AbortError")) {
-          window.open(whatsappUrl(text), "_blank", "noopener");
-        }
-      }
+    const canNativeShare =
+      typeof navigator.share === "function" && navigator.canShare?.({ text }) !== false;
+    if (!canNativeShare) {
+      window.open(whatsappUrl(text), "_blank", "noopener");
       return;
     }
-    window.open(whatsappUrl(text), "_blank", "noopener");
+    planError.hidden = true;
+    try {
+      await navigator.share({ text });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      planError.textContent = PLAN_SHARE_ERROR;
+      planError.hidden = false;
+    }
   }
 
   /** Plan section of the open link: one checkbox per item, progress per list. */
   function renderPlan(): void {
     if (!current) return;
     const planItems = readPlanItems(current.plan_items);
-    planRow.row.hidden = planItems.length === 0;
+    const people = current.people ?? [];
+    planRow.row.hidden = planItems.length === 0 && people.length === 0;
+    planPeople.hidden = people.length === 0;
+    planPeopleText.textContent = people.join(", ");
     for (const list of planLists) {
       const entries = planItems
         .map((item, index) => ({ item, index }))
@@ -2372,27 +2396,55 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     );
   }
 
-  /** Optimistic: show the tick, save, and put the item back if the save fails. */
-  async function tickPlanItem(index: number, done: boolean): Promise<void> {
+  /**
+   * Per place: `confirmed` is what the server last accepted, `local` what the UI
+   * shows, `chain` serializes the saves so they never overlap or land out of order.
+   */
+  type PlanSync = { confirmed: PlanItem[]; local: PlanItem[]; chain: Promise<void>; pending: number };
+  const planSync = new Map<string, PlanSync>();
+
+  function syncFor(link: LinkRow): PlanSync {
+    let state = planSync.get(link.id);
+    if (!state) {
+      state = { confirmed: [], local: [], chain: Promise.resolve(), pending: 0 };
+      planSync.set(link.id, state);
+    }
+    if (state.pending === 0) {
+      state.confirmed = readPlanItems(link.plan_items);
+      state.local = state.confirmed;
+    }
+    return state;
+  }
+
+  /** Optimistic: show the tick, queue the save of the latest state, roll back to the confirmed one on failure. */
+  function tickPlanItem(index: number, done: boolean): void {
     const link = current;
-    if (!link || !cb.onSavePlanItems) return;
-    const items = readPlanItems(link.plan_items);
-    const previous = items[index]?.done ?? !done;
-    const next = togglePlanItem(items, index, done);
+    const save = cb.onSavePlanItems;
+    if (!link || !save) return;
+    const state = syncFor(link);
+    const next = togglePlanItem(readPlanItems(link.plan_items), index, done);
+    state.local = next;
     planError.hidden = true;
     current = { ...link, plan_items: next };
     renderPlan();
-    try {
-      await cb.onSavePlanItems(link, next);
-    } catch (err) {
-      if (current?.id !== link.id) return;
-      const latest = readPlanItems(current.plan_items);
-      current = { ...current, plan_items: togglePlanItem(latest, index, previous) };
-      planError.textContent =
-        err instanceof Error && err.message !== "" ? err.message : "Não foi possível salvar. Tente novamente.";
-      planError.hidden = false;
-      renderPlan();
-    }
+    state.pending++;
+    state.chain = state.chain.then(async () => {
+      const sending = state.local;
+      try {
+        await save(link, sending);
+        state.confirmed = sending;
+      } catch {
+        state.local = state.confirmed;
+        if (current?.id === link.id) {
+          current = { ...current, plan_items: state.confirmed };
+          planError.textContent = PLAN_SAVE_ERROR;
+          planError.hidden = false;
+          renderPlan();
+        }
+      } finally {
+        state.pending--;
+      }
+    });
   }
 
   function act(fn: (link: LinkRow) => void): void {
@@ -2411,7 +2463,12 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     if (cb.onEditReview) act(cb.onEditReview);
   });
   planEdit.addEventListener("click", () => {
-    if (cb.onEditPlan) act(cb.onEditPlan);
+    const edit = cb.onEditPlan;
+    if (!edit || !current) return;
+    const state = planSync.get(current.id);
+    // Pending tick saves land (or roll back) first, so the sheet starts from the settled plan.
+    if (state && state.pending > 0) void state.chain.then(() => act(edit));
+    else act(edit);
   });
   backBtn.addEventListener("click", close);
   overlay.addEventListener("keydown", (e) => {

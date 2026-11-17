@@ -100,6 +100,36 @@ test.describe("Enviar plano no WhatsApp", () => {
       .toEqual([[`https://wa.me/?text=${encodeURIComponent(EXPECTED)}`, "_blank", "noopener"]]);
   });
 
+  test("does not open wa.me after a failed native share and shows a message", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "share", {
+        configurable: true,
+        value: () => Promise.reject(new Error("share failed")),
+      });
+      (window as unknown as { __opened: unknown[][] }).__opened = [];
+      window.open = ((...args: unknown[]) => {
+        (window as unknown as { __opened: unknown[][] }).__opened.push(args);
+        return null;
+      }) as typeof window.open;
+    });
+    await openAuthedWith(page, [PLANNED, ...LINK_ROWS]);
+    const detail = await openDetail(page, "Lugar Whatsapp");
+    await detail.getByRole("button", { name: "Enviar no WhatsApp" }).click();
+    await expect(detail.getByRole("alert")).toHaveText(
+      "Não foi possível compartilhar o plano. Tente de novo."
+    );
+    expect(await page.evaluate(() => (window as unknown as { __opened: unknown[] }).__opened)).toEqual([]);
+  });
+
+  test("participants and both actions live inside the Plano section", async ({ page }) => {
+    await openAuthedWith(page, [{ ...BASE, people: ["Alana"] }, ...LINK_ROWS]);
+    const detail = await openDetail(page, "Lugar Whatsapp");
+    const plan = detail.locator("[data-field='plan']");
+    await expect(plan).toContainText("Alana");
+    await expect(plan.getByRole("button", { name: "Enviar no WhatsApp" })).toBeVisible();
+    await expect(plan.getByRole("button", { name: "Editar plano" })).toBeVisible();
+  });
+
   test("button is hidden when the place has no plan and no participants", async ({ page }) => {
     await openAuthedWith(page, [BASE, ...LINK_ROWS]);
     const detail = await openDetail(page, "Lugar Whatsapp");

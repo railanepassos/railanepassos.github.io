@@ -81,6 +81,7 @@ import {
  * the login affordance and never show experience cards to guests.
  */
 
+const PLAN_SAVE_ERROR = "Não foi possível salvar o plano. Tente de novo.";
 const GENERIC_ERROR = "Algo deu errado. Tente novamente.";
 
 type Els = {
@@ -440,8 +441,8 @@ function bootDynamic(
           deckScreen.refresh(links);
           planSheet.close();
           reopenDetail();
-        } catch (err) {
-          planSheet.setError(messageOf(err, GENERIC_ERROR));
+        } catch {
+          planSheet.setError(PLAN_SAVE_ERROR);
         } finally {
           planSheet.setBusy(false);
         }
