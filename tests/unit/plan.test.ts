@@ -188,6 +188,8 @@ describe("togglePlanItem", () => {
 
   it("returns an equal copy for an out-of-range index", () => {
     expect(togglePlanItem(items, 5, true)).toEqual(items);
+  });
+});
 
 describe("ownerOptions", () => {
   it("lists the participants, with the stored owner kept as an extra when absent", () => {

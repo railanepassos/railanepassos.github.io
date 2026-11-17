@@ -267,6 +267,7 @@ test.describe("Plano do passeio", () => {
     await expect(detail.getByRole("alert").filter({ hasText: /\S/ })).toBeVisible();
     await expect(compras).toContainText("0 de 1");
     await expect(box).not.toBeChecked();
+  });
 
   test("assigns an owner per item, keeps an ex-participant, shows who does what", async ({ page }) => {
     const writes = await openAuthedWith(page, [
