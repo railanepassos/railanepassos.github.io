@@ -3,6 +3,7 @@ import {
   EMPTY_DRAW_FILTERS,
   applyDrawFilters,
   drawCities,
+  drawCost,
   hasActiveDrawFilters,
   type DrawFilters,
 } from "../../src/links/draw-filters";
@@ -132,5 +133,20 @@ describe("hasActiveDrawFilters", () => {
     expect(hasActiveDrawFilters(f({ city: "x" }))).toBe(true);
     expect(hasActiveDrawFilters(f({ tags: ["a"] }))).toBe(true);
     expect(hasActiveDrawFilters(f({ duration: "rapido" }))).toBe(true);
+  });
+});
+
+describe("drawCost", () => {
+  it("a number in the text wins over free words", () => {
+    expect(drawCost("R$ 20, crianças grátis")).toBe(20);
+    expect(drawCost("R$ 30, grátis até 12 anos")).toBe(30);
+  });
+  it("free words count as 0 only when there is no number", () => {
+    expect(drawCost("Grátis")).toBe(0);
+    expect(drawCost("Entrada franca")).toBe(0);
+  });
+  it("null when unknown", () => {
+    expect(drawCost("a combinar")).toBeNull();
+    expect(drawCost(null)).toBeNull();
   });
 });

@@ -92,7 +92,7 @@ test.describe("draw filters", () => {
         const cs = getComputedStyle(n);
         return { h: n.getBoundingClientRect().height, fs: parseFloat(cs.fontSize) };
       });
-      expect(m.h).toBeGreaterThanOrEqual(47.5);
+      expect(m.h).toBeGreaterThanOrEqual(48);
       expect(m.fs).toBeGreaterThanOrEqual(16);
     }
   });

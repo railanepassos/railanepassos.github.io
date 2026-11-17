@@ -89,7 +89,7 @@ export function createDrawFilterSheet<T extends DrawFilterable>(
   costInput.step = "any";
   costInput.inputMode = "decimal";
   costInput.placeholder = "Sem limite";
-  costInput.className = "links-admin-form__control links-admin-form__control--select";
+  costInput.className = "links-admin-form__control links-admin-form__control--touch";
 
   const citySelect = document.createElement("select");
   citySelect.id = "links-draw-city";

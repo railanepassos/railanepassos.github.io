@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify(supabaseAnonKey),
     },
     test: {
+      env: { TZ: "America/Sao_Paulo" },
       include: ["tests/unit/**/*.test.ts"],
       exclude: ["tests/e2e/**", "node_modules/**"],
       coverage: {

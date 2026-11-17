@@ -37,11 +37,15 @@ export type DrawFilterable = {
 
 const FREE_WORDS = ["gratis", "gratuito", "gratuita", "entrada franca"];
 
-/** Cost in R$ for the draw: free words = 0, first number otherwise, null if unknown. */
+/**
+ * Cost in R$ for the draw: a number in the text wins ("R$ 20, crianças grátis"
+ * = 20); free words count as 0 only when there is no number; null if unknown.
+ */
 export function drawCost(text: string | null | undefined): number | null {
+  const n = costNumber(text);
+  if (n !== null) return n;
   const folded = fold(text ?? "");
-  if (FREE_WORDS.some((w) => folded.includes(w))) return 0;
-  return costNumber(text);
+  return FREE_WORDS.some((w) => folded.includes(w)) ? 0 : null;
 }
 
 export function hasActiveDrawFilters(filters: DrawFilters): boolean {

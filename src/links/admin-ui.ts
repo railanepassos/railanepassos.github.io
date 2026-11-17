@@ -291,7 +291,6 @@ export type CreatePrefill = Partial<
     | "sources"
     | "duration"
     | "cost_text"
-    | "duration"
     | "city"
     | "address"
     | "dossier"

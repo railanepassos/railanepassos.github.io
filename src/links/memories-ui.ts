@@ -184,11 +184,13 @@ function renderAnniversaries(
 export function renderMemoriesTimeline(
   links: readonly LinkRow[],
   handlers: MemoriesHandlers,
-  now: Date = new Date()
+  now: Date = new Date(),
+  /** Source of the "Há N anos" highlight: all done items, not the filtered timeline. */
+  anniversarySource: readonly LinkRow[] = links
 ): HTMLElement {
   const root = document.createElement("div");
   root.className = "links-memories";
-  const highlight = renderAnniversaries(links, handlers, now);
+  const highlight = renderAnniversaries(anniversarySource, handlers, now);
   if (highlight) root.appendChild(highlight);
   const groups = groupMemories(links);
   if (groups.length === 0) {

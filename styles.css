@@ -1638,8 +1638,9 @@ body.links-screen-open {
   outline-offset: 1px;
 }
 
-/* Duração select: 16px+ text and a 48px tap target. */
-.links-admin-form__control--select {
+/* Touch controls (selects, number inputs): 16px+ text and a 48px tap target. */
+.links-admin-form__control--select,
+.links-admin-form__control--touch {
   min-height: 48px;
   font-size: max(16px, 1rem);
 }
@@ -4595,10 +4596,4 @@ select {
 .links-draw-filter-sheet .links-admin-button {
   min-height: 48px;
   font-size: max(16px, 1rem);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .links-draw-filter__tag {
-    transition: none;
-  }
 }

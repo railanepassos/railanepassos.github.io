@@ -117,3 +117,15 @@ describe("renderMemoriesSwitch", () => {
     expect(onList).toHaveBeenCalled();
   });
 });
+
+describe("anniversary highlight source", () => {
+  it("uses the full list, not the filtered timeline", () => {
+    const now = new Date("2026-11-10T12:00:00-03:00");
+    const old = row({ id: "old", label: "Passeio antigo", completed_at: "2024-11-10T15:00:00-03:00" });
+    const shown = row({ id: "new", label: "Outro", completed_at: "2026-05-01T15:00:00-03:00" });
+    const el = renderMemoriesTimeline([shown], { onView: vi.fn() }, now, [old, shown]);
+    expect(el.querySelector(".links-anniversary")?.textContent).toContain("Passeio antigo");
+    expect(el.querySelector(".links-memories")?.textContent ?? el.textContent).toContain("Outro");
+    expect(el.querySelectorAll(".links-memory")).toHaveLength(1);
+  });
+});

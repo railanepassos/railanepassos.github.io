@@ -943,7 +943,12 @@ function bootDynamic(
     if (filterBar) els.list.appendChild(filterBar);
     const filtering = query.trim().length > 0 || categoryFilter.length > 0;
     if (section === "memories" && (visible.length > 0 || !filtering)) {
-      els.list.appendChild(renderMemoriesTimeline(visible, { onView: (l) => viewModal.open(l) }));
+      els.list.appendChild(renderMemoriesTimeline(
+          visible,
+          { onView: (l) => viewModal.open(l) },
+          new Date(),
+          linksForSection(links, "done")
+        ));
     } else if (visible.length === 0) {
       const empty = document.createElement("p");
       empty.className = "links-status";
