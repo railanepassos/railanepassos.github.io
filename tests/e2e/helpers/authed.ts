@@ -57,18 +57,21 @@ let stamp = 0;
 /** Opens /p/a8f3k2/ with a fake session. GET returns `rows`; POST/PATCH are captured. */
 export async function openAuthedWith(
   page: Page,
-  initialRows: Array<Record<string, unknown>>
+  initialRows: Array<Record<string, unknown>>,
+  options: { /** Fragment to open the page with, e.g. "#rascunho=...". */ hash?: string; /** No stored session: the login form answers with the fake session. */ loggedOut?: boolean } = {}
 ): Promise<Writes> {
   // Own copies: the mock "server" mutates its rows, shared fixtures must stay pristine.
   const rows = initialRows.map((row) => ({ ...row }));
   const writes: Writes = { created: null, patched: null, allPatched: [], rows };
-  await page.addInitScript(
-    ([key, value]) => {
-      localStorage.setItem(key, value);
-      localStorage.setItem("links-remember-me", "1");
-    },
-    [`sb-${PROJECT_REF}-auth-token`, fakeSession()] as const
-  );
+  if (!options.loggedOut) {
+    await page.addInitScript(
+      ([key, value]) => {
+        localStorage.setItem(key, value);
+        localStorage.setItem("links-remember-me", "1");
+      },
+      [`sb-${PROJECT_REF}-auth-token`, fakeSession()] as const
+    );
+  }
   await page.route(`${SUPABASE}/rest/v1/links**`, async (route) => {
     const request = route.request();
     const method = request.method();
@@ -110,10 +113,14 @@ export async function openAuthedWith(
     }
   });
   await page.route(`${SUPABASE}/auth/v1/**`, (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: "{}" })
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: options.loggedOut && route.request().url().includes("/token") ? fakeSession() : "{}",
+    })
   );
-  await page.goto("/p/a8f3k2/");
-  await expect(page.locator(".feed-card").first()).toBeVisible();
+  await page.goto(`/p/a8f3k2/${options.hash ?? ""}`);
+  if (!options.loggedOut) await expect(page.locator(".feed-card").first()).toBeVisible();
   return writes;
 }
 

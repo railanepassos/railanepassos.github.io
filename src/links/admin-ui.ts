@@ -258,6 +258,26 @@ function canShare(): boolean {
 /** Label of the source-post field (form, errors). */
 const SOURCE_TERM = "Link do post original";
 
+/** What "Nova experiência" can open pre-filled (share target, item drafts). */
+export type CreatePrefill = Partial<
+  Pick<
+    LinkFormValues,
+    | "url"
+    | "label"
+    | "description"
+    | "image_url"
+    | "source_url"
+    | "category"
+    | "tags"
+    | "people"
+    | "cost_text"
+    | "city"
+    | "address"
+    | "dossier"
+    | "itinerary"
+  >
+>;
+
 export type LinkFormValues = MoreTextValues & {
   url: string;
   label: string;
@@ -987,7 +1007,7 @@ export function createDeleteConfirmSheet(): DeleteSheetHandle {
 
 export type LinkFormHandle = {
   element: HTMLElement;
-  openCreate: (prefill?: { url?: string }) => void;
+  openCreate: (prefill?: CreatePrefill) => void;
   openEdit: (link: LinkRow) => void;
   close: () => void;
   setError: (message: string) => void;
@@ -1282,7 +1302,7 @@ export function createLinkFormModal(
   }
 
   /** Fill the "Mais detalhes" fields; opens the section when any has content. */
-  function writeMoreText(link: LinkRow | null): void {
+  function writeMoreText(link: Partial<LinkRow> | null): void {
     let any = false;
     for (const f of moreText) {
       const value = link?.[f.key] ?? "";
@@ -1393,15 +1413,16 @@ export function createLinkFormModal(
     // Do not autofocus fields — on mobile that pops the keyboard immediately.
   }
 
-  function openCreate(prefill?: { url?: string }): void {
+  function openCreate(prefill?: CreatePrefill): void {
     editingId = null;
     title.textContent = "Nova experiência";
     form.reset();
-    if (prefill?.url) {
-      urlField.input.value = prefill.url;
-    }
-    pickedCategory = "";
-    writeMoreText(null);
+    urlField.input.value = prefill?.url ?? "";
+    labelField.input.value = prefill?.label ?? "";
+    descField.input.value = prefill?.description ?? "";
+    imageField.input.value = prefill?.image_url ?? "";
+    pickedCategory = prefill?.category && isCategory(prefill.category) ? prefill.category : "";
+    writeMoreText(prefill ?? null);
     syncCategoryChips();
     syncPreview();
     descField.syncHeight();

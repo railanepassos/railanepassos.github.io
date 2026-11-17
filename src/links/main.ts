@@ -5,6 +5,7 @@ import { createAuth, type Auth } from "./auth";
 import { createAuthStorage, setRememberMe } from "./session-storage";
 import { PLAN_STALE_NOTICE, isPlanShareFragment } from "./plan-share";
 import { bootSharedPlan } from "./shared-plan-boot";
+import { isDraftFragment, parseDraft, type ParseDraftResult } from "./draft";
 import { StaleLinkError, createLinksRepo, type LinksRepo, type LinkRow, type UpdateLinkPatch } from "./links-repo";
 import { renderGuestGate } from "./render";
 import { collectTags } from "./tags";
@@ -147,6 +148,19 @@ function bootStatic(els: Els): void {
 }
 
 /**
+ * Item draft read from `#rascunho=` (Phase 5), held until the editor is
+ * logged in (same idea as `pendingSharedUrl`). It only pre-fills a form.
+ */
+let pendingDraft: ParseDraftResult | null = null;
+
+/** Reads the draft from the fragment and takes the fragment out of the URL right away. */
+function takeDraftFromUrl(): void {
+  if (!isDraftFragment(window.location.hash)) return;
+  pendingDraft = parseDraft(window.location.hash);
+  history.replaceState(null, "", location.pathname + location.search);
+}
+
+/**
  * Dynamic mode: Supabase configured and reachable.
  */
 function bootDynamic(
@@ -159,6 +173,8 @@ function bootDynamic(
   let links: LinkRow[] = sortLinks(initialLinks);
   let authenticated = false;
   let notice = warning ?? null;
+  /** Why a draft was not opened; kept so later re-renders do not drop it. */
+  let draftNotice: string | null = null;
   let categoryFilter: Category[] = [];
   let section: Section = "feed";
   /**
@@ -822,6 +838,7 @@ function bootDynamic(
       if (notice) {
         renderMessage(els.list, notice);
       }
+      if (draftNotice) renderMessage(els.list, draftNotice);
       return;
     }
     setShellVisible(true);
@@ -881,6 +898,7 @@ function bootDynamic(
     if (notice) {
       renderMessage(els.list, notice);
     }
+    if (draftNotice) renderMessage(els.list, draftNotice);
   }
 
   function render(): void {
@@ -897,6 +915,28 @@ function bootDynamic(
       formModal.openCreate({ url });
     } else {
       loginModal.open();
+    }
+  }
+
+  function handlePendingDraft(): void {
+    const result = pendingDraft;
+    if (!result) return;
+    if (!result.ok) {
+      pendingDraft = null;
+      draftNotice = `Não foi possível abrir o rascunho: ${result.reason}`;
+      renderList();
+      return;
+    }
+    if (!authenticated) {
+      loginModal.open();
+      return;
+    }
+    pendingDraft = null;
+    if (result.draft.kind === "novo") {
+      formModal.openCreate(result.draft.fields);
+    } else {
+      draftNotice = "Não foi possível abrir o rascunho: atualização ainda não é suportada.";
+      renderList();
     }
   }
 
@@ -917,6 +957,7 @@ function bootDynamic(
         links = [];
       }
       render();
+      handlePendingDraft();
       handlePendingShare();
     })();
   });
@@ -943,6 +984,7 @@ function bootDynamic(
       links = [];
     }
     render();
+    handlePendingDraft();
     handlePendingShare();
   })();
 
@@ -962,6 +1004,8 @@ async function boot(): Promise<void> {
     await bootSharedPlan(window.location.hash);
     return;
   }
+
+  takeDraftFromUrl();
 
   const els = getEls();
   if (!els) return;
