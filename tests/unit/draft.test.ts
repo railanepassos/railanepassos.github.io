@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DRAFT_LIMITS,
   DRAFT_MAX_BYTES,
+  draftPrefill,
   encodeDraft,
   isDraftFragment,
   parseDraft,
@@ -9,7 +10,7 @@ import {
   type Draft,
 } from "../../src/links/draft";
 import { isHttpsUrl } from "../../src/links/validate";
-import { CATEGORY_OPTIONS } from "../../src/links/category";
+import { CATEGORY_OPTIONS, MAX_CATEGORIES } from "../../src/links/category";
 import { MORE_TEXT_FIELDS } from "../../src/links/more-fields";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH } from "../../src/links/people";
 import { MAX_PLAN_ITEMS, PLAN_TEXT_MAX } from "../../src/links/plan";
@@ -170,6 +171,44 @@ describe("parseDraft rejections", () => {
     const fields = { ...NEW_DRAFT.fields, category: "zoologico" };
     expect(reject(fragOf({ ...NEW_DRAFT, fields }))).toContain("category");
   });
+  describe("categories", () => {
+    const withCats = (extra: object) =>
+      fragOf({ v: 1, kind: "novo", fields: { url: "https://example.com", ...extra } });
+    it("accepts 1 to 4 distinct allowed values, in order", () => {
+      for (const categories of [["museu"], ["museu", "parque"], ["bar", "evento", "praia", "trilha"]]) {
+        expect(parseDraft(withCats({ categories }))).toMatchObject({ ok: true });
+      }
+    });
+    it.each([
+      ["empty list", []],
+      ["more than 4", ["museu", "bar", "praia", "trilha", "parque"]],
+      ["duplicates", ["museu", "bar", "museu"]],
+      ["unknown value", ["museu", "zoologico"]],
+      ["non-string item", ["museu", 3]],
+      ["not a list", "museu"],
+    ])("rejects %s", (_n, categories) => {
+      expect(reject(withCats({ categories }))).toContain("categories");
+    });
+    it("still accepts a single category", () => {
+      expect(parseDraft(withCats({ category: "museu" }))).toMatchObject({ ok: true });
+    });
+    it("rejects category and categories together", () => {
+      expect(reject(withCats({ category: "museu", categories: ["bar"] }))).toContain("categories");
+    });
+    it("update drafts: an empty categories list is no proposal", () => {
+      const frag = fragOf({ v: 1, kind: "atualizacao", id: ID, fields: { categories: [], city: "X" } });
+      expect(parseDraft(frag)).toMatchObject({ ok: true });
+      expect(withoutEmptyProposals({ categories: [], city: "X" })).toEqual({ city: "X" });
+    });
+    it("draftPrefill maps categories to main + extras", () => {
+      expect(draftPrefill({ label: "A", categories: ["bar", "praia", "museu"] })).toEqual({
+        label: "A",
+        category: "bar",
+        extra_categories: ["praia", "museu"],
+      });
+      expect(draftPrefill({ category: "bar" })).toEqual({ category: "bar" });
+    });
+  });
   it("rejects non-string field values and non-string tags", () => {
     const f = (extra: object) => fragOf({ v: 1, kind: "novo", fields: { url: "https://example.com", ...extra } });
     expect(reject(f({ city: 5 }))).toContain("city");
@@ -258,6 +297,7 @@ describe("parseDraft limits (boundary accepted, +1 rejected)", () => {
 describe("DRAFT_LIMITS stays in sync with the app (the codec is import-free)", () => {
   it("matches the app constants", () => {
     expect(DRAFT_LIMITS.categories).toEqual([...CATEGORY_OPTIONS]);
+    expect(DRAFT_LIMITS.maxCategories).toBe(MAX_CATEGORIES);
     for (const f of MORE_TEXT_FIELDS) {
       expect(DRAFT_LIMITS.text[f.key]).toBe(f.max);
     }

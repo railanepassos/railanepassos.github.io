@@ -6,6 +6,7 @@ import { createAuthStorage, setRememberMe } from "./session-storage";
 import { PLAN_STALE_NOTICE, isPlanShareFragment } from "./plan-share";
 import { bootSharedPlan } from "./shared-plan-boot";
 import {
+  draftPrefill,
   isDraftFragment,
   parseDraft,
   withoutEmptyProposals,
@@ -982,11 +983,11 @@ function bootDynamic(
     }
     pendingDraft = null;
     if (result.draft.kind === "novo") {
-      formModal.openCreate(result.draft.fields);
+      formModal.openCreate(draftPrefill(result.draft.fields));
       return;
     }
     const { id, plan } = result.draft;
-    const fields = result.draft.fields ? withoutEmptyProposals(result.draft.fields) : undefined;
+    const fields = result.draft.fields ? draftPrefill(withoutEmptyProposals(result.draft.fields)) : undefined;
     const target = findLink(id);
     if (!target) {
       draftNotice = listLoadFailed

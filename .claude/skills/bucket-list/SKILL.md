@@ -25,7 +25,8 @@ Examples: `examples/novo.json` and `examples/atualizacao.json` (fake content). T
 
 - `novo`: `{ "v": 1, "kind": "novo", "fields": { "url": ... } }`. `fields.url` is required.
 - `atualizacao`: `{ "v": 1, "kind": "atualizacao", "id": "<uuid>", "fields": {...}, "plan": [{ "text", "list": "checklist" | "compras" }] }`. Needs `fields` or `plan`.
-- `fields` keys: `url`, `label`, `description`, `source_url`, `category`, `tags`, `people`, `cost_text`, `city`, `address`, `dossier`, `itinerary`, `image_url`.
+- `fields` keys: `url`, `label`, `description`, `source_url`, `category` or `categories`, `tags`, `people`, `cost_text`, `city`, `address`, `dossier`, `itinerary`, `image_url`.
+- Category: `category` is a single value; `categories` is a list of 1 to 4 distinct values, the first is the main one (cards and theme use it), the rest are extras for discovery. Use `categories` when the experience mixes kinds (a museum with a garden: `["museu", "parque"]`); otherwise use `category`. Sending both is an error. Allowed values: museu, evento, restaurante, bar, cafeteria, trilha, praca, parque, praia, ponto-turistico, passeio, outro. In an `atualizacao`, the edit form shows the proposed main + extras over the current ones.
 - Links are https. `source_url` is the Instagram post link. `image_url` only when it is a public https URL.
 - Plan items are appended to the editor's list, so propose only new ones. Never include `who` or `done`.
 

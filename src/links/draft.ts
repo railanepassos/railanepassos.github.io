@@ -41,6 +41,7 @@ export const DRAFT_LIMITS = {
     dossier: 5000,
     itinerary: 5000,
   } as Record<TextKey, number>,
+  maxCategories: 4,
   maxUrlLength: 2000,
   maxTags: 30,
   maxTagLength: 40,
@@ -56,6 +57,8 @@ export type DraftFields = {
   description?: string;
   source_url?: string;
   category?: string;
+  /** 1-4 distinct allowed values, first = main. Mutually exclusive with `category`. */
+  categories?: string[];
   tags?: string[];
   people?: string[];
   cost_text?: string;
@@ -76,7 +79,7 @@ export type ParseDraftResult = { ok: true; draft: Draft } | { ok: false; reason:
 
 const URL_KEYS = ["url", "source_url", "image_url"];
 const TEXT_KEYS = ["label", "description", "cost_text", "city", "address", "dossier", "itinerary"];
-const FIELD_KEYS = [...URL_KEYS, ...TEXT_KEYS, "category", "tags", "people"];
+const FIELD_KEYS = [...URL_KEYS, ...TEXT_KEYS, "category", "categories", "tags", "people"];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const B64URL_RE = /^[A-Za-z0-9_-]*$/;
 // Encoded size of DRAFT_MAX_BYTES (no padding); anything longer is rejected before decoding.
@@ -95,6 +98,18 @@ export function withoutEmptyProposals<T extends object>(fields: T): Partial<T> {
     out[key] = value;
   }
   return out;
+}
+
+/**
+ * Draft fields -> what the form takes: `categories` becomes `category` (main)
+ * + `extra_categories`. Empty list is left as is (update drafts drop it).
+ */
+export function draftPrefill(fields: DraftFields): Omit<DraftFields, "categories"> & {
+  extra_categories?: string[];
+} {
+  const { categories, ...rest } = fields;
+  if (!categories || categories.length === 0) return rest;
+  return { ...rest, category: categories[0], extra_categories: categories.slice(1) };
 }
 
 export function isDraftFragment(hash: string): boolean {
@@ -159,6 +174,21 @@ function fieldsError(raw: unknown, requireUrl: boolean): string | null {
       const max = DRAFT_LIMITS.text[key as TextKey] ?? 0;
       if (v.length > max) return `O campo ${key} passa de ${max} caracteres.`;
     }
+  }
+  if (raw.categories !== undefined) {
+    if (raw.category !== undefined) return "Use category ou categories, não os dois.";
+    const v = raw.categories;
+    if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) {
+      return "O campo categories deve ser uma lista de textos.";
+    }
+    const max = DRAFT_LIMITS.maxCategories;
+    if (v.length > max) return `O campo categories passa de ${max} itens.`;
+    if (v.some((x: string) => !DRAFT_LIMITS.categories.includes(x))) {
+      return "O campo categories tem valor desconhecido.";
+    }
+    if (v.length === 0 && requireUrl) return "O campo categories precisa de 1 a 4 itens.";
+    if (new Set(v).size !== v.length) return "O campo categories tem valores repetidos.";
+    if (v.includes("")) return "O campo categories tem valor vazio.";
   }
   for (const [key, maxCount, maxLen] of [
     ["tags", DRAFT_LIMITS.maxTags, DRAFT_LIMITS.maxTagLength],

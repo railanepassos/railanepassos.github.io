@@ -235,4 +235,19 @@ test.describe("Links app: update draft (#rascunho=)", () => {
     await expect(page.getByRole("alert").filter({ hasText: "login de editor" })).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
+
+  test("fields.categories: the edit form proposes main + extras; Salvar PATCHes the split", async ({ page }) => {
+    const writes = await openAuthedWith(page, [ITEM], {
+      hash: hashOf({ v: 1, kind: "atualizacao", id: ID, fields: { categories: ["parque", "praia"] } }),
+    });
+    const form = page.getByRole("dialog", { name: FORM });
+    await expect(form).toBeVisible();
+    await expect(form.locator('[data-category="parque"]')).toHaveAttribute("data-main", "true");
+    await expect(form.locator('[data-category="praia"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(form.locator('[data-category="museu"]')).toHaveAttribute("aria-pressed", "false");
+
+    await form.getByRole("button", { name: "Salvar" }).click();
+    await expect.poll(() => writes.patched).not.toBeNull();
+    expect(writes.patched).toMatchObject({ category: "parque", extra_categories: ["praia"] });
+  });
 });

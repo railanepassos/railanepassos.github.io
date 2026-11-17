@@ -57,6 +57,17 @@ describe("scripts/draft-url.mjs", () => {
     expect(err).not.toBe("");
   });
 
+  it("accepts fields.categories and rejects it together with category", () => {
+    const ok = run([], JSON.stringify({ ...VALID, fields: { url: "https://a.com", categories: ["museu", "parque"] } }));
+    expect(ok.code).toBe(0);
+    const both = run(
+      [],
+      JSON.stringify({ ...VALID, fields: { url: "https://a.com", category: "museu", categories: ["parque"] } }),
+    );
+    expect(both.code).not.toBe(0);
+    expect(both.err).toContain("categories");
+  });
+
   it("exits non-zero when the file does not exist", () => {
     expect(run(["/nonexistent/draft.json"]).code).not.toBe(0);
   });
