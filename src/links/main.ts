@@ -5,6 +5,13 @@ import { createAuth, type Auth } from "./auth";
 import { createAuthStorage, setRememberMe } from "./session-storage";
 import { PLAN_STALE_NOTICE, isPlanShareFragment } from "./plan-share";
 import { bootSharedPlan } from "./shared-plan-boot";
+import {
+  isDraftFragment,
+  parseDraft,
+  withoutEmptyProposals,
+  type DraftPlanItem,
+  type ParseDraftResult,
+} from "./draft";
 import { StaleLinkError, createLinksRepo, type LinksRepo, type LinkRow, type UpdateLinkPatch } from "./links-repo";
 import { renderGuestGate } from "./render";
 import { collectTags } from "./tags";
@@ -57,7 +64,7 @@ import { buildIcs, downloadIcs } from "./ics";
 import { createReviewSheet, type ReviewSheetHandle } from "./review-sheet";
 import { UNMARK_DONE_PATCH, reviewError, reviewFromLink, reviewToPatch } from "./review";
 import { createPlanSheet, type PlanSheetHandle } from "./plan-sheet";
-import { planError, planFromLink, planToPatch } from "./plan";
+import { mergeProposedPlanItems, planError, planFromLink, planToPatch } from "./plan";
 import { createDeckScreen, type DeckHandle } from "./deck-ui";
 import { nextPriority } from "./deck-queue";
 import { pickSharedUrl } from "./share-target";
@@ -144,6 +151,27 @@ function icsFilename(link: LinkRow): string {
 function bootStatic(els: Els): void {
   els.adminRoot.replaceChildren();
   renderGuestGate(els.list);
+  if (pendingDraft) {
+    // No editor login in this mode, so the draft cannot be opened: say so instead of dropping it silently.
+    pendingDraft = null;
+    renderMessage(
+      els.list,
+      "Não foi possível abrir o rascunho: rascunhos precisam do login de editor, que não está disponível agora."
+    );
+  }
+}
+
+/**
+ * Item draft read from `#rascunho=` (Phase 5), held until the editor is
+ * logged in (same idea as `pendingSharedUrl`). It only pre-fills a form.
+ */
+let pendingDraft: ParseDraftResult | null = null;
+
+/** Reads the draft from the fragment and takes the fragment out of the URL right away. */
+function takeDraftFromUrl(): void {
+  if (!isDraftFragment(window.location.hash)) return;
+  pendingDraft = parseDraft(window.location.hash);
+  history.replaceState(null, "", location.pathname + location.search);
 }
 
 /**
@@ -159,6 +187,10 @@ function bootDynamic(
   let links: LinkRow[] = sortLinks(initialLinks);
   let authenticated = false;
   let notice = warning ?? null;
+  /** Why a draft was not opened; kept so later re-renders do not drop it. */
+  let draftNotice: string | null = null;
+  /** The last list load failed: an unknown draft id then says that, not "item gone". */
+  let listLoadFailed = false;
   let categoryFilter: Category[] = [];
   let section: Section = "feed";
   /**
@@ -188,6 +220,9 @@ function bootDynamic(
     }
   });
 
+  /** Update draft with fields + plan: the plan sheet opens once the item is saved. */
+  let planAfterSave: { id: string; items: DraftPlanItem[] } | null = null;
+
   const formModal: LinkFormHandle = createLinkFormModal(
     async (values, editingId) => {
       formModal.setBusy(true);
@@ -198,6 +233,10 @@ function bootDynamic(
           await submitCreate(values);
         }
         formModal.close();
+        const next = planAfterSave;
+        planAfterSave = null;
+        const saved = next && next.id === editingId ? findLink(next.id) : undefined;
+        if (next && saved) openPlan(saved, next.items);
       } catch (err) {
         formModal.setError(messageOf(err, GENERIC_ERROR));
       } finally {
@@ -207,6 +246,9 @@ function bootDynamic(
     {
       getTagSuggestions: () => collectTags(links),
       getPeopleSuggestions: () => collectPeople(links),
+      onDismiss: () => {
+        planAfterSave = null;
+      },
     }
   );
 
@@ -436,15 +478,18 @@ function bootDynamic(
   }
 
   /** "Plano do passeio" sheet, opened from the detail; the detail comes back when it closes. */
-  function openPlan(link: LinkRow): void {
+  function openPlan(link: LinkRow, proposed?: readonly DraftPlanItem[]): void {
     const reopenDetail = (): void => {
       const current = findLink(link.id);
       if (current) viewModal.open(current);
     };
+    const current = planFromLink(link);
     planSheet.open({
       label: displayTitle(link),
-      initial: planFromLink(link),
-      onSkip: reopenDetail,
+      initial: proposed
+        ? { ...current, items: mergeProposedPlanItems(current.items, proposed) }
+        : current,
+      onSkip: proposed ? () => undefined : reopenDetail,
       onSave: async (values) => {
         const problem = planError(values.items);
         if (problem) {
@@ -814,6 +859,26 @@ function bootDynamic(
     return "Nenhuma experiência ainda.";
   }
 
+  /**
+   * The draft notice survives the automatic re-renders of boot (the session is
+   * loaded twice) but not the editor's next action: the first interaction
+   * clears it, so the render that follows starts clean.
+   */
+  let draftNoticeArmed = false;
+  const NOTICE_CLEAR_EVENTS = ["pointerdown", "keydown", "input"];
+  function clearDraftNotice(): void {
+    draftNotice = null;
+    draftNoticeArmed = false;
+    for (const type of NOTICE_CLEAR_EVENTS) document.removeEventListener(type, clearDraftNotice, true);
+  }
+  function showDraftNotice(): void {
+    if (!draftNotice) return;
+    renderMessage(els.list, draftNotice);
+    if (draftNoticeArmed) return;
+    draftNoticeArmed = true;
+    for (const type of NOTICE_CLEAR_EVENTS) document.addEventListener(type, clearDraftNotice, true);
+  }
+
   function renderList(): void {
     els.list.replaceChildren();
     if (!authenticated) {
@@ -822,6 +887,7 @@ function bootDynamic(
       if (notice) {
         renderMessage(els.list, notice);
       }
+      showDraftNotice();
       return;
     }
     setShellVisible(true);
@@ -881,6 +947,7 @@ function bootDynamic(
     if (notice) {
       renderMessage(els.list, notice);
     }
+    showDraftNotice();
   }
 
   function render(): void {
@@ -900,6 +967,43 @@ function bootDynamic(
     }
   }
 
+  function handlePendingDraft(): void {
+    const result = pendingDraft;
+    if (!result) return;
+    if (!result.ok) {
+      pendingDraft = null;
+      draftNotice = `Não foi possível abrir o rascunho: ${result.reason}`;
+      renderList();
+      return;
+    }
+    if (!authenticated) {
+      loginModal.open();
+      return;
+    }
+    pendingDraft = null;
+    if (result.draft.kind === "novo") {
+      formModal.openCreate(result.draft.fields);
+      return;
+    }
+    const { id, plan } = result.draft;
+    const fields = result.draft.fields ? withoutEmptyProposals(result.draft.fields) : undefined;
+    const target = findLink(id);
+    if (!target) {
+      draftNotice = listLoadFailed
+        ? "Não foi possível abrir o rascunho: a lista de itens não carregou. Recarregue a página e tente de novo."
+        : "Não foi possível abrir o rascunho: o item não existe mais ou o id está errado.";
+      renderList();
+      return;
+    }
+    const hasPlan = plan !== undefined && plan.length > 0;
+    if (fields && Object.keys(fields).length > 0) {
+      planAfterSave = hasPlan ? { id, items: plan } : null;
+      formModal.openEdit(target, fields);
+    } else if (hasPlan) {
+      openPlan(target, plan);
+    }
+  }
+
   // --- auth wiring: reload private list on every session change ---
   auth.onAuthStateChange((_event, session) => {
     void (async () => {
@@ -908,8 +1012,10 @@ function bootDynamic(
         try {
           links = sortLinks(await repo.listLinks());
           notice = null;
+          listLoadFailed = false;
         } catch {
           links = [];
+          listLoadFailed = true;
           notice =
             "Não foi possível carregar links do Supabase. Confira a migration e a chave anon.";
         }
@@ -917,6 +1023,7 @@ function bootDynamic(
         links = [];
       }
       render();
+      handlePendingDraft();
       handlePendingShare();
     })();
   });
@@ -930,8 +1037,10 @@ function bootDynamic(
         try {
           links = sortLinks(await repo.listLinks());
           notice = null;
+          listLoadFailed = false;
         } catch {
           links = [];
+          listLoadFailed = true;
           notice =
             "Não foi possível carregar links do Supabase. Confira a migration e a chave anon.";
         }
@@ -943,6 +1052,7 @@ function bootDynamic(
       links = [];
     }
     render();
+    handlePendingDraft();
     handlePendingShare();
   })();
 
@@ -962,6 +1072,8 @@ async function boot(): Promise<void> {
     await bootSharedPlan(window.location.hash);
     return;
   }
+
+  takeDraftFromUrl();
 
   const els = getEls();
   if (!els) return;

@@ -103,6 +103,29 @@ export function planDraftsFromItems(items: readonly PlanItem[]): PlanDraft[] {
   return items.map(planDraftFromItem);
 }
 
+/**
+ * Update draft (Phase 5): the current rows with the proposed items appended at
+ * the end. Text already there (trimmed, case-insensitive) is not added again,
+ * and the list never goes past MAX_PLAN_ITEMS. Pure: inputs are not mutated.
+ */
+export function mergeProposedPlanItems(
+  current: readonly PlanDraft[],
+  proposed: ReadonlyArray<{ text: string; list: PlanList }>
+): PlanDraft[] {
+  const out = [...current];
+  // One set for both lists on purpose: the same text in checklist and compras would just be a duplicate row.
+  const seen = new Set(current.map((d) => d.text.trim().toLowerCase()));
+  for (const item of proposed) {
+    if (out.length >= MAX_PLAN_ITEMS) break;
+    const text = item.text.trim();
+    const key = text.toLowerCase();
+    if (text === "" || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ text, list: item.list, who: "", done: false });
+  }
+  return out;
+}
+
 export type PlanProgress = { done: number; total: number; label: string };
 
 /** Progress of one list: "3 de 7". */

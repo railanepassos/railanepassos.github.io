@@ -23,6 +23,7 @@ import { setScreenBusy } from "./skeleton";
 import { formatScheduleChip, formatScheduleLabel } from "./schedule";
 import { isPanelMode, syncBodyScreenLock } from "./screen-lock";
 import { categoryBackdropSrc } from "./card-theme";
+import { withoutEmptyProposals } from "./draft";
 import { displayTitle, linkDomain } from "./feed";
 import { uiIcon, type IconName } from "./ui-icons";
 import { buildMapUrl } from "./map-url";
@@ -257,6 +258,26 @@ function canShare(): boolean {
 
 /** Label of the source-post field (form, errors). */
 const SOURCE_TERM = "Link do post original";
+
+/** What "Nova experiência" can open pre-filled (share target, item drafts). */
+export type CreatePrefill = Partial<
+  Pick<
+    LinkFormValues,
+    | "url"
+    | "label"
+    | "description"
+    | "image_url"
+    | "source_url"
+    | "category"
+    | "tags"
+    | "people"
+    | "cost_text"
+    | "city"
+    | "address"
+    | "dossier"
+    | "itinerary"
+  >
+>;
 
 export type LinkFormValues = MoreTextValues & {
   url: string;
@@ -987,8 +1008,9 @@ export function createDeleteConfirmSheet(): DeleteSheetHandle {
 
 export type LinkFormHandle = {
   element: HTMLElement;
-  openCreate: (prefill?: { url?: string }) => void;
-  openEdit: (link: LinkRow) => void;
+  openCreate: (prefill?: CreatePrefill) => void;
+  /** `proposed` (update draft) is shown over the current values; nothing is saved until Salvar. */
+  openEdit: (link: LinkRow, proposed?: CreatePrefill) => void;
   close: () => void;
   setError: (message: string) => void;
   setBusy: (busy: boolean) => void;
@@ -999,6 +1021,8 @@ export type LinkFormOptions = {
   getTagSuggestions?: () => readonly string[];
   /** Names already used across items (autocomplete source). */
   getPeopleSuggestions?: () => readonly string[];
+  /** Fired when the editor closes the form without saving (Voltar / Escape). */
+  onDismiss?: () => void;
 };
 
 export function createLinkFormModal(
@@ -1282,7 +1306,7 @@ export function createLinkFormModal(
   }
 
   /** Fill the "Mais detalhes" fields; opens the section when any has content. */
-  function writeMoreText(link: LinkRow | null): void {
+  function writeMoreText(link: Partial<LinkRow> | null): void {
     let any = false;
     for (const f of moreText) {
       const value = link?.[f.key] ?? "";
@@ -1312,6 +1336,18 @@ export function createLinkFormModal(
   }
   more.addEventListener("toggle", syncMoreHeights);
 
+  let draftImageHeld = false;
+  const loadPreviewBtn = document.createElement("button");
+  loadPreviewBtn.type = "button";
+  loadPreviewBtn.className = "links-admin-button links-admin-button--ghost";
+  loadPreviewBtn.textContent = "Carregar prévia";
+  loadPreviewBtn.hidden = true;
+
+  function holdDraftImage(hold: boolean): void {
+    draftImageHeld = hold;
+    loadPreviewBtn.hidden = !hold;
+  }
+
   function syncPreview(): void {
     const category = isCategory(pickedCategory)
       ? pickedCategory
@@ -1320,7 +1356,8 @@ export function createLinkFormModal(
           description: descField.input.value,
           url: urlField.input.value,
         });
-    const image = imageField.input.value.trim();
+    // A draft-supplied image is not fetched until the editor asks (a crafted link must not ping a host).
+    const image = draftImageHeld ? "" : imageField.input.value.trim();
     const src = categoryBackdropSrc(category, image);
     if (src) previewImg.src = src;
     else previewImg.removeAttribute("src");
@@ -1329,6 +1366,14 @@ export function createLinkFormModal(
     input.addEventListener("input", syncPreview);
   }
   descField.input.addEventListener("input", syncPreview);
+  imageField.input.addEventListener("input", () => {
+    holdDraftImage(false);
+    syncPreview();
+  });
+  loadPreviewBtn.addEventListener("click", () => {
+    holdDraftImage(false);
+    syncPreview();
+  });
 
   const error = document.createElement("p");
   error.className = "links-admin-form__error";
@@ -1360,6 +1405,7 @@ export function createLinkFormModal(
     categoryField,
     descField.wrapper,
     imageField.wrapper,
+    loadPreviewBtn,
     memoryField.wrapper,
     more,
     error,
@@ -1393,15 +1439,17 @@ export function createLinkFormModal(
     // Do not autofocus fields — on mobile that pops the keyboard immediately.
   }
 
-  function openCreate(prefill?: { url?: string }): void {
+  function openCreate(prefill?: CreatePrefill): void {
     editingId = null;
     title.textContent = "Nova experiência";
     form.reset();
-    if (prefill?.url) {
-      urlField.input.value = prefill.url;
-    }
-    pickedCategory = "";
-    writeMoreText(null);
+    urlField.input.value = prefill?.url ?? "";
+    labelField.input.value = prefill?.label ?? "";
+    descField.input.value = prefill?.description ?? "";
+    imageField.input.value = prefill?.image_url ?? "";
+    holdDraftImage(Boolean(prefill?.image_url));
+    pickedCategory = prefill?.category && isCategory(prefill.category) ? prefill.category : "";
+    writeMoreText(prefill ?? null);
     syncCategoryChips();
     syncPreview();
     descField.syncHeight();
@@ -1411,13 +1459,16 @@ export function createLinkFormModal(
     afterOpen();
   }
 
-  function openEdit(link: LinkRow): void {
+  function openEdit(current: LinkRow, proposed?: CreatePrefill): void {
+    const changes = proposed ? withoutEmptyProposals(proposed) : undefined;
+    const link: LinkRow = changes ? { ...current, ...changes } : current;
     editingId = link.id;
     title.textContent = "Editar experiência";
     urlField.input.value = link.url;
     labelField.input.value = link.label;
     descField.input.value = link.description ?? "";
     imageField.input.value = link.image_url ?? "";
+    holdDraftImage(Boolean(changes?.image_url));
     memoryField.input.value = link.note ?? "";
     writeMoreText(link);
     pickedCategory = link.category && isCategory(link.category) ? link.category : "";
@@ -1463,11 +1514,16 @@ export function createLinkFormModal(
     );
   });
 
-  backBtn.addEventListener("click", close);
+  function dismiss(): void {
+    close();
+    formOptions.onDismiss?.();
+  }
+
+  backBtn.addEventListener("click", dismiss);
   overlay.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.stopPropagation();
-      close();
+      dismiss();
     }
   });
 
