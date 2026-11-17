@@ -1968,6 +1968,11 @@ body.links-screen-open {
   margin-top: 12px;
 }
 
+/* 48px, not 44: sub-pixel layout can measure 43.99994px against a 44px tap-target check. */
+.links-detail__action.links-detail__plan-share {
+  min-height: 48px;
+}
+
 .links-detail__plan-who-line {
   margin: 0;
   overflow-wrap: anywhere;

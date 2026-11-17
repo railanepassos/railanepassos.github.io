@@ -157,4 +157,24 @@ test.describe("Links app: new-item draft (#rascunho=)", () => {
       extra_categories: ["praia", "passeio"],
     });
   });
+
+  test("draft with sources pre-fills the Fontes editor and Salvar sends them", async ({ page }) => {
+    const sources = [
+      { title: "Guia da cidade", url: "https://example.com/guia" },
+      { title: "<b>Notícia</b>", url: "https://example.com/noticia" },
+    ];
+    const writes = await openAuthedWith(page, LINK_ROWS, {
+      hash: hashOf({ ...DRAFT, fields: { ...DRAFT.fields, sources } }),
+    });
+    const sheet = page.getByRole("dialog", { name: SHEET });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByLabel("Fonte 1: título")).toHaveValue("Guia da cidade");
+    await expect(sheet.getByLabel("Fonte 1: link")).toHaveValue("https://example.com/guia");
+    await expect(sheet.getByLabel("Fonte 2: título")).toHaveValue("<b>Notícia</b>");
+    await expect(sheet.getByLabel("Fonte 3: título")).toHaveCount(0);
+
+    await sheet.getByRole("button", { name: "Salvar" }).click();
+    await expect.poll(() => writes.created).not.toBeNull();
+    expect(writes.created).toMatchObject({ sources });
+  });
 });

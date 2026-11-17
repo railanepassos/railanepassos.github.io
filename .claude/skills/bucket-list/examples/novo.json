@@ -10,6 +10,10 @@
     "tags": ["arte", "jardim", "chuva"],
     "cost_text": "R$ 30 por pessoa",
     "city": "Cidade Exemplo",
-    "address": "Rua das Amostras, 100, Centro"
+    "address": "Rua das Amostras, 100, Centro",
+    "sources": [
+      { "title": "Site oficial do Museu do Exemplo", "url": "https://example.com/museu-do-exemplo" },
+      { "title": "Guia de museus da Cidade Exemplo", "url": "https://example.com/guia-museus" }
+    ]
   }
 }

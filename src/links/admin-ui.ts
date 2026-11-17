@@ -47,6 +47,7 @@ import {
   MAX_SOURCES,
   SOURCE_TITLE_MAX,
   draftsToSources,
+  mergeSources,
   readSources,
   sourceDraftsFromSources,
   sourcesError,
@@ -286,6 +287,7 @@ export type CreatePrefill = Partial<
     | "extra_categories"
     | "tags"
     | "people"
+    | "sources"
     | "cost_text"
     | "city"
     | "address"
@@ -1588,6 +1590,10 @@ export function createLinkFormModal(
   function openEdit(current: LinkRow, proposed?: CreatePrefill): void {
     const changes = proposed ? withoutEmptyProposals(proposed) : undefined;
     const link: LinkRow = changes ? { ...current, ...changes } : current;
+    // Proposed Fontes are appended to the current ones (deduped by URL, capped), never replace them.
+    if (changes?.sources) {
+      link.sources = mergeSources(readSources(current.sources), changes.sources);
+    }
     editingId = link.id;
     title.textContent = "Editar experiência";
     urlField.input.value = link.url;

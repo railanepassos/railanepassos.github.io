@@ -15,6 +15,7 @@ import { MORE_TEXT_FIELDS } from "../../src/links/more-fields";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH } from "../../src/links/people";
 import { MAX_PLAN_ITEMS, PLAN_TEXT_MAX } from "../../src/links/plan";
 import { MAX_TAGS, MAX_TAG_LENGTH } from "../../src/links/tags";
+import { MAX_SOURCES, SOURCE_TITLE_MAX, SOURCE_URL_MAX } from "../../src/links/sources";
 
 const ID = "00000000-0000-4000-8000-0000000000a1";
 
@@ -209,6 +210,43 @@ describe("parseDraft rejections", () => {
       expect(draftPrefill({ category: "bar" })).toEqual({ category: "bar" });
     });
   });
+  describe("sources", () => {
+    const withSources = (sources: unknown) =>
+      fragOf({ v: 1, kind: "novo", fields: { url: "https://example.com", sources } });
+    const S = (n: number) => ({ title: `Fonte ${n}`, url: `https://example.com/f${n}` });
+    it("accepts 1 to 10 well-formed sources", () => {
+      for (const n of [1, 3, 10]) {
+        expect(parseDraft(withSources(Array.from({ length: n }, (_, i) => S(i))))).toMatchObject({ ok: true });
+      }
+    });
+    it.each([
+      ["more than 10", Array.from({ length: 11 }, (_, i) => S(i))],
+      ["not a list", "https://example.com"],
+      ["item not an object", ["https://example.com"]],
+      ["unknown key", [{ title: "A", url: "https://example.com", note: "x" }]],
+      ["missing url", [{ title: "A" }]],
+      ["blank title", [{ title: "  ", url: "https://example.com" }]],
+      ["title too long", [{ title: "a".repeat(121), url: "https://example.com" }]],
+      ["http url", [{ title: "A", url: "http://example.com" }]],
+      ["url with space", [{ title: "A", url: "https://example.com/a b" }]],
+      ["url too long", [{ title: "A", url: "https://example.com/" + "a".repeat(2000) }]],
+      ["non-string title", [{ title: 3, url: "https://example.com" }]],
+    ])("rejects %s", (_n, sources) => {
+      expect(reject(withSources(sources))).toContain("sources");
+    });
+    it("accepts title at 120 chars and url at 2000", () => {
+      const url = "https://example.com/" + "a".repeat(2000 - 20);
+      expect(parseDraft(withSources([{ title: "a".repeat(120), url }]))).toMatchObject({ ok: true });
+    });
+    it("update drafts: an empty sources list is no proposal", () => {
+      const frag = fragOf({ v: 1, kind: "atualizacao", id: ID, fields: { sources: [], city: "X" } });
+      expect(parseDraft(frag)).toMatchObject({ ok: true });
+      expect(withoutEmptyProposals({ sources: [], city: "X" })).toEqual({ city: "X" });
+    });
+    it("an update draft with only an empty sources list proposes nothing", () => {
+      expect(reject(fragOf({ v: 1, kind: "atualizacao", id: ID, fields: { sources: [] } }))).toContain("nada");
+    });
+  });
   it("rejects non-string field values and non-string tags", () => {
     const f = (extra: object) => fragOf({ v: 1, kind: "novo", fields: { url: "https://example.com", ...extra } });
     expect(reject(f({ city: 5 }))).toContain("city");
@@ -309,6 +347,9 @@ describe("DRAFT_LIMITS stays in sync with the app (the codec is import-free)", (
     expect(DRAFT_LIMITS.maxPersonLength).toBe(MAX_PERSON_LENGTH);
     expect(DRAFT_LIMITS.maxPlanItems).toBe(MAX_PLAN_ITEMS);
     expect(DRAFT_LIMITS.planTextMax).toBe(PLAN_TEXT_MAX);
+    expect(DRAFT_LIMITS.maxSources).toBe(MAX_SOURCES);
+    expect(DRAFT_LIMITS.sourceTitleMax).toBe(SOURCE_TITLE_MAX);
+    expect(DRAFT_LIMITS.sourceUrlMax).toBe(SOURCE_URL_MAX);
   });
 });
 

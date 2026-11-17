@@ -49,7 +49,13 @@ export const DRAFT_LIMITS = {
   maxPersonLength: 80,
   maxPlanItems: 60,
   planTextMax: 200,
+  maxSources: 10,
+  sourceTitleMax: 120,
+  sourceUrlMax: 2000,
 };
+
+/** A Fonte (same shape as `Source` in sources.ts; duplicated to stay import-free). */
+export type DraftSource = { title: string; url: string };
 
 export type DraftFields = {
   url?: string;
@@ -61,6 +67,8 @@ export type DraftFields = {
   categories?: string[];
   tags?: string[];
   people?: string[];
+  /** Fontes: up to 10 {title, url}. On an update they are appended to the current ones (dedupe by URL). */
+  sources?: DraftSource[];
   cost_text?: string;
   city?: string;
   address?: string;
@@ -79,7 +87,7 @@ export type ParseDraftResult = { ok: true; draft: Draft } | { ok: false; reason:
 
 const URL_KEYS = ["url", "source_url", "image_url"];
 const TEXT_KEYS = ["label", "description", "cost_text", "city", "address", "dossier", "itinerary"];
-const FIELD_KEYS = [...URL_KEYS, ...TEXT_KEYS, "category", "categories", "tags", "people"];
+const FIELD_KEYS = [...URL_KEYS, ...TEXT_KEYS, "category", "categories", "tags", "people", "sources"];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const B64URL_RE = /^[A-Za-z0-9_-]*$/;
 // Encoded size of DRAFT_MAX_BYTES (no padding); anything longer is rejected before decoding.
@@ -203,6 +211,34 @@ function fieldsError(raw: unknown, requireUrl: boolean): string | null {
     if (v.some((x: string) => x.length > maxLen)) {
       return `O campo ${key} tem item com mais de ${maxLen} caracteres.`;
     }
+  }
+  if (raw.sources !== undefined) {
+    const problem = sourcesError(raw.sources);
+    if (problem) return problem;
+  }
+  return null;
+}
+
+function sourcesError(raw: unknown): string | null {
+  if (!Array.isArray(raw)) return "O campo sources deve ser uma lista.";
+  if (raw.length > DRAFT_LIMITS.maxSources) {
+    return `O campo sources passa de ${DRAFT_LIMITS.maxSources} itens.`;
+  }
+  for (let i = 0; i < raw.length; i++) {
+    const item: unknown = raw[i];
+    const at = `sources, item ${i + 1}`;
+    if (!isRecord(item)) return `${at}: deve ser um objeto.`;
+    for (const key of Object.keys(item)) {
+      if (key !== "title" && key !== "url") return `${at}: chave não permitida: ${key}.`;
+    }
+    const { title, url } = item;
+    if (typeof title !== "string" || title.trim() === "") return `${at}: title não pode ficar em branco.`;
+    if (title.trim().length > DRAFT_LIMITS.sourceTitleMax) {
+      return `${at}: title passa de ${DRAFT_LIMITS.sourceTitleMax} caracteres.`;
+    }
+    if (typeof url !== "string") return `${at}: url deve ser texto.`;
+    if (url.length > DRAFT_LIMITS.sourceUrlMax) return `${at}: url é longo demais.`;
+    if (/\s/.test(url) || !isHttps(url)) return `${at}: url deve ser um link https válido.`;
   }
   return null;
 }

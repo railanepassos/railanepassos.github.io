@@ -68,6 +68,14 @@ describe("scripts/draft-url.mjs", () => {
     expect(both.err).toContain("categories");
   });
 
+  it("accepts fields.sources and rejects a non-https source", () => {
+    const f = (sources: unknown) => JSON.stringify({ ...VALID, fields: { url: "https://a.com", sources } });
+    expect(run([], f([{ title: "Guia", url: "https://example.com/guia" }])).code).toBe(0);
+    const bad = run([], f([{ title: "Guia", url: "http://example.com/guia" }]));
+    expect(bad.code).not.toBe(0);
+    expect(bad.err).toContain("sources");
+  });
+
   it("exits non-zero when the file does not exist", () => {
     expect(run(["/nonexistent/draft.json"]).code).not.toBe(0);
   });
