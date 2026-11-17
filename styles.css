@@ -4128,5 +4128,7 @@ select {
 /* Owner select of a plan item: full width, comfortable touch target. */
 .links-plan__who {
   width: 100%;
-  min-height: 44px;
+  /* 48px leaves room for sub-pixel rounding on scaled mobile viewports. */
+  min-height: 48px;
+  flex-shrink: 0;
 }
