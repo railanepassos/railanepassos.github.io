@@ -2,7 +2,7 @@ import { resolveCategory } from "./category";
 import { categoryBackdropSrc } from "./card-theme";
 import { displayTitle } from "./feed";
 import type { LinkRow } from "./links-repo";
-import { groupMemories } from "./memories";
+import { anniversaries, groupMemories } from "./memories";
 import { parseMemoryLink } from "./memory-link";
 import { formatRating, formatVisitDate, hasRating, ratingLabel } from "./review";
 import { uiIcon } from "./ui-icons";
@@ -138,13 +138,58 @@ function renderEntry(link: LinkRow, handlers: MemoriesHandlers): HTMLElement {
   return item;
 }
 
+export function anniversaryLabel(yearsAgo: number): string {
+  return yearsAgo === 1 ? "Há 1 ano" : `Há ${yearsAgo} anos`;
+}
+
+/** "Há N anos" highlight for visits near today's date; null when none. */
+function renderAnniversaries(
+  links: readonly LinkRow[],
+  handlers: MemoriesHandlers,
+  now: Date
+): HTMLElement | null {
+  const items = anniversaries(links, now);
+  if (items.length === 0) return null;
+  const box = document.createElement("section");
+  box.className = "links-anniversary";
+  box.setAttribute("aria-label", "Aniversários de memórias");
+  const list = document.createElement("ul");
+  list.className = "links-anniversary__list";
+  for (const { link, yearsAgo } of items) {
+    const li = document.createElement("li");
+    li.className = "links-anniversary__item";
+    const years = document.createElement("span");
+    years.className = "links-anniversary__years";
+    years.textContent = anniversaryLabel(yearsAgo);
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "links-anniversary__open";
+    open.addEventListener("click", () => handlers.onView(link));
+    const name = document.createElement("span");
+    name.className = "links-anniversary__name";
+    name.textContent = displayTitle(link);
+    const date = document.createElement("time");
+    date.className = "links-anniversary__date";
+    date.dateTime = link.completed_at ?? "";
+    date.textContent = formatVisitDate(link.completed_at);
+    open.append(name, date);
+    li.append(years, open);
+    list.appendChild(li);
+  }
+  box.appendChild(list);
+  return box;
+}
+
 /** Timeline of memories; the empty state explains how to add one. */
 export function renderMemoriesTimeline(
   links: readonly LinkRow[],
-  handlers: MemoriesHandlers
+  handlers: MemoriesHandlers,
+  now: Date = new Date()
 ): HTMLElement {
   const root = document.createElement("div");
   root.className = "links-memories";
+  const highlight = renderAnniversaries(links, handlers, now);
+  if (highlight) root.appendChild(highlight);
   const groups = groupMemories(links);
   if (groups.length === 0) {
     const empty = document.createElement("p");

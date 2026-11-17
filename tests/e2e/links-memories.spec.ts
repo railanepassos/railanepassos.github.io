@@ -128,3 +128,55 @@ test.describe("Memórias", () => {
     await expect(page.locator(".links-memswitch")).toBeHidden();
   });
 });
+
+test.describe("Memórias: aniversários", () => {
+  const FIXED = new Date("2026-11-17T12:00:00");
+  const ANNIV_ROWS = [
+    done("a1", "Forte Um Ano", "2025-11-14T15:00:00Z"),
+    done("a2", "Praia Tres Anos", "2023-11-20T15:00:00Z"),
+    done("a3", "Longe Da Data", "2025-06-01T15:00:00Z"),
+    ...WISHLIST,
+  ];
+
+  test("highlights visits near today with years ago and opens the detail", async ({ page }) => {
+    await page.clock.setFixedTime(FIXED);
+    await openAuthedWith(page, ANNIV_ROWS);
+    await openMemories(page);
+
+    const box = page.locator(".links-anniversary");
+    await expect(box).toBeVisible();
+    await expect(box.locator(".links-anniversary__years")).toHaveText(["Há 1 ano", "Há 3 anos"]);
+    await expect(box.locator(".links-anniversary__name")).toHaveText([
+      "Forte Um Ano",
+      "Praia Tres Anos",
+    ]);
+    await expect(box).not.toContainText("Longe Da Data");
+
+    await box.locator(".links-anniversary__open", { hasText: "Praia Tres Anos" }).click();
+    await expect(page.locator(".links-detail")).toContainText("Praia Tres Anos");
+  });
+
+  test("is hidden when no visit is near today", async ({ page }) => {
+    await page.clock.setFixedTime(new Date("2026-04-02T12:00:00"));
+    await openAuthedWith(page, ANNIV_ROWS);
+    await openMemories(page);
+    await expect(page.locator(".links-memories")).toBeVisible();
+    await expect(page.locator(".links-anniversary")).toHaveCount(0);
+  });
+
+  test("mobile: highlight tap target is touch-sized", async ({ page }) => {
+    test.skip(!isMobile(page), "mobile only");
+    await page.clock.setFixedTime(FIXED);
+    await openAuthedWith(page, ANNIV_ROWS);
+    await openMemories(page);
+    for (const sel of [".links-anniversary__open", ".links-anniversary__years"]) {
+      const size = await page
+        .locator(sel)
+        .first()
+        .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+      expect(size).toBeGreaterThanOrEqual(16);
+    }
+    const box = await page.locator(".links-anniversary__open").first().boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(48);
+  });
+});

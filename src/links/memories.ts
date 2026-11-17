@@ -67,3 +67,47 @@ export function groupMemories(links: readonly LinkRow[]): MemoryYear[] {
   }
   return years;
 }
+
+export type Anniversary = { link: LinkRow; yearsAgo: number; daysAway: number };
+
+/** Half-width, in days, of the window around today's month-day. */
+export const ANNIVERSARY_WINDOW_DAYS = 7;
+
+const DAY_MS = 86_400_000;
+
+/** Calendar-day number (local date parts, so DST never shifts it). */
+function dayNumber(year: number, month: number, day: number): number {
+  return Math.floor(Date.UTC(year, month, day) / DAY_MS);
+}
+
+/** Month-day of a visit placed in `year`; Feb 29 falls on Feb 28 in non-leap years. */
+function inYear(year: number, month: number, day: number): number {
+  const leap = new Date(Date.UTC(year, 1, 29)).getUTCMonth() === 1;
+  return dayNumber(year, month, month === 1 && day === 29 && !leap ? 28 : day);
+}
+
+/**
+ * Visits from earlier years whose month-day is within +-7 days of `now`
+ * (year boundary included). `yearsAgo` counts anniversary years (>= 1), so a
+ * Dec 30 visit seen on Jan 3 is still "1 year". Closest first, then newest.
+ */
+export function anniversaries(links: readonly LinkRow[], now: Date): Anniversary[] {
+  const today = dayNumber(now.getFullYear(), now.getMonth(), now.getDate());
+  const found: Array<Anniversary & { time: number }> = [];
+  for (const { link, time } of memoryEntries(links)) {
+    const visit = new Date(time);
+    const month = visit.getMonth();
+    const day = visit.getDate();
+    let best: { year: number; daysAway: number } | null = null;
+    for (const year of [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1]) {
+      const daysAway = Math.abs(inYear(year, month, day) - today);
+      if (!best || daysAway < best.daysAway) best = { year, daysAway };
+    }
+    if (!best || best.daysAway > ANNIVERSARY_WINDOW_DAYS) continue;
+    const yearsAgo = best.year - visit.getFullYear();
+    if (yearsAgo < 1) continue;
+    found.push({ link, yearsAgo, daysAway: best.daysAway, time });
+  }
+  found.sort((a, b) => a.daysAway - b.daysAway || b.time - a.time);
+  return found.map(({ link, yearsAgo, daysAway }) => ({ link, yearsAgo, daysAway }));
+}
