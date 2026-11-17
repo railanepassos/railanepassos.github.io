@@ -2,8 +2,8 @@ import type { SharedPlanView } from "./plan-share";
 
 /**
  * Render of a shared plan (Phase 4.1). Text nodes only (never HTML), no login.
- * The only controls are one checkbox per item (the tick). Reuses the Plano
- * section styles of the detail.
+ * The only controls are, per item, a checkbox (the tick) and an "Eu levo"
+ * select (claim / release). Reuses the Plano section styles of the detail.
  */
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -24,14 +24,18 @@ function block(title: string, ...content: HTMLElement[]): HTMLElement {
 }
 
 export type ToggleHandler = (idx: number, text: string, done: boolean) => void;
+export type ClaimHandler = (idx: number, text: string, who: string | null) => void;
+
+const NOBODY = "Ninguém";
 
 export function renderSharedPlan(
   root: HTMLElement,
   view: SharedPlanView,
   onToggle: ToggleHandler,
+  onClaim: ClaimHandler,
   notice: string | null = null
 ): void {
-  const focusedIdx = (document.activeElement as HTMLElement | null)?.dataset?.idx ?? null;
+  const focusedIdx = (document.activeElement as HTMLElement | null)?.dataset?.key ?? null;
   const article = el("article", "links-public-plan");
   if (notice) {
     const note = el("p", "links-public-plan__notice", notice);
@@ -59,17 +63,31 @@ export function renderSharedPlan(
       box.type = "checkbox";
       box.checked = item.done;
       box.dataset.idx = String(item.idx);
+      box.dataset.key = `done-${item.idx}`;
       box.addEventListener("change", () => onToggle(item.idx, item.text, box.checked));
       label.append(box, el("span", "links-detail__plan-text", item.text));
       li.appendChild(label);
       if (item.who) li.appendChild(el("span", "links-detail__plan-who", item.who));
+      if (view.people.length > 0 || item.who) {
+        const pick = el("select", "links-public-plan__claim");
+        pick.dataset.key = `who-${item.idx}`;
+        pick.setAttribute("aria-label", `Eu levo: ${item.text}`);
+        const names = [...view.people];
+        if (item.who && !names.includes(item.who)) names.push(item.who);
+        pick.append(new Option(NOBODY, ""), ...names.map((n) => new Option(n, n)));
+        pick.value = item.who ?? "";
+        pick.addEventListener("change", () =>
+          onClaim(item.idx, item.text, pick.value === "" ? null : pick.value)
+        );
+        li.appendChild(pick);
+      }
       ul.appendChild(li);
     }
     article.appendChild(block(`${list.title} · ${list.progress}`, ul));
   }
   root.replaceChildren(article);
   if (focusedIdx !== null) {
-    root.querySelector<HTMLElement>(`input[data-idx="${focusedIdx}"]`)?.focus();
+    root.querySelector<HTMLElement>(`[data-key="${focusedIdx}"]`)?.focus();
   }
 }
 

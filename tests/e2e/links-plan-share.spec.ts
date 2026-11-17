@@ -409,4 +409,96 @@ test.describe("public plan (#plano=<token>)", () => {
       await expect(box).toBeChecked();
     });
   });
+
+  test.describe("claiming items (Eu levo)", () => {
+    const CLAIMED = {
+      ...SHARED,
+      plan_items: [SHARED.plan_items[0]!, { ...SHARED.plan_items[1]!, who: "Bia Teste" }],
+    };
+    const RELEASED = {
+      ...SHARED,
+      plan_items: [{ text: "Comprar ingressos", list: "checklist", done: true }, SHARED.plan_items[1]!],
+    };
+
+    test("claims through the rpc and shows the owner after the response", async ({ page }) => {
+      const touched = await watchForbidden(page);
+      const calls = await mockRpc(page, {
+        links_shared_plan_get: () => SHARED,
+        links_shared_plan_set_who: () => CLAIMED,
+      });
+      await page.goto(`${PAGE}#plano=${TOKEN}`);
+      const pick = page.getByRole("combobox", { name: "Eu levo: Biscoitos" });
+      await expect(pick).toBeVisible();
+      await expect(pick).toHaveValue("");
+      await pick.selectOption("Bia Teste");
+      await expect(page.locator(".links-detail__plan-who", { hasText: "Bia Teste" })).toBeVisible();
+      await expect(pick).toHaveValue("Bia Teste");
+
+      const writes = calls.filter((c) => c.name === "links_shared_plan_set_who");
+      expect(writes).toHaveLength(1);
+      expect(writes[0]!.body).toEqual({
+        token: TOKEN,
+        idx: 1,
+        expected_text: "Biscoitos",
+        who: "Bia Teste",
+      });
+      expect(writes[0]!.headers.authorization).toBeUndefined();
+      expect(touched).toEqual([]);
+    });
+
+    test("releases with who null", async ({ page }) => {
+      const calls = await mockRpc(page, {
+        links_shared_plan_get: () => SHARED,
+        links_shared_plan_set_who: () => RELEASED,
+      });
+      await page.goto(`${PAGE}#plano=${TOKEN}`);
+      const pick = page.getByRole("combobox", { name: "Eu levo: Comprar ingressos" });
+      await expect(pick).toHaveValue("Alana");
+      await pick.selectOption({ label: "Ninguém" });
+      await expect(page.locator(".links-detail__plan-who")).toHaveCount(0);
+      await expect(pick).toHaveValue("");
+      const write = calls.find((c) => c.name === "links_shared_plan_set_who")!;
+      expect(write.body).toEqual({
+        token: TOKEN,
+        idx: 0,
+        expected_text: "Comprar ingressos",
+        who: null,
+      });
+    });
+
+    test("on conflict shows the notice and reloads the plan", async ({ page }) => {
+      let gets = 0;
+      await page.route(`${RPC}*`, async (route) => {
+        const name = new URL(route.request().url()).pathname.split("/").pop()!;
+        if (name === "links_shared_plan_get") gets += 1;
+        const conflict = name === "links_shared_plan_set_who";
+        await route.fulfill({
+          status: conflict ? 400 : 200,
+          contentType: "application/json",
+          body: JSON.stringify(conflict ? { message: "conflict" } : SHARED),
+        });
+      });
+      await page.goto(`${PAGE}#plano=${TOKEN}`);
+      await page.getByRole("combobox", { name: "Eu levo: Biscoitos" }).selectOption("Alana");
+      await expect(page.getByRole("status")).toContainText("O plano mudou");
+      await expect.poll(() => gets).toBe(2);
+      await expect(page.getByRole("combobox", { name: "Eu levo: Biscoitos" })).toHaveValue("");
+    });
+
+    test("selects and rows are at least 16px text and 44px tall", async ({ page }) => {
+      await mockRpc(page, { links_shared_plan_get: () => SHARED });
+      await page.goto(`${PAGE}#plano=${TOKEN}`);
+      const picks = page.locator(".links-public-plan__claim");
+      await expect(picks).toHaveCount(2);
+      for (const pick of await picks.all()) {
+        const box = (await pick.boundingBox())!;
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        expect(box.width).toBeGreaterThanOrEqual(44);
+        const size = await pick.evaluate((n) => parseFloat(getComputedStyle(n).fontSize));
+        expect(size).toBeGreaterThanOrEqual(16);
+        const opt = await pick.locator("option").first().evaluate((n) => parseFloat(getComputedStyle(n).fontSize));
+        expect(opt).toBeGreaterThanOrEqual(16);
+      }
+    });
+  });
 });

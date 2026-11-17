@@ -7,7 +7,7 @@ import {
   planWriteErrorMessage,
   type SharedPlanView,
 } from "./plan-share";
-import { SharedPlanWriteFailure, fetchSharedPlan, setSharedPlanDone } from "./shared-plan-api";
+import { SharedPlanWriteFailure, fetchSharedPlan, setSharedPlanDone, setSharedPlanWho } from "./shared-plan-api";
 import { renderSharedPlan, renderSharedPlanMessage } from "./shared-plan-ui";
 
 /**
@@ -17,7 +17,7 @@ import { renderSharedPlan, renderSharedPlanMessage } from "./shared-plan-ui";
  * It must stay free of auth: this module never imports auth.ts, session-storage.ts
  * or creates a supabase-js client, so nothing here reads or writes the auth
  * session in localStorage and no login UI is built. The only network calls are
- * the two public rpcs (shared-plan-api.ts): read, and tick one item.
+ * the public rpcs (shared-plan-api.ts): read, tick one item, claim one item.
  */
 export async function bootSharedPlan(hash: string): Promise<void> {
   const main = document.querySelector<HTMLElement>(".links-app__main");
@@ -52,14 +52,14 @@ export async function bootSharedPlan(hash: string): Promise<void> {
 
   let view: SharedPlanView | null = null;
   let notice: string | null = null;
-  // Ticks run one at a time, in order. A failure bumps `epoch` so ticks still
+  // Writes run one at a time, in order. A failure bumps `epoch` so writes still
   // queued behind it are dropped (they were made on a plan we are reloading).
   let queue: Promise<void> = Promise.resolve();
   let epoch = 0;
   let inFlight = 0;
 
   const show = (): void => {
-    if (view) renderSharedPlan(root, view, onToggle, notice);
+    if (view) renderSharedPlan(root, view, onToggle, onClaim, notice);
   };
 
   const load = async (): Promise<void> => {
@@ -88,26 +88,17 @@ export async function bootSharedPlan(hash: string): Promise<void> {
     }
   };
 
-  function onToggle(idx: number, text: string, done: boolean): void {
-    if (!view) return;
-    notice = null;
-    for (const list of view.lists) {
-      for (const item of list.items) if (item.idx === idx) item.done = done;
-    }
-    // Optimistic: progress labels follow the new state.
-    for (const list of view.lists) {
-      const doneCount = list.items.filter((i) => i.done).length;
-      list.progress = `${doneCount} de ${list.items.length}`;
-    }
-    show();
-
+  /**
+   * Runs one write behind the previous ones. Every answer is the whole plan, so
+   * only the last one in flight is shown; earlier answers would undo queued writes.
+   */
+  function enqueue(write: () => Promise<unknown>): void {
     const myEpoch = epoch;
     inFlight += 1;
     queue = queue.then(async () => {
       try {
         if (myEpoch !== epoch) return;
-        const plan = await setSharedPlanDone(config, { token: planToken, idx, expectedText: text, done });
-        // Only the last answer wins: earlier ones would undo queued ticks.
+        const plan = await write();
         if (inFlight === 1 && myEpoch === epoch) {
           const next = buildSharedPlanView(plan);
           if (next) {
@@ -122,6 +113,31 @@ export async function bootSharedPlan(hash: string): Promise<void> {
         inFlight -= 1;
       }
     });
+  }
+
+  function onToggle(idx: number, text: string, done: boolean): void {
+    if (!view) return;
+    notice = null;
+    for (const list of view.lists) {
+      for (const item of list.items) if (item.idx === idx) item.done = done;
+    }
+    // Optimistic: progress labels follow the new state.
+    for (const list of view.lists) {
+      const doneCount = list.items.filter((i) => i.done).length;
+      list.progress = `${doneCount} de ${list.items.length}`;
+    }
+    show();
+    enqueue(() => setSharedPlanDone(config, { token: planToken, idx, expectedText: text, done }));
+  }
+
+  function onClaim(idx: number, text: string, who: string | null): void {
+    if (!view) return;
+    notice = null;
+    for (const list of view.lists) {
+      for (const item of list.items) if (item.idx === idx) item.who = who;
+    }
+    show();
+    enqueue(() => setSharedPlanWho(config, { token: planToken, idx, expectedText: text, who }));
   }
 
   try {

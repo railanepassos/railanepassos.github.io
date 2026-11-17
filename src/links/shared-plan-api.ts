@@ -34,27 +34,18 @@ export class SharedPlanWriteFailure extends Error {
   }
 }
 
-/**
- * Ticks one item through links_shared_plan_set_done. Same rules as the read:
- * plain fetch, anon key only, no cookies, no Authorization, no Referer.
- * Resolves with the updated plan; throws SharedPlanWriteFailure otherwise.
- */
-export async function setSharedPlanDone(
+async function callWrite(
   config: SupabaseConfig,
-  args: { token: string; idx: number; expectedText: string; done: boolean },
-  fetchImpl: typeof fetch = fetch
+  rpc: string,
+  body: Record<string, unknown>,
+  fetchImpl: typeof fetch
 ): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetchImpl(`${config.url}/rest/v1/rpc/links_shared_plan_set_done`, {
+    response = await fetchImpl(`${config.url}/rest/v1/rpc/${rpc}`, {
       method: "POST",
       headers: { apikey: config.anonKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        token: args.token,
-        idx: args.idx,
-        expected_text: args.expectedText,
-        done: args.done,
-      }),
+      body: JSON.stringify(body),
       credentials: "omit",
       referrerPolicy: "no-referrer",
     });
@@ -62,8 +53,40 @@ export async function setSharedPlanDone(
     throw new SharedPlanWriteFailure("error");
   }
   if (!response.ok) {
-    const body: unknown = await response.json().catch(() => null);
-    throw new SharedPlanWriteFailure(classifyPlanWriteError(response.status, body));
+    const data: unknown = await response.json().catch(() => null);
+    throw new SharedPlanWriteFailure(classifyPlanWriteError(response.status, data));
   }
   return response.json();
+}
+
+/**
+ * Ticks one item through links_shared_plan_set_done. Same rules as the read:
+ * plain fetch, anon key only, no cookies, no Authorization, no Referer.
+ * Resolves with the updated plan; throws SharedPlanWriteFailure otherwise.
+ */
+export function setSharedPlanDone(
+  config: SupabaseConfig,
+  args: { token: string; idx: number; expectedText: string; done: boolean },
+  fetchImpl: typeof fetch = fetch
+): Promise<unknown> {
+  return callWrite(
+    config,
+    "links_shared_plan_set_done",
+    { token: args.token, idx: args.idx, expected_text: args.expectedText, done: args.done },
+    fetchImpl
+  );
+}
+
+/** Claims ("Eu levo") or, with who null, releases one item through links_shared_plan_set_who. */
+export function setSharedPlanWho(
+  config: SupabaseConfig,
+  args: { token: string; idx: number; expectedText: string; who: string | null },
+  fetchImpl: typeof fetch = fetch
+): Promise<unknown> {
+  return callWrite(
+    config,
+    "links_shared_plan_set_who",
+    { token: args.token, idx: args.idx, expected_text: args.expectedText, who: args.who },
+    fetchImpl
+  );
 }
