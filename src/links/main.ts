@@ -6,6 +6,7 @@ import { createAuthStorage, setRememberMe } from "./session-storage";
 import { createLinksRepo, type LinksRepo, type LinkRow } from "./links-repo";
 import { renderGuestGate } from "./render";
 import { collectTags } from "./tags";
+import { collectLessons } from "./lesson-suggestions";
 import { collectPeople } from "./people";
 import { matches, parseQuery, removeChip, setMinRating, toggleFilter } from "./query";
 import { renderDoneToolbar } from "./done-toolbar";
@@ -211,6 +212,7 @@ function bootDynamic(
   const reviewSheet: ReviewSheetHandle = createReviewSheet();
   const planSheet: PlanSheetHandle = createPlanSheet({
     getPeopleSuggestions: () => collectPeople(links),
+    getLessonCandidates: () => collectLessons(links),
   });
   const viewModal: ViewModalHandle = createViewModal({
     onEdit: (l) => formModal.openEdit(l),

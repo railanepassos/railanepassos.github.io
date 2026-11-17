@@ -10,6 +10,7 @@ import {
   type PlanList,
   type PlanValues,
 } from "./plan";
+import { suggestLessons } from "./lesson-suggestions";
 import { moveItem } from "./poses";
 import { setScreenBusy } from "./skeleton";
 import { syncBodyScreenLock } from "./screen-lock";
@@ -47,6 +48,8 @@ export type PlanSheetOpenOpts = {
 export type PlanSheetOptions = {
   /** Names already used in other places (autocomplete for the participants). */
   getPeopleSuggestions?: () => readonly string[];
+  /** Lessons from done places, most frequent first ("Sugestões das suas lições"). */
+  getLessonCandidates?: () => readonly string[];
 };
 
 export type PlanSheetHandle = {
@@ -61,6 +64,8 @@ type PlanListControl = {
   element: HTMLElement;
   set: (items: readonly PlanDraft[]) => void;
   read: () => PlanDraft[];
+  /** Appends a filled item at the end (no redraw: the caller redraws every list). */
+  append: (text: string) => void;
   /** Redraws the rows (numbers and the add button depend on the other lists). */
   render: () => void;
 };
@@ -236,6 +241,9 @@ function createListControl(
       render();
     },
     read: () => rows.map((d) => ({ ...d })),
+    append: (text) => {
+      rows.push({ text, list, who: "", done: false });
+    },
     render: () => render(),
   };
 }
@@ -277,7 +285,45 @@ export function createPlanSheet(options: PlanSheetOptions = {}): PlanSheetHandle
 
   // Numbers and add buttons depend on the other lists: any change redraws all.
   const listControls: PlanListControl[] = [];
-  const renderAll = (): void => listControls.forEach((c) => c.render());
+  const suggestions = document.createElement("section");
+  suggestions.className = "links-admin-form__field links-plan-suggestions";
+  suggestions.dataset.lessonSuggestions = "";
+  suggestions.setAttribute("aria-label", "Sugestões das suas lições");
+  suggestions.hidden = true;
+  const suggestionsTitle = document.createElement("p");
+  suggestionsTitle.className = "links-admin-form__label";
+  suggestionsTitle.textContent = "Sugestões das suas lições";
+  const suggestionList = document.createElement("div");
+  suggestionList.className = "links-plan-suggestions__list";
+  suggestions.append(suggestionsTitle, suggestionList);
+
+  function renderSuggestions(): void {
+    const all = listControls.flatMap((c) => c.read());
+    const shown = suggestLessons(options.getLessonCandidates?.() ?? [], all.map((d) => d.text));
+    const full = all.length >= MAX_PLAN_ITEMS;
+    suggestionList.replaceChildren();
+    for (const text of shown) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "links-plan-suggestions__chip";
+      chip.dataset.lessonSuggestion = "";
+      chip.disabled = full;
+      chip.setAttribute("aria-label", `Adicionar ao checklist: ${text}`);
+      chip.append(uiIcon("plus", 18), document.createTextNode(text));
+      chip.addEventListener("click", () => {
+        if (listControls.flatMap((c) => c.read()).length >= MAX_PLAN_ITEMS) return;
+        listControls[0]!.append(text);
+        renderAll();
+        (suggestionList.querySelector("button:not(:disabled)") as HTMLElement | null)?.focus();
+      });
+      suggestionList.appendChild(chip);
+    }
+    suggestions.hidden = shown.length === 0;
+  }
+  const renderAll = (): void => {
+    listControls.forEach((c) => c.render());
+    renderSuggestions();
+  };
   const counts = (): number[] => listControls.map((c) => c.read().length);
   PLAN_LISTS.forEach(({ key, title }, index) => {
     listControls.push(
@@ -312,7 +358,15 @@ export function createPlanSheet(options: PlanSheetOptions = {}): PlanSheetHandle
   skipBtn.textContent = "Cancelar";
 
   actions.append(saveBtn, skipBtn);
-  form.append(peopleInput.element, ...listControls.map((c) => c.element), error, actions);
+  const [checklistControl, ...otherControls] = listControls;
+  form.append(
+    peopleInput.element,
+    checklistControl!.element,
+    suggestions,
+    ...otherControls.map((c) => c.element),
+    error,
+    actions
+  );
   dialog.append(placeName, form);
 
   function setBusy(next: boolean): void {
