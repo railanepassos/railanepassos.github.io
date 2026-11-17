@@ -175,7 +175,9 @@ test.describe("public plan (#plano=<token>)", () => {
       await expect(main).toContainText(text);
     }
     await expect(page.getByRole("button", { name: /entrar|login/i })).toHaveCount(0);
-    await expect(page.locator("input")).toHaveCount(0);
+    await expect(page.locator("input:not([type=checkbox])")).toHaveCount(0);
+    await expect(page.getByRole("checkbox", { name: "Comprar ingressos" })).toBeChecked();
+    await expect(page.getByRole("checkbox", { name: "Biscoitos" })).not.toBeChecked();
     await expect(page.locator("#links-tabbar")).toBeHidden();
 
     expect(calls).toHaveLength(1);
@@ -243,5 +245,168 @@ test.describe("public plan (#plano=<token>)", () => {
     for (const size of sizes) expect(size).toBeGreaterThanOrEqual(16);
     await expect(page.locator("meta[name='referrer']")).toHaveAttribute("content", "no-referrer");
     await expect(page.locator("meta[name='robots']")).toHaveAttribute("content", /noindex/);
+  });
+  test.describe("ticking items", () => {
+    const AFTER = {
+      ...SHARED,
+      plan_items: [SHARED.plan_items[0]!, { ...SHARED.plan_items[1]!, done: true }],
+    };
+
+    test("ticks through the rpc with idx, expected_text and done", async ({ page }) => {
+      const touched = await watchForbidden(page);
+      const calls = await mockRpc(page, {
+        links_shared_plan_get: () => SHARED,
+        links_shared_plan_set_done: () => AFTER,
+      });
+      await page.goto(`${PAGE}#plano=${TOKEN}`);
+      const box = page.getByRole("checkbox", { name: "Biscoitos" });
+      await expect(box).toBeVisible();
+      await box.check();
+      await expect(page.locator("#shared-plan-root")).toContainText("Lanches e compras · 1 de 1");
+      await expect(box).toBeChecked();
+
+      const writes = calls.filter((c) => c.name === "links_shared_plan_set_done");
+      expect(writes).toHaveLength(1);
+      expect(writes[0]!.body).toEqual({
+        token: TOKEN,
+        idx: 1,
+        expected_text: "Biscoitos",
+        done: true,
+      });
+      expect(writes[0]!.headers.authorization).toBeUndefined();
+      expect(touched).toEqual([]);
+      expect(calls.filter((c) => c.name === "links_shared_plan_get")).toHaveLength(1);
+    });
+
+    test("unticking sends done false", async ({ page }) => {
+      const calls = await mockRpc(page, {
+        links_shared_plan_get: () => SHARED,
+        links_shared_plan_set_done: () => ({
+          ...SHARED,
+          plan_items: [{ ...SHARED.plan_items[0]!, done: false }, SHARED.plan_items[1]!],
+        }),
+      });
+      await page.goto(`${PAGE}#plano=${TOKEN}`);
+      await page.getByRole("checkbox", { name: "Comprar ingressos" }).uncheck();
+      await expect(page.locator("#shared-plan-root")).toContainText("Checklist · 0 de 1");
+      const write = calls.find((c) => c.name === "links_shared_plan_set_done")!;
+      expect(write.body).toEqual({
+        token: TOKEN,
+        idx: 0,
+        expected_text: "Comprar ingressos",
+        done: false,
+      });
+    });
+
+    test("checkboxes and their rows are big enough to tap", async ({ page }) => {
+      await mockRpc(page, { links_shared_plan_get: () => SHARED });
+      await page.goto(`${PAGE}#plano=${TOKEN}`);
+      const box = page.getByRole("checkbox", { name: "Biscoitos" });
+      await expect(box).toBeVisible();
+      const check = (await box.boundingBox())!;
+      expect(check.width).toBeGreaterThanOrEqual(16);
+      const row = (await page.locator(".links-public-plan__row").first().boundingBox())!;
+      expect(row.height).toBeGreaterThanOrEqual(44);
+    });
+
+    test("on conflict shows the notice and reloads the plan", async ({ page }) => {
+      const RELOADED = {
+        ...SHARED,
+        plan_items: [{ text: "Biscoitos integrais", list: "compras", done: false }],
+      };
+      let gets = 0;
+      const calls: Call[] = [];
+      await page.route(`${RPC}*`, async (route) => {
+        const request = route.request();
+        const name = new URL(request.url()).pathname.split("/").pop()!;
+        calls.push({ name, body: request.postDataJSON() ?? {}, headers: request.headers() });
+        if (name === "links_shared_plan_set_done") {
+          await route.fulfill({
+            status: 400,
+            contentType: "application/json",
+            body: JSON.stringify({ code: "P0001", message: "conflict", details: null, hint: null }),
+          });
+          return;
+        }
+        gets += 1;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(gets === 1 ? SHARED : RELOADED),
+        });
+      });
+      await page.goto(`${PAGE}#plano=${TOKEN}`);
+      await page.getByRole("checkbox", { name: "Biscoitos" }).click();
+      await expect(page.getByText("O plano mudou, recarregamos para você")).toBeVisible();
+      await expect(page.getByRole("checkbox", { name: "Biscoitos integrais" })).not.toBeChecked();
+      await expect(page.getByRole("checkbox", { name: "Comprar ingressos" })).toHaveCount(0);
+      expect(calls.map((c) => c.name)).toEqual([
+        "links_shared_plan_get",
+        "links_shared_plan_set_done",
+        "links_shared_plan_get",
+      ]);
+      for (const c of calls) expect(c.headers.authorization).toBeUndefined();
+    });
+
+    test("on inactive shows the inactive message", async ({ page }) => {
+      await page.route(`${RPC}*`, async (route) => {
+        const name = new URL(route.request().url()).pathname.split("/").pop()!;
+        if (name === "links_shared_plan_set_done") {
+          await route.fulfill({
+            status: 400,
+            contentType: "application/json",
+            body: JSON.stringify({ code: "P0001", message: "inactive" }),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(SHARED),
+        });
+      });
+      await page.goto(`${PAGE}#plano=${TOKEN}`);
+      await page.getByRole("checkbox", { name: "Biscoitos" }).click();
+      await expect(page.getByText("Este link não está mais ativo")).toBeVisible();
+      await expect(page.getByRole("checkbox")).toHaveCount(0);
+    });
+
+    test("serializes rapid ticks: one call at a time, in order", async ({ page }) => {
+      let active = 0;
+      let maxActive = 0;
+      const bodies: Array<Record<string, unknown>> = [];
+      await page.route(`${RPC}*`, async (route) => {
+        const name = new URL(route.request().url()).pathname.split("/").pop()!;
+        if (name === "links_shared_plan_set_done") {
+          active += 1;
+          maxActive = Math.max(maxActive, active);
+          bodies.push(route.request().postDataJSON());
+          await new Promise((r) => setTimeout(r, 150));
+          active -= 1;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(
+            name === "links_shared_plan_set_done"
+              ? {
+                  ...SHARED,
+                  plan_items: [SHARED.plan_items[0]!, { ...SHARED.plan_items[1]!, done: true }],
+                }
+              : SHARED
+          ),
+        });
+      });
+      await page.goto(`${PAGE}#plano=${TOKEN}`);
+      const box = page.getByRole("checkbox", { name: "Biscoitos" });
+      await expect(box).toBeVisible();
+      await box.check();
+      await box.uncheck();
+      await box.check();
+      await expect.poll(() => bodies.length).toBe(3);
+      expect(bodies.map((b) => b.done)).toEqual([true, false, true]);
+      expect(maxActive).toBe(1);
+      await expect(box).toBeChecked();
+    });
   });
 });

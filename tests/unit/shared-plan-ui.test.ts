@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderSharedPlan, renderSharedPlanMessage } from "../../src/links/shared-plan-ui";
 import { buildSharedPlanView } from "../../src/links/plan-share";
 
@@ -27,8 +27,8 @@ beforeEach(() => {
 });
 
 describe("renderSharedPlan", () => {
-  it("renders the plan read-only: no inputs, buttons or links", () => {
-    renderSharedPlan(root, VIEW);
+  it("renders the plan with one checkbox per item and no buttons, links or text fields", () => {
+    renderSharedPlan(root, VIEW, vi.fn());
     expect(root.querySelector("h2")!.textContent).toBe("Lugar Compartilhado");
     const text = root.textContent!;
     for (const part of [
@@ -43,19 +43,34 @@ describe("renderSharedPlan", () => {
     ]) {
       expect(text).toContain(part);
     }
-    expect(root.querySelector("input, button, a, textarea, select")).toBeNull();
+    expect(root.querySelector("button, a, textarea, select, input:not([type=checkbox])")).toBeNull();
+    expect(root.querySelectorAll("input[type=checkbox]")).toHaveLength(2);
   });
 
-  it("marks done and pending items for screen readers", () => {
-    renderSharedPlan(root, VIEW);
-    const items = [...root.querySelectorAll("li")];
-    expect(items[0]!.textContent).toContain("Feito");
-    expect(items[1]!.textContent).toContain("Pendente");
+  it("checks done items and labels each checkbox with the item text", () => {
+    renderSharedPlan(root, VIEW, vi.fn());
+    const boxes = [...root.querySelectorAll<HTMLInputElement>("input[type=checkbox]")];
+    expect(boxes.map((b) => b.checked)).toEqual([true, false]);
+    expect(boxes[0]!.closest("label")!.textContent).toContain("Comprar ingressos");
+  });
+
+  it("reports a toggle with the stored index, the text and the new value", () => {
+    const onToggle = vi.fn();
+    renderSharedPlan(root, VIEW, onToggle);
+    root.querySelectorAll<HTMLInputElement>("input[type=checkbox]")[1]!.click();
+    expect(onToggle).toHaveBeenCalledWith(1, "Biscoitos", true);
+  });
+
+  it("shows a notice as a status above the plan", () => {
+    renderSharedPlan(root, VIEW, vi.fn(), "O plano mudou, recarregamos para você");
+    expect(root.querySelector("[role=status]")!.textContent).toBe(
+      "O plano mudou, recarregamos para você"
+    );
   });
 
   it("escapes content (text only, never HTML)", () => {
     const evil = buildSharedPlanView({ label: "<img src=x onerror=alert(1)>", people: ["<b>x</b>"] })!;
-    renderSharedPlan(root, evil);
+    renderSharedPlan(root, evil, vi.fn());
     expect(root.querySelector("img")).toBeNull();
     expect(root.querySelector("b")).toBeNull();
     expect(root.textContent).toContain("<img src=x onerror=alert(1)>");

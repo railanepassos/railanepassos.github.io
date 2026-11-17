@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  SHARED_PLAN_CONFLICT,
   SHARED_PLAN_INACTIVE,
+  SHARED_PLAN_SAVE_ERROR,
   buildSharedPlanView,
+  classifyPlanWriteError,
+  planWriteErrorMessage,
   isPlanShareFragment,
   parsePlanFragment,
   planShareUrl,
@@ -94,15 +98,15 @@ describe("buildSharedPlanView", () => {
           title: "Checklist",
           progress: "1 de 2",
           items: [
-            { text: "Comprar ingressos", who: "Alana", done: true },
-            { text: "Protetor solar", who: null, done: false },
+            { idx: 0, text: "Comprar ingressos", who: "Alana", done: true },
+            { idx: 1, text: "Protetor solar", who: null, done: false },
           ],
         },
         {
           key: "compras",
           title: "Lanches e compras",
           progress: "0 de 1",
-          items: [{ text: "Biscoitos", who: "Bia Teste", done: false }],
+          items: [{ idx: 2, text: "Biscoitos", who: "Bia Teste", done: false }],
         },
       ],
     });
@@ -143,5 +147,48 @@ describe("buildSharedPlanView", () => {
     ["a blank label", { label: "  " }],
   ])("returns null for %s", (_n, raw) => {
     expect(buildSharedPlanView(raw)).toBeNull();
+  });
+});
+
+describe("buildSharedPlanView idx", () => {
+  it("keeps the index in the stored array even when a malformed item is skipped", () => {
+    const view = buildSharedPlanView({
+      label: "X",
+      plan_items: [
+        { text: "  ", list: "checklist", done: false },
+        { text: "Dois", list: "compras", done: false },
+        { text: "Tres", list: "checklist", done: true },
+      ],
+    });
+    const all = view!.lists.flatMap((l) => l.items.map((i) => [i.idx, i.text]));
+    expect(all.sort()).toEqual([[1, "Dois"], [2, "Tres"]].sort());
+  });
+});
+
+describe("classifyPlanWriteError", () => {
+  it("reads the server message", () => {
+    expect(classifyPlanWriteError(400, { message: "conflict" })).toBe("conflict");
+    expect(classifyPlanWriteError(400, { message: "inactive" })).toBe("inactive");
+  });
+
+  it.each([
+    ["invalid message", 400, { message: "invalid" }],
+    ["unknown message", 400, { message: "boom" }],
+    ["server error", 500, { message: "conflict-ish" }],
+    ["no body", 400, null],
+    ["string body", 400, "conflict"],
+    ["network (status 0)", 0, undefined],
+  ])("maps %s to a generic error", (_n, status, body) => {
+    expect(classifyPlanWriteError(status, body)).toBe("error");
+  });
+});
+
+describe("planWriteErrorMessage", () => {
+  it("is PT-BR for each kind", () => {
+    expect(planWriteErrorMessage("conflict")).toBe("O plano mudou, recarregamos para você");
+    expect(planWriteErrorMessage("conflict")).toBe(SHARED_PLAN_CONFLICT);
+    expect(planWriteErrorMessage("inactive")).toBe(SHARED_PLAN_INACTIVE);
+    expect(planWriteErrorMessage("error")).toBe(SHARED_PLAN_SAVE_ERROR);
+    expect(SHARED_PLAN_SAVE_ERROR).toBe("Não foi possível salvar. Tente de novo.");
   });
 });
