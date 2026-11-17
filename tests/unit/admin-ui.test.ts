@@ -34,6 +34,10 @@ function formValues(partial: Partial<LinkFormValues> = {}): LinkFormValues {
   };
 }
 
+function modalSourceRows(q: <T extends HTMLElement>(sel: string) => T): number {
+  return q<HTMLElement>(".links-sources__list").children.length;
+}
+
 function row(partial: Partial<LinkRow> = {}): LinkRow {
   return {
     id: "link-1",
@@ -1010,6 +1014,87 @@ describe("pose references", () => {
     expect(q<HTMLInputElement>("#links-form-pose-1-note").value).toBe("so nota");
     modal.openCreate({ url: "" });
     expect(items()).toHaveLength(0);
+  });
+
+  it("maps sources to the payload, dropping blank rows", () => {
+    expect(
+      toCreateInput(
+        formValues({
+          sources: [
+            { title: " Guia ", url: "example.com/a" },
+            { title: "", url: "" },
+          ],
+        }),
+        1
+      )
+    ).toMatchObject({ sources: [{ title: "Guia", url: "https://example.com/a" }] });
+    expect(toUpdatePatch(formValues())).toMatchObject({ sources: [] });
+    expect(() => toCreateInput(formValues({ sources: [{ title: "", url: "https://example.com" }] }), 1)).toThrow(
+      /Fonte 1/
+    );
+  });
+
+  it("adds and removes source rows; blank rows are dropped on submit", () => {
+    const onSubmit = vi.fn();
+    const { click, type, submit, q } = setup(onSubmit);
+    click("Adicionar fonte");
+    click("Adicionar fonte");
+    click("Adicionar fonte");
+    type("links-form-source-0-title", "Guia");
+    type("links-form-source-0-url", "https://example.com/g");
+    type("links-form-source-1-title", "Notícia");
+    type("links-form-source-1-url", "https://example.com/n");
+    click("Remover fonte 3");
+    expect(modalSourceRows(q)).toBe(2);
+    submit();
+    const values = onSubmit.mock.calls[0]![0] as LinkFormValues;
+    expect(values.sources).toEqual([
+      { title: "Guia", url: "https://example.com/g" },
+      { title: "Notícia", url: "https://example.com/n" },
+    ]);
+  });
+
+  it("blocks submit on a half-filled source row", () => {
+    const onSubmit = vi.fn();
+    const { click, type, submit } = setup(onSubmit);
+    click("Adicionar fonte");
+    type("links-form-source-0-title", "Só título");
+    submit();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("round-trips stored sources on edit and resets on create", () => {
+    const { modal, q } = setup();
+    modal.openEdit(row({ sources: [{ title: "Guia", url: "https://example.com/g" }] }));
+    expect(q<HTMLDetailsElement>("details.links-admin-form__more").open).toBe(true);
+    expect(q<HTMLInputElement>("#links-form-source-0-title").value).toBe("Guia");
+    expect(q<HTMLInputElement>("#links-form-source-0-url").value).toBe("https://example.com/g");
+    modal.openCreate({ url: "" });
+    expect(modalSourceRows(q)).toBe(0);
+  });
+
+  it("detail lists sources as safe new-tab links with text titles, hidden when empty", () => {
+    const modal = createViewModal(viewCb());
+    document.body.appendChild(modal.element);
+    modal.open(
+      row({
+        sources: [
+          { title: "<b>Guia</b>", url: "https://example.com/g" },
+          { title: "Ruim", url: "javascript:alert(1)" },
+        ],
+      })
+    );
+    const wrap = modal.element.querySelector<HTMLElement>("[data-field='sources']")!;
+    expect(wrap.hidden).toBe(false);
+    const links = [...wrap.querySelectorAll("a")];
+    expect(links).toHaveLength(1);
+    expect(links[0]!.getAttribute("href")).toBe("https://example.com/g");
+    expect(links[0]!.target).toBe("_blank");
+    expect(links[0]!.rel).toBe("noopener noreferrer");
+    expect(links[0]!.textContent).toContain("<b>Guia</b>");
+    expect(links[0]!.querySelector("b")).toBeNull();
+    modal.open(row());
+    expect(wrap.hidden).toBe(true);
   });
 
   it("detail lists poses in order with safe new-tab links, hidden when empty", () => {

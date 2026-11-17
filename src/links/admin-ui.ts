@@ -43,6 +43,16 @@ import {
   readPoseRefs,
   type PoseDraft,
 } from "./poses";
+import {
+  MAX_SOURCES,
+  SOURCE_TITLE_MAX,
+  draftsToSources,
+  readSources,
+  sourceDraftsFromSources,
+  sourcesError,
+  type Source,
+  type SourceDraft,
+} from "./sources";
 import { readLessons } from "./lessons";
 import {
   PLAN_LISTS,
@@ -294,6 +304,8 @@ export type LinkFormValues = MoreTextValues & {
   source_url: string;
   /** Photo-pose references, in display order (blank rows are dropped on save). */
   pose_refs: PoseDraft[];
+  /** Fontes (title + https link rows); blank rows are dropped on save. */
+  sources?: SourceDraft[];
   /** Picked category; "" = infer from text (Automática). */
   category: string;
   /** Extra categories after the main one (up to 3); only used with a picked main. */
@@ -1323,6 +1335,90 @@ export function createLinkFormModal(
       ?.focus();
   });
 
+  // Fontes: rows of {title, url}. Same pattern as the poses above (state in
+  // `sourceRows`, re-render on add/remove only so typing keeps focus).
+  let sourceRows: SourceDraft[] = [];
+  const sourcesField = document.createElement("fieldset");
+  sourcesField.className = "links-admin-form__field links-sources";
+  const sourcesLegend = document.createElement("legend");
+  sourcesLegend.className = "links-admin-form__label";
+  sourcesLegend.textContent = "Fontes (opcional)";
+  const sourcesList = document.createElement("ol");
+  sourcesList.className = "links-sources__list";
+  const addSourceBtn = document.createElement("button");
+  addSourceBtn.type = "button";
+  addSourceBtn.className = "links-sources__add";
+  addSourceBtn.setAttribute("aria-label", "Adicionar fonte");
+  addSourceBtn.append(uiIcon("plus", 18), document.createTextNode("Adicionar fonte"));
+  sourcesField.append(sourcesLegend, sourcesList, addSourceBtn);
+  moreBody.appendChild(sourcesField);
+
+  function validateSourceRow(index: number): boolean {
+    const row = sourceRows[index];
+    const err = sourcesList.querySelector<HTMLElement>(`#links-form-source-${index}-error`);
+    const urlInput = sourcesList.querySelector<HTMLInputElement>(`#links-form-source-${index}-url`);
+    if (!row || !err || !urlInput) return true;
+    const message = sourcesError([row]);
+    err.textContent = message ? message.replace(/^Fonte \d+: /, "") : "";
+    err.hidden = message === null;
+    if (message) urlInput.setAttribute("aria-invalid", "true");
+    else urlInput.removeAttribute("aria-invalid");
+    return message === null;
+  }
+
+  function renderSources(focusAdd = false): void {
+    sourcesList.replaceChildren();
+    sourceRows.forEach((source, i) => {
+      const n = i + 1;
+      const item = document.createElement("li");
+      item.className = "links-sources__item";
+      const titleField = labelledInput(`links-form-source-${i}-title`, `Fonte ${n}: título`, "text");
+      titleField.input.maxLength = SOURCE_TITLE_MAX;
+      titleField.input.autocomplete = "off";
+      titleField.input.value = source.title;
+      const urlField = labelledInput(`links-form-source-${i}-url`, `Fonte ${n}: link`, "url");
+      urlField.input.placeholder = "https://";
+      urlField.input.autocomplete = "off";
+      urlField.input.value = source.url;
+      const err = document.createElement("p");
+      err.id = `links-form-source-${i}-error`;
+      err.className = "links-admin-form__field-error";
+      err.hidden = true;
+      urlField.input.setAttribute("aria-describedby", err.id);
+      urlField.wrapper.appendChild(err);
+      titleField.input.addEventListener("input", () => {
+        source.title = titleField.input.value;
+        validateSourceRow(i);
+      });
+      urlField.input.addEventListener("input", () => {
+        source.url = urlField.input.value;
+        validateSourceRow(i);
+      });
+      normalizeUrlOnBlur(urlField.input);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "links-sources__remove";
+      remove.setAttribute("aria-label", `Remover fonte ${n}`);
+      remove.textContent = "Remover";
+      remove.addEventListener("click", () => {
+        sourceRows = sourceRows.filter((_, j) => j !== i);
+        renderSources(true);
+      });
+      item.append(titleField.wrapper, urlField.wrapper, remove);
+      sourcesList.appendChild(item);
+    });
+    addSourceBtn.disabled = sourceRows.length >= MAX_SOURCES;
+    if (focusAdd) addSourceBtn.focus();
+  }
+  addSourceBtn.addEventListener("click", () => {
+    if (sourceRows.length >= MAX_SOURCES) return;
+    sourceRows.push({ title: "", url: "" });
+    renderSources();
+    sourcesList
+      .querySelector<HTMLInputElement>(`#links-form-source-${sourceRows.length - 1}-title`)
+      ?.focus();
+  });
+
   function readMoreText(): MoreTextValues {
     const out = emptyMoreTextValues();
     for (const f of moreText) out[f.key] = f.input.value.trim();
@@ -1348,7 +1444,10 @@ export function createLinkFormModal(
     validateSource();
     poses = poseDraftsFromRefs(readPoseRefs(link?.pose_refs));
     renderPoses();
-    more.open = any || sourceField.input.value !== "" || poses.length > 0;
+    sourceRows = sourceDraftsFromSources(readSources(link?.sources));
+    renderSources();
+    more.open =
+      any || sourceField.input.value !== "" || poses.length > 0 || sourceRows.length > 0;
     syncMoreHeights();
   }
 
@@ -1524,6 +1623,14 @@ export function createLinkFormModal(
       posesList.querySelector<HTMLInputElement>(`#links-form-pose-${badPose}-url`)?.focus();
       return;
     }
+    const badSource = sourceRows.findIndex((_, i) => !validateSourceRow(i));
+    if (badSource >= 0) {
+      more.open = true;
+      sourcesList
+        .querySelector<HTMLInputElement>(`#links-form-source-${badSource}-url`)
+        ?.focus();
+      return;
+    }
     onSubmit(
       {
         tags: tagsInput.getValues(),
@@ -1535,6 +1642,7 @@ export function createLinkFormModal(
         note: memoryField.input.value.trim(),
         source_url: normalizeUrlInput(sourceField.input.value),
         pose_refs: poses.map((p) => ({ url: normalizeUrlInput(p.url), note: p.note.trim() })),
+        sources: sourceRows.map((s) => ({ title: s.title.trim(), url: normalizeUrlInput(s.url) })),
         category: pickedCategories[0] ?? "",
         extra_categories: pickedCategories.slice(1),
         ...readMoreText(),
@@ -1926,6 +2034,22 @@ function renderPoseItem(ref: { url?: string; note?: string }, index: number): HT
   return li;
 }
 
+/** One fonte in the detail list: title as text in a new-tab https link. */
+function renderSourceItem(source: Source): HTMLElement {
+  const li = document.createElement("li");
+  li.className = "links-detail__source";
+  const a = document.createElement("a");
+  a.className = "links-detail__source-link";
+  a.href = source.url;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  const label = document.createElement("span");
+  label.textContent = source.title;
+  a.append(label, uiIcon("external", 16));
+  li.appendChild(a);
+  return li;
+}
+
 const PLAN_SAVE_ERROR = "Não foi possível salvar o plano. Tente de novo.";
 const PLAN_SHARE_ERROR = "Não foi possível compartilhar o plano. Tente de novo.";
 
@@ -2279,7 +2403,14 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   const posesOl = document.createElement("ol");
   posesOl.className = "links-detail__poses";
   posesRow.value.appendChild(posesOl);
-  info.append(posesRow.row, linkRow.row);
+  // Fontes: public links the dossier/itinerary came from (new tab, titles as text).
+  const sourcesRow = infoRow("external", "Fontes");
+  sourcesRow.row.dataset.field = "sources";
+  sourcesRow.row.classList.add("links-detail__row--long");
+  const sourcesUl = document.createElement("ul");
+  sourcesUl.className = "links-detail__sources";
+  sourcesRow.value.appendChild(sourcesUl);
+  info.append(posesRow.row, linkRow.row, sourcesRow.row);
 
   body.append(chips, title, info);
 
@@ -2399,6 +2530,10 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     const poseRefs = readPoseRefs(link.pose_refs);
     posesRow.row.hidden = poseRefs.length === 0;
     posesOl.replaceChildren(...poseRefs.map(renderPoseItem));
+
+    const sources = readSources(link.sources);
+    sourcesRow.row.hidden = sources.length === 0;
+    sourcesUl.replaceChildren(...sources.map(renderSourceItem));
 
     planError.hidden = true;
     renderPlan();
@@ -2742,6 +2877,7 @@ export function toCreateInput(values: LinkFormValues, sortOrder: number): Create
     note: resolved.note.length > 0 ? resolved.note : null,
     source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
     pose_refs: draftsToPoseRefs(resolved.pose_refs),
+    sources: draftsToSources(resolved.sources ?? []),
     ...moreTextPayload(resolved),
     tags: tagsPayload(resolved),
     people: peoplePayload(resolved),
@@ -2763,6 +2899,7 @@ export function toUpdatePatch(values: LinkFormValues): UpdateLinkPatch {
     note: resolved.note.length > 0 ? resolved.note : null,
     source_url: resolved.source_url.length > 0 ? resolved.source_url : null,
     pose_refs: draftsToPoseRefs(resolved.pose_refs),
+    sources: draftsToSources(resolved.sources ?? []),
     ...moreTextPayload(resolved),
     tags: tagsPayload(resolved),
     people: peoplePayload(resolved),
@@ -2831,6 +2968,8 @@ function assertFormValues(values: LinkFormValues): void {
   if (!isOptionalHttpsUrl(values.source_url)) throw new Error(`${SOURCE_TERM} inválido.`);
   const poseError = poseRefsError(values.pose_refs);
   if (poseError) throw new Error(poseError);
+  const sourcesProblem = sourcesError(values.sources ?? []);
+  if (sourcesProblem) throw new Error(sourcesProblem);
   for (const field of MORE_TEXT_FIELDS) {
     if (values[field.key].length > field.max) {
       throw new Error(`${field.term} deve ter no máximo ${field.max} caracteres.`);
