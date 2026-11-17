@@ -5,7 +5,7 @@ import { createAuth, type Auth } from "./auth";
 import { createAuthStorage, setRememberMe } from "./session-storage";
 import { PLAN_STALE_NOTICE, isPlanShareFragment } from "./plan-share";
 import { bootSharedPlan } from "./shared-plan-boot";
-import { isDraftFragment, parseDraft, type ParseDraftResult } from "./draft";
+import { isDraftFragment, parseDraft, type DraftPlanItem, type ParseDraftResult } from "./draft";
 import { StaleLinkError, createLinksRepo, type LinksRepo, type LinkRow, type UpdateLinkPatch } from "./links-repo";
 import { renderGuestGate } from "./render";
 import { collectTags } from "./tags";
@@ -58,7 +58,7 @@ import { buildIcs, downloadIcs } from "./ics";
 import { createReviewSheet, type ReviewSheetHandle } from "./review-sheet";
 import { UNMARK_DONE_PATCH, reviewError, reviewFromLink, reviewToPatch } from "./review";
 import { createPlanSheet, type PlanSheetHandle } from "./plan-sheet";
-import { planError, planFromLink, planToPatch } from "./plan";
+import { mergeProposedPlanItems, planError, planFromLink, planToPatch } from "./plan";
 import { createDeckScreen, type DeckHandle } from "./deck-ui";
 import { nextPriority } from "./deck-queue";
 import { pickSharedUrl } from "./share-target";
@@ -204,6 +204,9 @@ function bootDynamic(
     }
   });
 
+  /** Update draft with fields + plan: the plan sheet opens once the item is saved. */
+  let planAfterSave: { id: string; items: DraftPlanItem[] } | null = null;
+
   const formModal: LinkFormHandle = createLinkFormModal(
     async (values, editingId) => {
       formModal.setBusy(true);
@@ -214,6 +217,10 @@ function bootDynamic(
           await submitCreate(values);
         }
         formModal.close();
+        const next = planAfterSave;
+        planAfterSave = null;
+        const saved = next && next.id === editingId ? findLink(next.id) : undefined;
+        if (next && saved) openPlan(saved, next.items);
       } catch (err) {
         formModal.setError(messageOf(err, GENERIC_ERROR));
       } finally {
@@ -223,6 +230,9 @@ function bootDynamic(
     {
       getTagSuggestions: () => collectTags(links),
       getPeopleSuggestions: () => collectPeople(links),
+      onDismiss: () => {
+        planAfterSave = null;
+      },
     }
   );
 
@@ -452,15 +462,18 @@ function bootDynamic(
   }
 
   /** "Plano do passeio" sheet, opened from the detail; the detail comes back when it closes. */
-  function openPlan(link: LinkRow): void {
+  function openPlan(link: LinkRow, proposed?: readonly DraftPlanItem[]): void {
     const reopenDetail = (): void => {
       const current = findLink(link.id);
       if (current) viewModal.open(current);
     };
+    const current = planFromLink(link);
     planSheet.open({
       label: displayTitle(link),
-      initial: planFromLink(link),
-      onSkip: reopenDetail,
+      initial: proposed
+        ? { ...current, items: mergeProposedPlanItems(current.items, proposed) }
+        : current,
+      onSkip: proposed ? () => undefined : reopenDetail,
       onSave: async (values) => {
         const problem = planError(values.items);
         if (problem) {
@@ -934,9 +947,21 @@ function bootDynamic(
     pendingDraft = null;
     if (result.draft.kind === "novo") {
       formModal.openCreate(result.draft.fields);
-    } else {
-      draftNotice = "Não foi possível abrir o rascunho: atualização ainda não é suportada.";
+      return;
+    }
+    const { id, fields, plan } = result.draft;
+    const target = findLink(id);
+    if (!target) {
+      draftNotice = "Não foi possível abrir o rascunho: o item não existe mais ou o id está errado.";
       renderList();
+      return;
+    }
+    const hasPlan = plan !== undefined && plan.length > 0;
+    if (fields && Object.keys(fields).length > 0) {
+      planAfterSave = hasPlan ? { id, items: plan } : null;
+      formModal.openEdit(target, fields);
+    } else if (hasPlan) {
+      openPlan(target, plan);
     }
   }
 
