@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LinkRow } from "../../src/links/links-repo";
-import { sortLinksForDisplay, visibleListLinks } from "../../src/links/sort-links";
+import { nextSortOrder, sortLinksForDisplay, visibleListLinks } from "../../src/links/sort-links";
 
 function row(partial: Partial<LinkRow>): LinkRow {
   return {
@@ -98,5 +98,16 @@ describe("visibleListLinks", () => {
     const open = row({ id: "open", status: "wishlist" });
     const done = row({ id: "done", status: "done" });
     expect(visibleListLinks([open, done]).map((l) => l.id)).toEqual(["open"]);
+  });
+});
+
+describe("nextSortOrder", () => {
+  it("starts at 0 for an empty list", () => {
+    expect(nextSortOrder([])).toBe(0);
+  });
+
+  it("goes past the highest sort_order when deletions left gaps", () => {
+    const links = [0, 1, 12, 13, 18].map((n, i) => row({ id: `id-${i}`, sort_order: n }));
+    expect(nextSortOrder(links)).toBe(19);
   });
 });

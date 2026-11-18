@@ -46,7 +46,7 @@ import { filterLinksByCategory, type Category } from "./category";
 import { pickRandomItem } from "./pick-random";
 import { applyDrawFilters, hasActiveDrawFilters } from "./draw-filters";
 import { createDrawFilterSheet } from "./draw-sheet";
-import { sortLinksForDisplay, visibleListLinks } from "./sort-links";
+import { nextSortOrder, sortLinksForDisplay, visibleListLinks } from "./sort-links";
 import {
   categoryCounts,
   displayTitle,
@@ -382,7 +382,7 @@ function bootDynamic(
 
   // --- persistence helpers ---
   async function submitCreate(values: LinkFormValues): Promise<void> {
-    const nextOrder = links.length;
+    const nextOrder = nextSortOrder(links);
     const created = await repo.createLink(toCreateInput(values, nextOrder));
     links = sortLinks([...links, created]);
     renderList();

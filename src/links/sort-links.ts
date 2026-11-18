@@ -30,3 +30,11 @@ export function sortLinksForDisplay(links: readonly LinkRow[]): LinkRow[] {
 export function visibleListLinks(links: readonly LinkRow[]): LinkRow[] {
   return sortLinksForDisplay(links.filter((l) => (l.status ?? "wishlist") !== "done"));
 }
+
+/**
+ * sort_order for a new link: one past the highest in use. sort_order is unique,
+ * and deletions leave gaps, so the list length can collide with an existing row.
+ */
+export function nextSortOrder(links: readonly LinkRow[]): number {
+  return links.reduce((max, l) => Math.max(max, l.sort_order), -1) + 1;
+}
