@@ -1611,3 +1611,83 @@ describe("Duração", () => {
     expect(wrap.hidden).toBe(true);
   });
 });
+
+describe("Aviso de duplicado", () => {
+  const existing = row({ id: "dup-1", label: "Almoçar no restaurante Vila do Caranguejo" });
+
+  function open(
+    prefill: Parameters<ReturnType<typeof createLinkFormModal>["openCreate"]>[0],
+    findDuplicate = vi.fn((url: string, source: string) =>
+      url.includes("caranguejo") || source.includes("caranguejo") ? existing : null
+    )
+  ) {
+    const onSubmit = vi.fn();
+    const onOpenDuplicate = vi.fn();
+    const modal = createLinkFormModal(onSubmit, { findDuplicate, onOpenDuplicate });
+    document.body.appendChild(modal.element);
+    modal.openCreate(prefill);
+    const notice = modal.element.querySelector<HTMLElement>("#links-form-duplicate")!;
+    const submitBtn = modal.element.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    const submit = () =>
+      modal.element.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    return { modal, notice, submitBtn, submit, onSubmit, onOpenDuplicate, findDuplicate };
+  }
+
+  it("names the existing item as soon as a draft opens", () => {
+    const { notice } = open({ url: "https://example.com/caranguejo" });
+    expect(notice.hidden).toBe(false);
+    expect(notice.textContent).toContain("Almoçar no restaurante Vila do Caranguejo");
+  });
+
+  it("checks the source post link too, and updates when the link changes", () => {
+    const { modal, notice } = open({ url: "https://example.com/lugar" });
+    expect(notice.hidden).toBe(true);
+    const source = modal.element.querySelector<HTMLInputElement>("#links-form-source_url")!;
+    source.value = "https://instagram.com/p/caranguejo";
+    source.dispatchEvent(new Event("input"));
+    expect(notice.hidden).toBe(false);
+    const url = modal.element.querySelector<HTMLInputElement>("#links-form-url")!;
+    source.value = "";
+    source.dispatchEvent(new Event("input"));
+    url.value = "https://example.com/outro";
+    url.dispatchEvent(new Event("input"));
+    expect(notice.hidden).toBe(true);
+  });
+
+  it("holds the first Salvar, then saves on Salvar mesmo assim", () => {
+    const { submitBtn, submit, onSubmit } = open({ url: "https://example.com/caranguejo" });
+    submit();
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(submitBtn.textContent).toBe("Salvar mesmo assim");
+    submit();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves on the first Salvar when there is no duplicate", () => {
+    const { submitBtn, submit, onSubmit } = open({ url: "https://example.com/novo" });
+    expect(submitBtn.textContent).toBe("Salvar");
+    submit();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the existing item and closes the form", () => {
+    const { modal, notice, onOpenDuplicate } = open({ url: "https://example.com/caranguejo" });
+    notice.querySelector<HTMLButtonElement>("button")!.click();
+    expect(onOpenDuplicate).toHaveBeenCalledWith(existing);
+    expect(modal.element.hidden).toBe(true);
+  });
+
+  it("never warns while editing, and resets the button on the next open", () => {
+    const { modal, notice, submitBtn, submit, onSubmit, findDuplicate } = open({
+      url: "https://example.com/caranguejo",
+    });
+    submit();
+    modal.openEdit(row({ url: "https://example.com/caranguejo" }));
+    expect(notice.hidden).toBe(true);
+    expect(submitBtn.textContent).toBe("Salvar");
+    findDuplicate.mockClear();
+    submit();
+    expect(findDuplicate).not.toHaveBeenCalled();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+});

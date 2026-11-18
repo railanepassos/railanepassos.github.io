@@ -1048,6 +1048,10 @@ export type LinkFormOptions = {
   getPeopleSuggestions?: () => readonly string[];
   /** Fired when the editor closes the form without saving (Voltar / Escape). */
   onDismiss?: () => void;
+  /** An item already on the list with the same link or source post (create only). */
+  findDuplicate?: (url: string, sourceUrl: string) => LinkRow | null;
+  /** Opens that item; the form closes first, so the new item is discarded. */
+  onOpenDuplicate?: (link: LinkRow) => void;
 };
 
 export function createLinkFormModal(
@@ -1551,6 +1555,46 @@ export function createLinkFormModal(
   submitBtn.textContent = "Salvar";
 
   actions.append(submitBtn);
+
+  // Duplicate notice (create only): the first Salvar is held while it shows.
+  const duplicateNotice = document.createElement("div");
+  duplicateNotice.id = "links-form-duplicate";
+  duplicateNotice.className = "links-admin-form__duplicate";
+  duplicateNotice.setAttribute("role", "status");
+  duplicateNotice.hidden = true;
+  const duplicateText = document.createElement("p");
+  const openDuplicateBtn = document.createElement("button");
+  openDuplicateBtn.type = "button";
+  openDuplicateBtn.className = "links-admin-button links-admin-button--ghost";
+  openDuplicateBtn.textContent = "Ver item existente";
+  duplicateNotice.append(duplicateText, openDuplicateBtn);
+  let duplicate: LinkRow | null = null;
+  let duplicateAcknowledged = false;
+
+  function syncDuplicate(): void {
+    const found =
+      editingId === null && formOptions.findDuplicate
+        ? formOptions.findDuplicate(
+            normalizeUrlInput(urlField.input.value),
+            normalizeUrlInput(sourceField.input.value)
+          )
+        : null;
+    if (found?.id !== duplicate?.id) duplicateAcknowledged = false;
+    duplicate = found;
+    duplicateNotice.hidden = !found;
+    duplicateText.textContent = found ? `Este link já está na lista como "${found.label}".` : "";
+    submitBtn.textContent = found && duplicateAcknowledged ? "Salvar mesmo assim" : "Salvar";
+  }
+
+  openDuplicateBtn.addEventListener("click", () => {
+    const target = duplicate;
+    if (!target) return;
+    close();
+    formOptions.onOpenDuplicate?.(target);
+  });
+  urlField.input.addEventListener("input", syncDuplicate);
+  sourceField.input.addEventListener("input", syncDuplicate);
+
   form.append(
     urlField.wrapper,
     preview,
@@ -1560,6 +1604,7 @@ export function createLinkFormModal(
     loadPreviewBtn,
     memoryField.wrapper,
     more,
+    duplicateNotice,
     error,
     actions
   );
@@ -1576,6 +1621,8 @@ export function createLinkFormModal(
     form.reset();
     more.open = false;
     editingId = null;
+    duplicateAcknowledged = false;
+    syncDuplicate();
     syncBodyScreenLock();
     if (previouslyFocused) {
       previouslyFocused.focus();
@@ -1588,6 +1635,8 @@ export function createLinkFormModal(
     overlay.hidden = false;
     syncBodyScreenLock();
     clearError();
+    duplicateAcknowledged = false;
+    syncDuplicate();
     // Do not autofocus fields — on mobile that pops the keyboard immediately.
   }
 
@@ -1655,6 +1704,15 @@ export function createLinkFormModal(
       more.open = true;
       posesList.querySelector<HTMLInputElement>(`#links-form-pose-${badPose}-url`)?.focus();
       return;
+    }
+    if (editingId === null) {
+      syncDuplicate();
+      if (duplicate && !duplicateAcknowledged) {
+        duplicateAcknowledged = true;
+        submitBtn.textContent = "Salvar mesmo assim";
+        duplicateNotice.scrollIntoView?.({ block: "nearest" });
+        return;
+      }
     }
     const badSource = sourceRows.findIndex((_, i) => !validateSourceRow(i));
     if (badSource >= 0) {
