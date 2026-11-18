@@ -2235,6 +2235,28 @@ body.links-screen-open {
   display: none;
 }
 
+.links-admin-form__duplicate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--green-dark);
+  border-radius: var(--radius);
+  background: var(--green-light);
+  color: var(--green-dark);
+  font-size: 0.85rem;
+}
+
+.links-admin-form__duplicate p {
+  flex: 1 1 200px;
+  margin: 0;
+}
+
+.links-admin-form__duplicate[hidden] {
+  display: none;
+}
+
 .links-admin-form__hint {
   margin: 0 0 16px;
   font-size: 0.82rem;

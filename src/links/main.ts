@@ -47,6 +47,7 @@ import { pickRandomItem } from "./pick-random";
 import { applyDrawFilters, hasActiveDrawFilters } from "./draw-filters";
 import { createDrawFilterSheet } from "./draw-sheet";
 import { nextSortOrder, sortLinksForDisplay, visibleListLinks } from "./sort-links";
+import { findDuplicate } from "./duplicates";
 import {
   categoryCounts,
   displayTitle,
@@ -252,6 +253,11 @@ function bootDynamic(
       getPeopleSuggestions: () => collectPeople(links),
       onDismiss: () => {
         planAfterSave = null;
+      },
+      findDuplicate: (url, source_url) => findDuplicate(links, { url, source_url }),
+      onOpenDuplicate: (l) => {
+        planAfterSave = null;
+        viewModal.open(l);
       },
     }
   );
