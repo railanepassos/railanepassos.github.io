@@ -45,6 +45,8 @@ Input: a post link, a DM chat the editor points to, or her saved items.
 
 1. Open the post read-only in Chrome and read its text. In a DM chat, find the shared post links only.
 2. Extract the place: name, city, address, category, cost, tags. Use public research (the place's own page, maps) when the post lacks the address or link.
+   - Name the item (`label`) as the outing: an action verb, the kind of place, and the main place's own name, for example "Visitar cafeteria Cafélier", "Almoçar no restaurante Vila do Caranguejo", "Fazer a trilha X".
+   - Take the name from the place itself: its sign in the photo or video, its official page, or its map listing. A brand or business promoting something inside the place, or a menu or promotion title, is not the name.
 3. Research the place and its surroundings in public sources (news, the place's site, city tourism pages, maps), then fill `dossier` and `itinerary` on every import (see **Dossier and itinerary content** below).
 4. Build one `novo` draft per post. `source_url` is the post link; `url` is the place's official page, or the post link when none exists.
 5. One draft at a time: show it, build the URL, open it, and continue with the next post after the editor moves on.
