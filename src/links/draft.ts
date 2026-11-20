@@ -8,12 +8,13 @@
  * fragment (`#rascunho=<base64url of the UTF-8 JSON>`), which never reaches the
  * server. Format v1:
  *   { v: 1, kind: "novo" | "atualizacao", id?, fields?, plan? }
+ *   { v: 1, kind: "fila", items: [fields, ...] }   (2-10 new items, opened one by one)
  * Text is plain text: callers must show it with `textContent` / form `value`.
  */
 
 export const DRAFT_FRAGMENT_PREFIX = "#rascunho=";
 /** Cap of the decoded JSON. */
-export const DRAFT_MAX_BYTES = 16 * 1024;
+export const DRAFT_MAX_BYTES = 64 * 1024;
 
 type TextKey = "label" | "description" | "cost_text" | "city" | "address" | "dossier" | "itinerary";
 
@@ -52,6 +53,9 @@ export const DRAFT_LIMITS = {
   maxSources: 10,
   sourceTitleMax: 120,
   sourceUrlMax: 2000,
+  /** Items in a `fila` draft. */
+  minQueueItems: 2,
+  maxQueueItems: 10,
   /** Duração values (mirrors duration.ts / migration 020). */
   durations: ["rapido", "meio-periodo", "dia-inteiro"],
 };
@@ -85,7 +89,8 @@ export type DraftPlanItem = { text: string; list: "checklist" | "compras" };
 
 export type Draft =
   | { v: 1; kind: "novo"; fields: DraftFields }
-  | { v: 1; kind: "atualizacao"; id: string; fields?: DraftFields; plan?: DraftPlanItem[] };
+  | { v: 1; kind: "atualizacao"; id: string; fields?: DraftFields; plan?: DraftPlanItem[] }
+  | { v: 1; kind: "fila"; items: DraftFields[] };
 
 export type ParseDraftResult = { ok: true; draft: Draft } | { ok: false; reason: string };
 
@@ -97,7 +102,7 @@ const B64URL_RE = /^[A-Za-z0-9_-]*$/;
 // Encoded size of DRAFT_MAX_BYTES (no padding); anything longer is rejected before decoding.
 const MAX_ENCODED_LENGTH = Math.ceil((DRAFT_MAX_BYTES * 4) / 3);
 
-const TOO_BIG = "O rascunho passa de 16 KB.";
+const TOO_BIG = "O rascunho passa de 64 KB.";
 
 /**
  * Update drafts: an empty string or empty list means "no proposal" for that
@@ -292,6 +297,7 @@ export function parseDraft(fragment: string): ParseDraftResult {
   }
   if (!isRecord(json)) return fail("O rascunho deve ser um objeto.");
   if (json.v !== 1) return fail("Versão de rascunho não suportada.");
+  if (json.kind === "fila") return parseQueue(json);
   if (json.kind !== "novo" && json.kind !== "atualizacao") {
     return fail("Tipo de rascunho desconhecido (kind).");
   }
@@ -315,6 +321,22 @@ export function parseDraft(fragment: string): ParseDraftResult {
     const hasFields = isRecord(json.fields) && Object.keys(withoutEmptyProposals(json.fields)).length > 0;
     const hasPlan = Array.isArray(json.plan) && json.plan.length > 0;
     if (!hasFields && !hasPlan) return fail("O rascunho de atualização não propõe nada.");
+  }
+  return { ok: true, draft: json as unknown as Draft };
+}
+
+function parseQueue(json: Record<string, unknown>): ParseDraftResult {
+  for (const key of Object.keys(json)) {
+    if (!["v", "kind", "items"].includes(key)) return fail(`Chave não permitida no rascunho: ${key}.`);
+  }
+  const { minQueueItems: min, maxQueueItems: max } = DRAFT_LIMITS;
+  const items = json.items;
+  if (!Array.isArray(items) || items.length < min || items.length > max) {
+    return fail(`O campo items deve ser uma lista de ${min} a ${max} itens.`);
+  }
+  for (let i = 0; i < items.length; i++) {
+    const problem = fieldsError(items[i], true);
+    if (problem) return fail(`items, item ${i + 1}: ${problem}`);
   }
   return { ok: true, draft: json as unknown as Draft };
 }

@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "kind": "fila",
+  "items": [
+    {
+      "url": "https://example.com/museu-do-exemplo",
+      "label": "Visitar o Museu do Exemplo",
+      "source_url": "https://www.instagram.com/p/EXEMPLO123/",
+      "category": "museu",
+      "city": "Cidade Exemplo"
+    },
+    {
+      "url": "https://www.instagram.com/reel/EXEMPLO456/",
+      "label": "Visitar cafeteria Café Amostra",
+      "source_url": "https://www.instagram.com/reel/EXEMPLO456/",
+      "category": "cafeteria",
+      "duration": "rapido",
+      "city": "Cidade Exemplo"
+    }
+  ]
+}

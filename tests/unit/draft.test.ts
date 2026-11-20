@@ -336,8 +336,8 @@ describe("parseDraft limits (boundary accepted, +1 rejected)", () => {
     expect(reject(fragOf({ ...UPDATE_DRAFT, plan: one(PLAN_TEXT_MAX + 1) }))).toContain("plan");
   });
 
-  it("rejects a payload over 16 KB decoded even if every field is within its own limit", () => {
-    expect(DRAFT_MAX_BYTES).toBe(16 * 1024);
+  it("rejects a payload over 64 KB decoded even if every field is within its own limit", () => {
+    expect(DRAFT_MAX_BYTES).toBe(64 * 1024);
     const fields = (ch: string) => ({
       url: "https://example.com",
       dossier: ch.repeat(5000),
@@ -348,16 +348,15 @@ describe("parseDraft limits (boundary accepted, +1 rejected)", () => {
       city: ch.repeat(120),
       cost_text: ch.repeat(200),
     });
-    const ascii = { v: 1, kind: "novo", fields: fields("a") };
-    expect(utf8Length(JSON.stringify(ascii))).toBeLessThan(DRAFT_MAX_BYTES);
-    expect(parseDraft(fragOf(ascii)).ok).toBe(true);
-    const heavy = { v: 1, kind: "novo", fields: fields("é") };
-    expect(utf8Length(JSON.stringify(heavy))).toBeGreaterThan(DRAFT_MAX_BYTES);
-    expect(reject(fragOf(heavy))).toMatch(/16 KB/);
+    const queue = (n: number) => ({ v: 1, kind: "fila", items: Array.from({ length: n }, () => fields("a")) });
+    expect(utf8Length(JSON.stringify(queue(4)))).toBeLessThan(DRAFT_MAX_BYTES);
+    expect(parseDraft(fragOf(queue(4))).ok).toBe(true);
+    expect(utf8Length(JSON.stringify(queue(6)))).toBeGreaterThan(DRAFT_MAX_BYTES);
+    expect(reject(fragOf(queue(6)))).toMatch(/64 KB/);
   });
 
   it("rejects a gigantic fragment", () => {
-    expect(reject("#rascunho=" + "A".repeat(200_000))).toMatch(/16 KB/);
+    expect(reject("#rascunho=" + "A".repeat(200_000))).toMatch(/64 KB/);
   });
 });
 
@@ -420,5 +419,38 @@ describe("update draft: empty proposed values are no proposal", () => {
   it("an update draft whose fields are all empty (and no plan) proposes nothing", () => {
     expect(reject(fragOf({ v: 1, kind: "atualizacao", id: ID, fields: { category: "", city: "" } }))).toMatch(/não propõe nada/);
     expect(parseDraft(fragOf({ v: 1, kind: "atualizacao", id: ID, fields: { category: "", city: "" }, plan: [{ text: "x", list: "compras" }] })).ok).toBe(true);
+  });
+});
+
+describe("fila (queue of new items)", () => {
+  const item = (n: number) => ({ url: `https://example.com/lugar-${n}`, label: `Lugar ${n}` });
+  const queue = (n: number) => ({ v: 1, kind: "fila", items: Array.from({ length: n }, (_, i) => item(i + 1)) });
+
+  it("accepts 2 to 10 items and round-trips", () => {
+    const two = queue(2) as Draft;
+    const parsed = parseDraft(encodeDraft(two));
+    expect(parsed).toEqual({ ok: true, draft: two });
+    expect(parseDraft(fragOf(queue(10))).ok).toBe(true);
+  });
+
+  it("rejects fewer than 2 or more than 10 items, and a non-list", () => {
+    expect(reject(fragOf(queue(1)))).toMatch(/items/);
+    expect(reject(fragOf(queue(11)))).toMatch(/items/);
+    expect(reject(fragOf({ v: 1, kind: "fila", items: "x" }))).toMatch(/items/);
+    expect(reject(fragOf({ v: 1, kind: "fila" }))).toMatch(/items/);
+  });
+
+  it("validates each item like a new draft and names the item", () => {
+    const bad = queue(3);
+    bad.items[1] = { url: "http://example.com/inseguro", label: "x" };
+    expect(reject(fragOf(bad))).toMatch(/item 2.*url/);
+    const noUrl = queue(2) as { items: Array<Record<string, unknown>> };
+    noUrl.items[0] = { label: "Sem link" };
+    expect(reject(fragOf(noUrl))).toMatch(/item 1.*url/);
+  });
+
+  it("rejects other top-level keys on a queue", () => {
+    expect(reject(fragOf({ ...queue(2), fields: item(1) }))).toMatch(/fields/);
+    expect(reject(fragOf({ ...queue(2), id: ID }))).toMatch(/id/);
   });
 });
