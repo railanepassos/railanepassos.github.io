@@ -1033,7 +1033,8 @@ export function createDeleteConfirmSheet(): DeleteSheetHandle {
 
 export type LinkFormHandle = {
   element: HTMLElement;
-  openCreate: (prefill?: CreatePrefill) => void;
+  /** `title` replaces "Nova experiência" (draft queue: "Nova experiência (1 de 3)"). */
+  openCreate: (prefill?: CreatePrefill, title?: string) => void;
   /** `proposed` (update draft) is shown over the current values; nothing is saved until Salvar. */
   openEdit: (link: LinkRow, proposed?: CreatePrefill) => void;
   close: () => void;
@@ -1640,9 +1641,9 @@ export function createLinkFormModal(
     // Do not autofocus fields — on mobile that pops the keyboard immediately.
   }
 
-  function openCreate(prefill?: CreatePrefill): void {
+  function openCreate(prefill?: CreatePrefill, heading = "Nova experiência"): void {
     editingId = null;
-    title.textContent = "Nova experiência";
+    title.textContent = heading;
     form.reset();
     urlField.input.value = prefill?.url ?? "";
     labelField.input.value = prefill?.label ?? "";

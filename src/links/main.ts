@@ -10,6 +10,7 @@ import {
   isDraftFragment,
   parseDraft,
   withoutEmptyProposals,
+  type DraftFields,
   type DraftPlanItem,
   type ParseDraftResult,
 } from "./draft";
@@ -227,6 +228,24 @@ function bootDynamic(
 
   /** Update draft with fields + plan: the plan sheet opens once the item is saved. */
   let planAfterSave: { id: string; items: DraftPlanItem[] } | null = null;
+  /** `fila` draft: new items still to open, one by one (memory only). */
+  let draftQueue: DraftFields[] = [];
+  let draftQueueTotal = 0;
+
+  function openNextQueued(): void {
+    const next = draftQueue.shift();
+    if (!next) return;
+    const position = draftQueueTotal - draftQueue.length;
+    formModal.openCreate(draftPrefill(next), `Nova experiência (${position} de ${draftQueueTotal})`);
+  }
+
+  /** Opens the next queued item once the form and the detail are both closed. */
+  function resumeQueue(): void {
+    if (draftQueue.length === 0) return;
+    setTimeout(() => {
+      if (formModal.element.hidden && viewModal.currentId() === null) openNextQueued();
+    }, 0);
+  }
 
   const formModal: LinkFormHandle = createLinkFormModal(
     async (values, editingId) => {
@@ -238,6 +257,7 @@ function bootDynamic(
           await submitCreate(values);
         }
         formModal.close();
+        resumeQueue();
         const next = planAfterSave;
         planAfterSave = null;
         const saved = next && next.id === editingId ? findLink(next.id) : undefined;
@@ -253,6 +273,7 @@ function bootDynamic(
       getPeopleSuggestions: () => collectPeople(links),
       onDismiss: () => {
         planAfterSave = null;
+        resumeQueue();
       },
       findDuplicate: (url, source_url) => findDuplicate(links, { url, source_url }),
       onOpenDuplicate: (l) => {
@@ -302,7 +323,10 @@ function bootDynamic(
     onDelete: (l) => void deleteLink(l),
     onTag: (tag) => toggleTagFilter(tag),
     onPerson: (person) => togglePeopleFilter(person),
-    onOpenChange: () => syncSelectedCard(),
+    onOpenChange: (id) => {
+      syncSelectedCard();
+      if (id === null) resumeQueue();
+    },
   });
 
   const shellHandlers: ShellHandlers = {
@@ -1019,6 +1043,12 @@ function bootDynamic(
     pendingDraft = null;
     if (result.draft.kind === "novo") {
       formModal.openCreate(draftPrefill(result.draft.fields));
+      return;
+    }
+    if (result.draft.kind === "fila") {
+      draftQueue = [...result.draft.items];
+      draftQueueTotal = draftQueue.length;
+      openNextQueued();
       return;
     }
     const { id, plan } = result.draft;

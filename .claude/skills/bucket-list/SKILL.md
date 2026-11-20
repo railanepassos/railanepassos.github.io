@@ -25,6 +25,7 @@ Examples: `examples/novo.json` and `examples/atualizacao.json` (fake content). T
 
 - `novo`: `{ "v": 1, "kind": "novo", "fields": { "url": ... } }`. `fields.url` is required.
 - `atualizacao`: `{ "v": 1, "kind": "atualizacao", "id": "<uuid>", "fields": {...}, "plan": [{ "text", "list": "checklist" | "compras" }] }`. Needs `fields` or `plan`.
+- `fila`: `{ "v": 1, "kind": "fila", "items": [fields, ...] }` (see `examples/fila.json`). 2 to 10 new items, each following the `novo` fields rules (`url` required). The app opens them one by one ("Nova experiência (1 de 3)"): Salvar saves and opens the next, Voltar skips. The whole draft must stay under 64 KB; split a big batch into several `fila` links.
 - `fields` keys: `url`, `label`, `description`, `source_url`, `category` or `categories`, `tags`, `people`, `sources`, `cost_text`, `duration`, `city`, `address`, `dossier`, `itinerary`, `image_url`.
 - Category: `category` is a single value; `categories` is a list of 1 to 4 distinct values, the first is the main one (cards and theme use it), the rest are extras for discovery. Use `categories` when the experience mixes kinds (a museum with a garden: `["museu", "parque"]`); otherwise use `category`. Sending both is an error. Allowed values: museu, evento, restaurante, bar, cafeteria, trilha, praca, parque, praia, ponto-turistico, passeio, outro. In an `atualizacao`, the edit form shows the proposed main + extras over the current ones.
 - Sources: `sources` is a list of up to 10 `{ "title", "url" }` (title 1-120 chars, https url, no other keys). Fill it with the public pages you actually used for the dossier, itinerary and place facts (the place's official site, press, guides, maps), one entry per page, and still list them in the chat. Never include Instagram DMs or private pages. In a `novo` they pre-fill the Fontes editor; in an `atualizacao` they are appended to the current ones (deduped by URL, capped at 10), so propose only the ones you used.
@@ -48,8 +49,8 @@ Input: a post link, a DM chat the editor points to, or her saved items.
    - Name the item (`label`) as the outing: an action verb, the kind of place, and the main place's own name, for example "Visitar cafeteria Cafélier", "Almoçar no restaurante Vila do Caranguejo", "Fazer a trilha X".
    - Take the name from the place itself: its sign in the photo or video, its official page, or its map listing. A brand or business promoting something inside the place, or a menu or promotion title, is not the name.
 3. Research the place and its surroundings in public sources (news, the place's site, city tourism pages, maps), then fill `dossier` and `itinerary` on every import (see **Dossier and itinerary content** below).
-4. Build one `novo` draft per post. `source_url` is the post link; `url` is the place's official page, or the post link when none exists.
-5. One draft at a time: show it, build the URL, open it, and continue with the next post after the editor moves on.
+4. Build one item per post. `source_url` is the post link; `url` is the place's official page, or the post link when none exists.
+5. One post: a `novo` draft. Two or more posts: one `fila` draft with every item. Show all items in the chat, build the URL, open it once. The app warns about items already on the list.
 
 ## Mode: dossier, itinerary, snacks for an existing item
 
