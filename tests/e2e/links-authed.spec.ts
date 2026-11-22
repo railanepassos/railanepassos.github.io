@@ -66,6 +66,17 @@ test.describe("Links app — authenticated (mocked session)", () => {
     await expect(page.getByRole("alertdialog")).toContainText("Excluir");
   });
 
+  test("the page never scrolls sideways (app bar fits the viewport)", async ({ page }) => {
+    const viewport = page.viewportSize()!;
+    const width = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(width).toBeLessThanOrEqual(viewport.width);
+    const bar = await page.locator(".links-appbar").evaluate((el) => {
+      const right = Math.max(...[...el.querySelectorAll("button")].map((b) => b.getBoundingClientRect().right));
+      return right;
+    });
+    expect(bar).toBeLessThanOrEqual(viewport.width);
+  });
+
   test("tapping a card opens the detail (full screen on mobile, side panel on desktop)", async ({
     page,
   }) => {
