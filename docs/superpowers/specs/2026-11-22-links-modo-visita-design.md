@@ -1,7 +1,7 @@
 # Spec: Fase 7 — Modo visita (guia do dia do passeio)
 
 **Date:** 2026-11-22
-**Status:** Draft (aguardando revisão da Railane)
+**Status:** Approved (2026-11-22). Propostas [INFERIDO] aceitas como estão: banner "Hoje" entra, "Terminar visita" pergunta antes, offline fica para a 7.1
 **Surface:** `/p/a8f3k2/` admin autenticado
 **Depende de:** Fases 2, 3 e 4 (campos, "Como foi" e plano), já no ar
 **Roadmap:** `2026-11-16-links-roadmap.md` (coluna "DIA DA VISITA" do diagrama)
