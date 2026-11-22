@@ -1853,6 +1853,45 @@ describe("Phase 8: Buscar imagem (Wikipedia)", () => {
     expect(signals[1].aborted).toBe(false);
   });
 
+  it("a stale search that resolves after a newer one never overwrites the grid (fetch ignores abort)", async () => {
+    const resolvers: Array<(r: Response) => void> = [];
+    const fetchFn = vi.fn(() => new Promise<Response>((r) => resolvers.push(r)));
+    const { modal, q, btn, type } = setup(fetchFn as unknown as ReturnType<typeof vi.fn>);
+    type(q<HTMLInputElement>("#links-form-label"), "Museu");
+    btn().click();
+    btn().click();
+    expect(resolvers).toHaveLength(2);
+    resolvers[1]({ ok: true, json: async () => apiBody(2) } as Response);
+    await flush();
+    resolvers[0]({ ok: true, json: async () => apiBody(4) } as Response);
+    await flush();
+    expect(modal.element.querySelectorAll(".links-image-search__option")).toHaveLength(2);
+  });
+
+  it("changing the place name clears the open results grid and cancels the in-flight search", async () => {
+    const { modal, q, btn, type } = setup(okFetch(apiBody(3)));
+    type(q<HTMLInputElement>("#links-form-label"), "Museu");
+    btn().click();
+    await flush();
+    expect(modal.element.querySelectorAll(".links-image-search__option")).toHaveLength(3);
+    type(q<HTMLInputElement>("#links-form-label"), "Museu do Amanhã");
+    expect(modal.element.querySelectorAll(".links-image-search__option")).toHaveLength(0);
+    expect(modal.element.querySelector(".links-image-search__status")!.textContent).toBe("");
+  });
+
+  it("changing the place name aborts a pending search", () => {
+    const signals: AbortSignal[] = [];
+    const fetchFn = vi.fn((_u: string, init: RequestInit) => {
+      signals.push(init.signal!);
+      return new Promise<Response>(() => {});
+    });
+    const { q, btn, type } = setup(fetchFn as unknown as ReturnType<typeof vi.fn>);
+    type(q<HTMLInputElement>("#links-form-label"), "Museu");
+    btn().click();
+    type(q<HTMLInputElement>("#links-form-label"), "Museu X");
+    expect(signals[0].aborted).toBe(true);
+  });
+
   it("reopening the form cancels a pending search and clears the grid", async () => {
     const signals: AbortSignal[] = [];
     const fetchFn = vi.fn((_u: string, init: RequestInit) => {

@@ -1237,6 +1237,9 @@ export function createLinkFormModal(
     );
   });
 
+  // A changed place name makes the open results (and any pending search) stale.
+  labelField.input.addEventListener("input", resetImageSearch);
+
   const memoryField = labelledInput(
     "links-form-note",
     "Memória (opcional) — após visitar",
