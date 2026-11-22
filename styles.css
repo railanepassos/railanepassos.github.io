@@ -4176,14 +4176,14 @@ body.links-authed .links-app__layout {
   gap: 6px;
 }
 
-.links-feed {
+.links-calfeed {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 0 16px 24px;
 }
 
-.links-feed__url {
+.links-calfeed__url {
   box-sizing: border-box;
   width: 100%;
   min-height: 44px;
@@ -4196,17 +4196,17 @@ body.links-authed .links-app__layout {
   font-size: 16px;
 }
 
-.links-feed__url[hidden] {
+.links-calfeed__url[hidden] {
   display: none;
 }
 
-.links-feed__actions {
+.links-calfeed__actions {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.links-feed__actions [hidden] {
+.links-calfeed__actions [hidden] {
   display: none;
 }
 
