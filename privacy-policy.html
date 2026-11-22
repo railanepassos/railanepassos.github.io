@@ -28,7 +28,7 @@
     <div class="container container--wide">
         <article class="legal-content">
             <h1>Política de Privacidade e Proteção de Dados Pessoais</h1>
-            <p class="legal-meta"><strong>Última atualização:</strong> 22 de novembro de 2026 &nbsp;|&nbsp; <strong>Versão:</strong> 2.11</p>
+            <p class="legal-meta"><strong>Última atualização:</strong> 22 de novembro de 2026 &nbsp;|&nbsp; <strong>Versão:</strong> 2.12</p>
 
             <p>Esta Política descreve, de forma transparente, como <strong>Railane Passos</strong>, pessoa física responsável pela consultoria <strong>Workflow Tech Engineering</strong> (“<strong>nós</strong>”, “<strong>controladora</strong>”), trata dados pessoais no site <a href="https://railanepassos.tec.br/">https://railanepassos.tec.br/</a> (“<strong>Site</strong>”), em conformidade com a Lei Geral de Proteção de Dados Pessoais — LGPD (Lei nº 13.709/2018) e regulamentações da Autoridade Nacional de Proteção de Dados (ANPD).</p>
 
@@ -99,6 +99,7 @@
                 </tbody>
             </table>
             <p><strong>Link público do plano.</strong> O editor pode ligar um link de um plano. <strong>Quem tiver o link, enquanto ele estiver ligado, vê</strong> o nome do lugar, a data, a cidade ou o endereço, o roteiro, os nomes dos participantes (como o editor os cadastrou) e os itens do plano com seus responsáveis, e pode <strong>marcar itens como feitos e colocar o próprio nome em um item</strong>, escolhendo um nome da lista de participantes. Não guardamos registro de quem marcou cada item. O link permanece ativo até o editor desligá-lo ou trocá-lo; não há expiração automática. Notas privadas, dossiê, custos e demais campos do lugar não são exibidos. O código do link fica no fragmento da URL (depois de <code>#</code>), que o navegador <strong>não envia ao servidor</strong> do Site; ele é enviado somente ao serviço de banco de dados (Supabase) para buscar o plano. Para <strong>revogar</strong>, o editor usa <strong>Desligar</strong> (o link deixa de funcionar) ou <strong>Trocar link</strong> (o link antigo deixa de funcionar e um novo é gerado). Não pedimos conta nem telefone de quem abre o link. Para pedir a desativação de um link, escreva para o canal de privacidade.</p>
+            <p><strong>Pedidos ao assistente.</strong> Os editores autorizados podem pedir ajuda ao assistente (Claude) na área restrita. O pedido guarda links de posts do Instagram, as opções escolhidas (dossiê, roteiro, lanches, imagem), os lugares a refinar e o período da agenda, além dos rascunhos sugeridos em resposta. Esses dados ficam visíveis apenas a editores autenticados e são apagados <strong>90 dias</strong> depois de o pedido ser aplicado ou descartado. Nada é salvo nos itens sem a revisão do editor.</p>
             <p><strong>Importante:</strong> ao clicar em links externos (LinkedIn, GitHub, YouTube, Instagram, Dev.to, Medium, BSTQB, Google Calendar etc.), você passa a estar sujeito às políticas daquele serviço, que podem coletar dados por conta própria.</p>
 
             <h2 id="operadores">4. Operadores e compartilhamento</h2>
@@ -138,6 +139,12 @@
                         <td>Estados Unidos e outros países</td>
                     </tr>
                     <tr>
+                        <td><a href="https://policies.google.com/privacy" rel="noopener noreferrer">Google LLC</a> (Google Agenda, importação sob pedido)</td>
+                        <td>Fonte de leitura apenas, a pedido do editor</td>
+                        <td>Somente quando um editor pede a importação da agenda, o assistente lê os eventos do período escolhido e guarda apenas o nome do evento (sem nomes de participantes), o início e o fim. Nada é escrito na agenda.</td>
+                        <td>Estados Unidos e outros países</td>
+                    </tr>
+                    <tr>
                         <td><a href="https://policies.google.com/privacy" rel="noopener noreferrer">Google LLC</a> (YouTube, domínio i.ytimg.com)</td>
                         <td>Miniaturas de vídeo na área restrita de edição de links</td>
                         <td>Somente quando um editor salva um link de memória do YouTube, o navegador do editor carrega a miniatura a partir de i.ytimg.com e, com isso, o endereço IP é enviado ao Google. As requisições usam <code>no-referrer</code>; não há player incorporado (embed) nem script de rastreamento</td>
@@ -151,8 +158,8 @@
                     </tr>
                     <tr>
                         <td><a href="https://www.anthropic.com/legal/privacy" rel="noopener noreferrer">Anthropic, PBC</a> (Claude)</td>
-                        <td>Operador — assistente de IA usado pelos editores para redigir rascunhos de itens</td>
-                        <td>Somente quando um editor usa o assistente: o conteúdo que ele mostra ao assistente (publicações públicas e, quando indicada pelo editor, uma conversa do Instagram usada apenas para achar links de publicações compartilhadas) é processado para gerar o rascunho. Nada é salvo sem revisão humana e a lista não guarda nomes, perfis ou mensagens de terceiros</td>
+                        <td>Operador — assistente de IA usado pelos editores para redigir rascunhos de itens e para processar os pedidos feitos no aplicativo</td>
+                        <td>Somente quando um editor usa o assistente ou faz um pedido pelo aplicativo: o conteúdo que ele mostra ao assistente (publicações públicas e, quando indicada pelo editor, uma conversa do Instagram usada apenas para achar links de publicações compartilhadas) e, nos pedidos feitos no aplicativo, o pedido e os dados do lugar correspondente são processados para gerar o rascunho. O processamento é disparado na máquina da controladora, mas o conteúdo do pedido é processado pela Anthropic nos Estados Unidos (transferência internacional, ver item 5). Nada é aplicado sem revisão humana e a lista não guarda nomes, perfis ou mensagens de terceiros</td>
                         <td>Estados Unidos</td>
                     </tr>
                     <tr>
@@ -180,6 +187,7 @@
                 <li><strong>Comunicações por e-mail</strong> (solicitações a <a href="mailto:privacy@railanepassos.tec.br">privacy@railanepassos.tec.br</a>): mantidas pelo tempo necessário para atender seu pedido, cumprir obrigação legal ou resguardar direitos, em geral até 5 anos após o encerramento da solicitação, salvo prazo maior exigido por lei.</li>
                 <li><strong>Dados de autenticação de editores (Supabase):</strong> credenciais e logs de acesso retidos pelo tempo necessário à operação e segurança da área restrita, conforme a <a href="https://supabase.com/privacy" rel="noopener noreferrer">Política de Privacidade do Supabase</a>; contas de editor encerradas mediante solicitação à controladora.</li>
                 <li><strong>Anotações de planejamento dos editores (Supabase):</strong> mantidas até que o editor exclua o item correspondente na área restrita; visíveis apenas a editores autenticados. Pedidos de correção ou exclusão podem ser feitos à controladora.</li>
+                <li><strong>Pedidos ao assistente (Supabase):</strong> apagados 90 dias depois de aplicados ou descartados; visíveis apenas a editores autenticados.</li>
                 <li><strong>JWT de sessão em localStorage/sessionStorage:</strong> removido do dispositivo do editor ao sair da sessão, ao fechar a aba (quando “Lembrar de mim” está desmarcado) ou ao limpar os dados do navegador.</li>
                 <li><strong>Dados em serviços externos</strong> (Google Calendar etc.): regidos pelas políticas e prazos desses controladores.</li>
             </ul>
@@ -215,7 +223,7 @@
 
             <h2 id="decisoes">10. Decisões automatizadas e perfilamento</h2>
             <p>Não realizamos decisões automatizadas ou perfilamento que produzam efeitos legais ou relevantes sobre você neste Site.</p>
-            <p><strong>Assistente de IA no preparo de rascunhos.</strong> Os editores autorizados podem usar um assistente de inteligência artificial (Claude, da Anthropic) para redigir rascunhos de textos de itens. O conteúdo que o editor mostra ao assistente — publicações públicas e, quando o editor o indica, uma conversa do Instagram usada somente para encontrar links de publicações compartilhadas — é processado pela Anthropic nos Estados Unidos (ver itens 4 e 5). O rascunho apenas preenche o formulário do aplicativo: nada é salvo sem revisão humana e sem que o editor pressione “Salvar”. O assistente não tem acesso ao banco de dados do Site, e nomes, perfis ou mensagens de terceiros não são guardados na lista.</p>
+            <p><strong>Assistente de IA no preparo de rascunhos.</strong> Os editores autorizados podem usar um assistente de inteligência artificial (Claude, da Anthropic) para redigir rascunhos de textos de itens. O conteúdo que o editor mostra ao assistente — publicações públicas e, quando o editor o indica, uma conversa do Instagram usada somente para encontrar links de publicações compartilhadas — é processado pela Anthropic nos Estados Unidos (ver itens 4 e 5). O rascunho apenas preenche o formulário do aplicativo: nada é salvo sem revisão humana e sem que o editor pressione “Salvar”. Nos pedidos feitos no aplicativo, o assistente lê os dados do lugar e grava rascunhos numa fila restrita do banco de dados, mas nunca altera os itens da lista; nomes, perfis ou mensagens de terceiros não são guardados na lista.</p>
 
             <h2 id="alteracoes">11. Alterações desta Política</h2>
             <p>Podemos atualizar esta Política para refletir mudanças legais, técnicas ou no Site. A data da versão vigente constará no topo. Recomendamos revisão periódica desta página.</p>
