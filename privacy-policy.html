@@ -28,7 +28,7 @@
     <div class="container container--wide">
         <article class="legal-content">
             <h1>Política de Privacidade e Proteção de Dados Pessoais</h1>
-            <p class="legal-meta"><strong>Última atualização:</strong> 22 de novembro de 2026 &nbsp;|&nbsp; <strong>Versão:</strong> 2.11</p>
+            <p class="legal-meta"><strong>Última atualização:</strong> 22 de novembro de 2026 &nbsp;|&nbsp; <strong>Versão:</strong> 2.12</p>
 
             <p>Esta Política descreve, de forma transparente, como <strong>Railane Passos</strong>, pessoa física responsável pela consultoria <strong>Workflow Tech Engineering</strong> (“<strong>nós</strong>”, “<strong>controladora</strong>”), trata dados pessoais no site <a href="https://railanepassos.tec.br/">https://railanepassos.tec.br/</a> (“<strong>Site</strong>”), em conformidade com a Lei Geral de Proteção de Dados Pessoais — LGPD (Lei nº 13.709/2018) e regulamentações da Autoridade Nacional de Proteção de Dados (ANPD).</p>
 
@@ -99,6 +99,7 @@
                 </tbody>
             </table>
             <p><strong>Link público do plano.</strong> O editor pode ligar um link de um plano. <strong>Quem tiver o link, enquanto ele estiver ligado, vê</strong> o nome do lugar, a data, a cidade ou o endereço, o roteiro, os nomes dos participantes (como o editor os cadastrou) e os itens do plano com seus responsáveis, e pode <strong>marcar itens como feitos e colocar o próprio nome em um item</strong>, escolhendo um nome da lista de participantes. Não guardamos registro de quem marcou cada item. O link permanece ativo até o editor desligá-lo ou trocá-lo; não há expiração automática. Notas privadas, dossiê, custos e demais campos do lugar não são exibidos. O código do link fica no fragmento da URL (depois de <code>#</code>), que o navegador <strong>não envia ao servidor</strong> do Site; ele é enviado somente ao serviço de banco de dados (Supabase) para buscar o plano. Para <strong>revogar</strong>, o editor usa <strong>Desligar</strong> (o link deixa de funcionar) ou <strong>Trocar link</strong> (o link antigo deixa de funcionar e um novo é gerado). Não pedimos conta nem telefone de quem abre o link. Para pedir a desativação de um link, escreva para o canal de privacidade.</p>
+            <p><strong>Pedidos ao assistente.</strong> Os editores autorizados podem pedir ajuda ao assistente (Claude) na área restrita. O pedido guarda links de posts do Instagram, as opções escolhidas (dossiê, roteiro, lanches, imagem), os lugares a refinar e o período da agenda, além dos rascunhos sugeridos em resposta. Esses dados ficam visíveis apenas a editores autenticados e são apagados <strong>90 dias</strong> depois de o pedido ser aplicado ou descartado. Nada é salvo nos itens sem a revisão do editor.</p>
             <p><strong>Importante:</strong> ao clicar em links externos (LinkedIn, GitHub, YouTube, Instagram, Dev.to, Medium, BSTQB, Google Calendar etc.), você passa a estar sujeito às políticas daquele serviço, que podem coletar dados por conta própria.</p>
 
             <h2 id="operadores">4. Operadores e compartilhamento</h2>
@@ -135,6 +136,18 @@
                         <td><a href="https://policies.google.com/privacy" rel="noopener noreferrer">Google LLC</a> (Google Agenda, assinatura opcional)</td>
                         <td>Leitura de um feed de agenda, somente se o editor ligar a assinatura na área restrita</td>
                         <td>Enquanto o link da assinatura estiver ligado, o Google Agenda busca periodicamente, a partir dos servidores do Google, o nome, as datas e os horários, o endereço e o link dos lugares agendados (e nada além disso: sem notas, impressões, nomes de pessoas ou plano). Quem tiver o link da assinatura vê o mesmo conteúdo, sem login. O editor pode trocar o link (o antigo deixa de funcionar) ou desligá-lo a qualquer momento. O feed é servido pelo Supabase (Edge Function); o botão “Adicionar ao Google Agenda” é um link comum que abre o Google Agenda em outra aba, sem envio automático de dados</td>
+                        <td>Estados Unidos e outros países</td>
+                    </tr>
+                    <tr>
+                        <td><a href="https://www.anthropic.com/legal/privacy" rel="noopener noreferrer">Anthropic</a> (Claude)</td>
+                        <td>Operador do processamento dos pedidos ao assistente, executado localmente na máquina da titular</td>
+                        <td>Somente quando um editor faz um pedido na área restrita, o Claude, rodando na máquina da controladora, lê o pedido e os dados do lugar correspondentes e escreve rascunhos de resposta. Nada é aplicado sem a revisão do editor.</td>
+                        <td>Estados Unidos e outros países</td>
+                    </tr>
+                    <tr>
+                        <td><a href="https://policies.google.com/privacy" rel="noopener noreferrer">Google LLC</a> (Google Agenda, importação sob pedido)</td>
+                        <td>Fonte de leitura apenas, a pedido do editor</td>
+                        <td>Somente quando um editor pede a importação da agenda, o assistente lê os eventos do período escolhido e guarda apenas o nome do evento, o início e o fim. Nada é escrito na agenda.</td>
                         <td>Estados Unidos e outros países</td>
                     </tr>
                     <tr>
@@ -180,6 +193,7 @@
                 <li><strong>Comunicações por e-mail</strong> (solicitações a <a href="mailto:privacy@railanepassos.tec.br">privacy@railanepassos.tec.br</a>): mantidas pelo tempo necessário para atender seu pedido, cumprir obrigação legal ou resguardar direitos, em geral até 5 anos após o encerramento da solicitação, salvo prazo maior exigido por lei.</li>
                 <li><strong>Dados de autenticação de editores (Supabase):</strong> credenciais e logs de acesso retidos pelo tempo necessário à operação e segurança da área restrita, conforme a <a href="https://supabase.com/privacy" rel="noopener noreferrer">Política de Privacidade do Supabase</a>; contas de editor encerradas mediante solicitação à controladora.</li>
                 <li><strong>Anotações de planejamento dos editores (Supabase):</strong> mantidas até que o editor exclua o item correspondente na área restrita; visíveis apenas a editores autenticados. Pedidos de correção ou exclusão podem ser feitos à controladora.</li>
+                <li><strong>Pedidos ao assistente (Supabase):</strong> apagados 90 dias depois de aplicados ou descartados; visíveis apenas a editores autenticados.</li>
                 <li><strong>JWT de sessão em localStorage/sessionStorage:</strong> removido do dispositivo do editor ao sair da sessão, ao fechar a aba (quando “Lembrar de mim” está desmarcado) ou ao limpar os dados do navegador.</li>
                 <li><strong>Dados em serviços externos</strong> (Google Calendar etc.): regidos pelas políticas e prazos desses controladores.</li>
             </ul>
