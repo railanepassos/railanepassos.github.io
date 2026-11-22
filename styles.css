@@ -5006,3 +5006,72 @@ select {
     transition: none;
   }
 }
+
+/* Buscar imagem (Wikipedia): input + button row and a grid of candidates */
+.links-image-search__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.links-image-search__row .links-admin-form__control {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.links-image-search__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.links-image-search__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.links-image-search__status:empty {
+  display: none;
+}
+
+.links-image-search__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.links-image-search__grid:empty {
+  display: none;
+}
+
+.links-image-search__option {
+  padding: 0;
+  border: 2px solid var(--app-line);
+  border-radius: 10px;
+  background: var(--app-media);
+  overflow: hidden;
+  cursor: pointer;
+  aspect-ratio: 1;
+  transition: border-color 0.15s ease;
+}
+
+.links-image-search__option:hover,
+.links-image-search__option:focus-visible {
+  border-color: var(--green);
+}
+
+.links-image-search__option img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .links-image-search__option {
+    transition: none;
+  }
+}
