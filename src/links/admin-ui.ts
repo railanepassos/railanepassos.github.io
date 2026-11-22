@@ -24,6 +24,7 @@ import {
 import { composeEditorEmail, EDITOR_EMAIL_DOMAIN } from "./editor-email";
 import { buildSpinLabels } from "./pick-random";
 import { setScreenBusy } from "./skeleton";
+import { googleCalendarUrl } from "./google-calendar";
 import { formatScheduleChip, formatScheduleLabel } from "./schedule";
 import { isPanelMode, syncBodyScreenLock } from "./screen-lock";
 import { categoryBackdropSrc } from "./card-theme";
@@ -1877,6 +1878,8 @@ export type ScheduleSheetOpenOpts = {
   hasSchedule: boolean;
   onSave: (values: ScheduleSheetValues) => void | Promise<void>;
   onDownloadIcs?: () => void;
+  /** Google Agenda "add event" URL of the place right now, or null (read when the sheet opens or gains a schedule). */
+  getGoogleCalendarUrl?: () => string | null;
   onRemove?: () => void | Promise<void>;
 };
 
@@ -1897,6 +1900,7 @@ export function createScheduleSheet(): ScheduleSheetHandle {
   let onSaveCb: ((values: ScheduleSheetValues) => void | Promise<void>) | null =
     null;
   let onDownloadCb: (() => void) | null = null;
+  let getGoogleUrlCb: (() => string | null) | null = null;
   let onRemoveCb: (() => void | Promise<void>) | null = null;
   let onUndoCb: (() => void | Promise<void>) | null = null;
 
@@ -1966,6 +1970,15 @@ export function createScheduleSheet(): ScheduleSheetHandle {
   downloadBtn.textContent = "Baixar ICS";
   downloadBtn.hidden = true;
 
+  const googleBtn = document.createElement("a");
+  googleBtn.className =
+    "links-admin-button links-admin-button--ghost links-admin-button--block";
+  googleBtn.dataset.action = "google-calendar";
+  googleBtn.target = "_blank";
+  googleBtn.rel = "noopener noreferrer";
+  googleBtn.textContent = "Adicionar ao Google Agenda";
+  googleBtn.hidden = true;
+
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
   removeBtn.className =
@@ -1974,7 +1987,7 @@ export function createScheduleSheet(): ScheduleSheetHandle {
   removeBtn.textContent = "Remover agendamento";
   removeBtn.hidden = true;
 
-  actions.append(submitBtn, downloadBtn, removeBtn);
+  actions.append(submitBtn, downloadBtn, googleBtn, removeBtn);
   form.append(
     success,
     dateField.wrapper,
@@ -2011,6 +2024,10 @@ export function createScheduleSheet(): ScheduleSheetHandle {
   function setHasSchedule(has: boolean): void {
     downloadBtn.hidden = !has;
     removeBtn.hidden = !has;
+    const href = has ? (getGoogleUrlCb?.() ?? null) : null;
+    if (href) googleBtn.href = href;
+    else googleBtn.removeAttribute("href");
+    googleBtn.hidden = href === null;
   }
 
   function close(): void {
@@ -2020,6 +2037,7 @@ export function createScheduleSheet(): ScheduleSheetHandle {
     form.reset();
     onSaveCb = null;
     onDownloadCb = null;
+    getGoogleUrlCb = null;
     onRemoveCb = null;
     setBusy(false);
     syncBodyScreenLock();
@@ -2074,6 +2092,7 @@ export function createScheduleSheet(): ScheduleSheetHandle {
     endField.input.value = opts.initial.endTime;
     onSaveCb = opts.onSave;
     onDownloadCb = opts.onDownloadIcs ?? null;
+    getGoogleUrlCb = opts.getGoogleCalendarUrl ?? null;
     onRemoveCb = opts.onRemove ?? null;
     clearError();
     clearSuccess();
@@ -2337,9 +2356,23 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   linkRow.value.append(domainText, original);
 
   const scheduleRow = infoRow("calendar", "Agendado");
+  // "Adicionar ao Google Agenda": plain new-tab link to the Google template (no API, no login).
+  const gcalLink = document.createElement("a");
+  gcalLink.className = "links-detail__map";
+  gcalLink.dataset.action = "google-calendar";
+  gcalLink.rel = "noopener noreferrer";
+  gcalLink.target = "_blank";
+  const gcalText = document.createElement("span");
+  gcalText.textContent = "Adicionar ao Google Agenda";
+  gcalLink.append(uiIcon("calendar", 16), gcalText);
+  const gcalWrap = document.createElement("div");
+  gcalWrap.className = "links-detail__row links-detail__row--action";
+  gcalWrap.dataset.field = "google-calendar";
+  gcalWrap.hidden = true;
+  gcalWrap.appendChild(gcalLink);
   const noteRow = infoRow("note", "Nota");
   const memoryRow = infoRow("memory", "Memória");
-  info.append(scheduleRow.row, noteRow.row, memoryRow.row);
+  info.append(scheduleRow.row, gcalWrap, noteRow.row, memoryRow.row);
 
   // "Como foi" block (done places only, each row only when filled). Later
   // Phase 3 rows (impressions, lessons, memory link) go right below these.
@@ -2689,6 +2722,10 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
       scheduleRow.value.textContent = "";
       primaryText.textContent = "Agendar";
     }
+    const gcalHref = googleCalendarUrl(link);
+    gcalWrap.hidden = gcalHref === null;
+    if (gcalHref) gcalLink.href = gcalHref;
+    else gcalLink.removeAttribute("href");
     noteRow.row.hidden = !link.description;
     noteRow.value.textContent = link.description ?? "";
     memoryRow.row.hidden = !link.note;

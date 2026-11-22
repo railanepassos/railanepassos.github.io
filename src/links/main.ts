@@ -21,6 +21,9 @@ import { collectLessons } from "./lesson-suggestions";
 import { collectPeople } from "./people";
 import { matches, parseQuery, removeChip, setMinRating, toggleFilter } from "./query";
 import { renderDoneToolbar } from "./done-toolbar";
+import { renderAgendaToolbar } from "./agenda-toolbar";
+import { createCalendarFeedSheet } from "./calendar-feed-sheet";
+import { buildCalendarIcs, googleCalendarUrl, scheduledForCalendar } from "./google-calendar";
 import { renderMemoriesSwitch, renderMemoriesTimeline } from "./memories-ui";
 import { rankDone, filterDone } from "./ranking";
 import { renderLinksSkeleton, renderToolbarSkeleton } from "./skeleton";
@@ -290,6 +293,12 @@ function bootDynamic(
 
   const deleteSheet: DeleteSheetHandle = createDeleteConfirmSheet();
   const scheduleSheet: ScheduleSheetHandle = createScheduleSheet();
+  const calendarFeedSheet = createCalendarFeedSheet({
+    supabaseUrl: getSupabaseConfig().url,
+    load: () => repo.getCalendarFeed(),
+    enable: () => repo.enableCalendarFeed(),
+    disable: () => repo.disableCalendarFeed(),
+  });
   const reviewSheet: ReviewSheetHandle = createReviewSheet();
   const planSheet: PlanSheetHandle = createPlanSheet({
     getPeopleSuggestions: () => collectPeople(links),
@@ -430,6 +439,7 @@ function bootDynamic(
     viewModal.element,
     visitMode.element,
     scheduleSheet.element,
+    calendarFeedSheet.element,
     reviewSheet.element,
     planSheet.element,
     drawFilterSheet.element,
@@ -731,6 +741,11 @@ function bootDynamic(
     downloadIcs(icsFilename(link), ics);
   }
 
+  function downloadAgendaIcs(): void {
+    if (scheduledForCalendar(links).length === 0) return;
+    downloadIcs("agenda-experiencias.ics", buildCalendarIcs(links));
+  }
+
   function openSchedule(link: LinkRow): void {
     const previousStart = link.scheduled_start;
     const previousEnd = link.scheduled_end;
@@ -751,6 +766,10 @@ function bootDynamic(
       title: "Agendar experiência",
       initial,
       hasSchedule,
+      getGoogleCalendarUrl: () => {
+        const current = findLink(link.id);
+        return current ? googleCalendarUrl(current) : null;
+      },
       onDownloadIcs: () => {
         const current = findLink(link.id) ?? link;
         downloadScheduleIcs(current);
@@ -1021,6 +1040,14 @@ function bootDynamic(
       );
     }
     if (doneToolbar) els.list.appendChild(doneToolbar);
+    if (section === "agenda") {
+      els.list.appendChild(
+        renderAgendaToolbar(
+          { count: scheduledForCalendar(links).length },
+          { onExport: downloadAgendaIcs, onGoogle: () => calendarFeedSheet.open() }
+        )
+      );
+    }
     if (section !== "done" && section !== "memories") {
       const today = renderTodayBanner(links, new Date(), { onOpen: (l) => openVisit(l) });
       if (today) els.list.appendChild(today);

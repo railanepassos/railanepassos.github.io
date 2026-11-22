@@ -10,6 +10,7 @@ import { normalizeRating, reviewColumnsError, type ReviewColumns } from "./revie
 import { readPlanItems, storedPlanError, type PlanItem } from "./plan";
 import { MAX_PEOPLE, MAX_PERSON_LENGTH } from "./people";
 import { parsePlanFragment, PLAN_FRAGMENT_PREFIX } from "./plan-share";
+import { isCalendarToken, readCalendarFeedState, type CalendarFeedState } from "./calendar-feed";
 
 export type LinkStatus = "wishlist" | "done";
 
@@ -358,6 +359,9 @@ export interface LinksRepo {
   enablePlanShare(id: string): Promise<string>;
   /** Turn the plan share link off (the old token stops working). */
   disablePlanShare(id: string): Promise<boolean>;
+  getCalendarFeed(): Promise<CalendarFeedState>;
+  enableCalendarFeed(): Promise<string>;
+  disableCalendarFeed(): Promise<void>;
 }
 
 export function createLinksRepo(client: SupabaseClient): LinksRepo {
@@ -486,6 +490,27 @@ export function createLinksRepo(client: SupabaseClient): LinksRepo {
       const result = await client.rpc("links_plan_share_disable", { link_id: id });
       if (result.error) throw new Error(result.error.message);
       return result.data === true;
+    },
+
+    /** Google Agenda feed (migration 022): editor-only, one secret token for the whole app. */
+    async getCalendarFeed(): Promise<CalendarFeedState> {
+      const result = await client.rpc("links_calendar_feed_get");
+      if (result.error) throw new Error(result.error.message);
+      return readCalendarFeedState(result.data);
+    },
+
+    /** Turn the feed on, or rotate its token. Resolves with the new token. */
+    async enableCalendarFeed(): Promise<string> {
+      const result = await client.rpc("links_calendar_feed_enable");
+      if (result.error) throw new Error(result.error.message);
+      if (!isCalendarToken(result.data)) throw new Error("invalid calendar feed token");
+      return result.data;
+    },
+
+    async disableCalendarFeed(): Promise<void> {
+      const result = await client.rpc("links_calendar_feed_disable");
+      if (result.error) throw new Error(result.error.message);
+      if (result.data !== true) throw new Error("calendar feed was not disabled");
     },
   };
 }
