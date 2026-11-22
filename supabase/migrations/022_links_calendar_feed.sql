@@ -47,10 +47,7 @@ begin
     raise exception 'forbidden' using errcode = '42501';
   end if;
   new_token := translate(
-    encode(
-      decode(replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''), 'hex'),
-      'base64'
-    ),
+    encode(extensions.gen_random_bytes(32), 'base64'),
     '+/=',
     '-_'
   );

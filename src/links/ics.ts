@@ -19,6 +19,7 @@ export function icsUtcStamp(d: Date): string {
 
 function escapeText(value: string): string {
   return value
+    .replace(/\r\n?/g, "\n")
     .replace(/\\/g, "\\\\")
     .replace(/\n/g, "\\n")
     .replace(/,/g, "\\,")
@@ -76,7 +77,7 @@ export function icsEventLines(input: IcsEventInput): string[] {
   if (descParts.length) {
     lines.push(`DESCRIPTION:${escapeText(descParts.join("\n"))}`);
   }
-  lines.push(`URL:${input.url}`);
+  lines.push(`URL:${input.url.replace(/[\r\n]/g, "")}`);
   lines.push("END:VEVENT");
   return lines;
 }

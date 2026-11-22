@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 // @ts-expect-error node:url is available at runtime via vitest/node environment
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
+import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
@@ -52,11 +53,13 @@ const get = () =>
   });
 
 beforeAll(async () => {
-  db = new PGlite();
+  db = new PGlite({ extensions: { pgcrypto } });
   await db.exec(`
     create role anon nologin;
     create role authenticated nologin;
     create role service_role nologin;
+    create schema extensions;
+    create extension pgcrypto with schema extensions;
     create schema auth;
     create table auth.users (id uuid primary key);
     create function auth.uid() returns uuid language sql stable as

@@ -84,10 +84,11 @@ function utcStamp(d: Date): string {
 
 function escapeText(value: string): string {
   return value
+    .replace(/\r\n?/g, "\n")
     .replace(/\\/g, "\\\\")
     .replace(/\n/g, "\\n")
     .replace(/,/g, "\\,")
-    .replace(/;/g, "\;");
+    .replace(/;/g, "\\;");
 }
 
 function foldLine(line: string): string {
@@ -127,7 +128,7 @@ function eventLines(row: FeedRow, stamp: string): string[] {
     .join(", ");
   if (location) lines.push(`LOCATION:${escapeText(location)}`);
   lines.push(`DESCRIPTION:${escapeText(row.url)}`);
-  lines.push(`URL:${row.url}`);
+  lines.push(`URL:${row.url.replace(/[\r\n]/g, "")}`);
   lines.push("END:VEVENT");
   return lines;
 }

@@ -81,6 +81,7 @@ describe("handleFeedRequest", () => {
   it("answers HEAD like GET without a body", async () => {
     const res = await handleFeedRequest(req(`?t=${TOKEN}`, "HEAD"), deps());
     expect(res.status).toBe(200);
+    expect(res.body).toBeNull();
     expect(await res.text()).toBe("");
   });
 

@@ -115,7 +115,7 @@ describe("buildFeedIcs", () => {
 
   it("escapes and folds long titles", () => {
     const ics = buildFeedIcs([row({ label: "A, B; C " + "palavra ".repeat(20) })], NOW);
-    expect(ics).toContain("SUMMARY:A\\, B\; C");
+    expect(ics).toContain("SUMMARY:A\\, B\\; C");
     for (const line of ics.split("\r\n")) {
       expect(new TextEncoder().encode(line).length).toBeLessThanOrEqual(75);
     }
@@ -124,15 +124,55 @@ describe("buildFeedIcs", () => {
   it("matches the app's own events line for line (same escapes), apart from time form and stamp", () => {
     const app = buildIcs({
       uid: "id-1@railanepassos.tec.br",
-      title: "Museu do Mar",
+      title: "Museu; do, Mar",
       description: null,
       url: "https://example.com/lugar",
       startIso: "2026-12-20T09:00:00-03:00",
       endIso: "2026-12-20T17:00:00-03:00",
     });
-    const feed = buildFeedIcs([row({ address: null, city: null })], NOW);
+    const feed = buildFeedIcs([row({ label: "Museu; do, Mar", address: null, city: null })], NOW);
     const keep = (text: string) =>
       text.split("\r\n").filter((l) => /^(UID|SUMMARY|DESCRIPTION|URL|BEGIN|END|VERSION|PRODID):/.test(l));
     expect(keep(feed)).toEqual(keep(app));
+  });
+  it("never emits raw CR/LF from data (feed)", () => {
+    const evil = "x\r\nBEGIN:VEVENT\rY\nZ";
+    const ics = buildFeedIcs(
+      [row({ label: evil, address: evil, city: null, url: "https://e.com/a" + evil })],
+      NOW
+    );
+    expect(ics.split("\r\n").filter((l) => l === "BEGIN:VEVENT").length).toBe(1);
+    expect(ics.replace(/\r\n/g, "")).not.toMatch(/[\r\n]/);
+    expect(ics).toContain("SUMMARY:x\\nBEGIN:VEVENT\\nY\\nZ");
+    expect(ics.split("\r\n")).toContain("URL:https://e.com/axBEGIN:VEVENTYZ");
+  });
+
+  it("never emits raw CR/LF from data (app ics)", () => {
+    const evil = "x\r\nBEGIN:VEVENT\rY\nZ";
+    const ics = buildIcs({
+      uid: "a@b",
+      title: evil,
+      description: evil,
+      url: "https://e.com/a" + evil,
+      startIso: "2026-12-20T09:00:00-03:00",
+      endIso: "2026-12-20T17:00:00-03:00",
+    });
+    expect(ics.split("\r\n").filter((l) => l === "BEGIN:VEVENT").length).toBe(1);
+    expect(ics.replace(/\r\n/g, "")).not.toMatch(/[\r\n]/);
+    expect(ics).toContain("SUMMARY:x\\nBEGIN:VEVENT\\nY\\nZ");
+  });
+
+  it("escapes semicolons in location and folds multibyte text without splitting characters", () => {
+    const title = "Café ação 🎉 ".repeat(15);
+    const ics = buildFeedIcs([row({ label: title, address: "Rua A; 1", city: null })], NOW);
+    expect(ics).toContain("LOCATION:Rua A\\; 1");
+    const dec = new TextDecoder("utf-8", { fatal: true });
+    for (const line of ics.split("\r\n")) {
+      const bytes = new TextEncoder().encode(line);
+      expect(bytes.length).toBeLessThanOrEqual(75);
+      expect(() => dec.decode(bytes)).not.toThrow();
+    }
+    const unfolded = ics.replace(/\r\n /g, "");
+    expect(unfolded).toContain(`SUMMARY:${title.trim() === title ? title : title}`.replace(/,/g, "\\,"));
   });
 });
