@@ -1716,3 +1716,207 @@ describe("Aviso de duplicado", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("Phase 8: Buscar imagem (Wikipedia)", () => {
+  const THUMB = (n: number) => `https://upload.wikimedia.org/wikipedia/commons/thumb/${n}/Foto${n}.jpg/800px-Foto${n}.jpg`;
+  const apiBody = (count: number) => ({
+    query: {
+      pages: Object.fromEntries(
+        Array.from({ length: count }, (_, i) => [
+          String(i),
+          { title: `Lugar ${i + 1}`, index: i + 1, thumbnail: { source: THUMB(i + 1) } },
+        ])
+      ),
+    },
+  });
+  const okFetch = (body: unknown) =>
+    vi.fn().mockResolvedValue({ ok: true, json: async () => body } as Response);
+
+  function setup(fetchFn: ReturnType<typeof vi.fn>) {
+    const modal = createLinkFormModal(vi.fn(), { fetchFn: fetchFn as unknown as typeof fetch });
+    document.body.appendChild(modal.element);
+    modal.openCreate({ url: "https://example.com/x" });
+    const q = <T extends HTMLElement>(s: string) => modal.element.querySelector<T>(s)!;
+    const btn = () =>
+      Array.from(modal.element.querySelectorAll("button")).find((b) => b.textContent?.includes("Buscar imagem"))! as HTMLButtonElement;
+    const type = (el: HTMLInputElement, v: string) => {
+      el.value = v;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    return { modal, q, btn, type };
+  }
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it("the button is disabled while the name is blank and enabled once typed", () => {
+    const { q, btn, type } = setup(okFetch(apiBody(1)));
+    expect(btn().disabled).toBe(true);
+    type(q<HTMLInputElement>("#links-form-label"), "Museu do Amanhã");
+    expect(btn().disabled).toBe(false);
+    type(q<HTMLInputElement>("#links-form-label"), "   ");
+    expect(btn().disabled).toBe(true);
+  });
+
+  it("does not fetch anything until the button is tapped", () => {
+    const fetchFn = okFetch(apiBody(1));
+    const { q, type } = setup(fetchFn);
+    type(q<HTMLInputElement>("#links-form-label"), "Museu");
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("shows up to 6 thumbnails as buttons with safe img attributes, searching label + city", async () => {
+    const fetchFn = okFetch(apiBody(6));
+    const { modal, q, btn, type } = setup(fetchFn);
+    type(q<HTMLInputElement>("#links-form-label"), "Museu do Amanhã");
+    (modal.element.querySelector("details") as HTMLDetailsElement).open = true;
+    type(q<HTMLInputElement>("#links-form-city"), "Rio de Janeiro");
+    btn().click();
+    await flush();
+    expect(new URL(String(fetchFn.mock.calls[0][0])).searchParams.get("gsrsearch")).toBe("Museu do Amanhã Rio de Janeiro");
+    const options = modal.element.querySelectorAll<HTMLButtonElement>(".links-image-search__option");
+    expect(options).toHaveLength(6);
+    const img = options[0].querySelector("img")!;
+    expect(img.getAttribute("alt")).toBe("Lugar 1");
+    expect(img.getAttribute("src")).toBe(THUMB(1));
+    expect(img.getAttribute("loading")).toBe("lazy");
+    expect(img.getAttribute("referrerpolicy")).toBe("no-referrer");
+    expect(options[0].type).toBe("button");
+  });
+
+  it("choosing a thumbnail fills the image field and the preview, then closes the grid", async () => {
+    const { modal, q, btn, type } = setup(okFetch(apiBody(3)));
+    type(q<HTMLInputElement>("#links-form-label"), "Museu");
+    btn().click();
+    await flush();
+    modal.element.querySelectorAll<HTMLButtonElement>(".links-image-search__option")[1].click();
+    expect(q<HTMLInputElement>("#links-form-image").value).toBe(THUMB(2));
+    expect(q<HTMLImageElement>(".links-admin-form__preview-img").getAttribute("src")).toBe(THUMB(2));
+    expect(modal.element.querySelectorAll(".links-image-search__option")).toHaveLength(0);
+  });
+
+  it("choosing also releases a held draft image", async () => {
+    const modal = createLinkFormModal(vi.fn(), { fetchFn: okFetch(apiBody(1)) as unknown as typeof fetch });
+    document.body.appendChild(modal.element);
+    modal.openCreate({ url: "https://example.com/x", label: "Museu", image_url: "https://draft.example.test/a.jpg" });
+    const btn = Array.from(modal.element.querySelectorAll("button")).find((b) => b.textContent?.includes("Buscar imagem"))!;
+    (btn as HTMLButtonElement).click();
+    await flush();
+    modal.element.querySelector<HTMLButtonElement>(".links-image-search__option")!.click();
+    const hold = Array.from(modal.element.querySelectorAll("button")).find((b) => b.textContent === "Carregar prévia")!;
+    expect(hold.hidden).toBe(true);
+  });
+
+  it("shows 'Nenhuma imagem encontrada' when there is no result", async () => {
+    const { modal, q, btn, type } = setup(okFetch({}));
+    type(q<HTMLInputElement>("#links-form-label"), "Lugar Inexistente");
+    btn().click();
+    await flush();
+    expect(modal.element.querySelector(".links-image-search__status")!.textContent).toBe("Nenhuma imagem encontrada");
+  });
+
+  it("shows an error notice when the search fails, and the form keeps working", async () => {
+    const { modal, q, btn, type } = setup(vi.fn().mockRejectedValue(new TypeError("offline")));
+    type(q<HTMLInputElement>("#links-form-label"), "Museu");
+    btn().click();
+    await flush();
+    expect(modal.element.querySelector(".links-image-search__status")!.textContent).toBe("Não foi possível buscar agora");
+    expect(btn().disabled).toBe(false);
+    type(q<HTMLInputElement>("#links-form-image"), "https://example.com/manual.jpg");
+    expect(q<HTMLInputElement>("#links-form-image").value).toBe("https://example.com/manual.jpg");
+  });
+
+  it("shows a loading state while searching", async () => {
+    let resolve!: (r: Response) => void;
+    const fetchFn = vi.fn().mockReturnValue(new Promise<Response>((r) => (resolve = r)));
+    const { modal, q, btn, type } = setup(fetchFn);
+    type(q<HTMLInputElement>("#links-form-label"), "Museu");
+    btn().click();
+    expect(modal.element.querySelector(".links-image-search__status")!.textContent).toBe("Buscando…");
+    resolve({ ok: true, json: async () => ({}) } as Response);
+    await flush();
+    expect(modal.element.querySelector(".links-image-search__status")!.textContent).toBe("Nenhuma imagem encontrada");
+  });
+
+  it("a newer search cancels the previous one", async () => {
+    const signals: AbortSignal[] = [];
+    const fetchFn = vi.fn((_u: string, init: RequestInit) => {
+      signals.push(init.signal!);
+      return new Promise<Response>(() => {});
+    });
+    const { q, btn, type } = setup(fetchFn as unknown as ReturnType<typeof vi.fn>);
+    type(q<HTMLInputElement>("#links-form-label"), "Museu");
+    btn().click();
+    expect(signals).toHaveLength(1);
+    expect(signals[0].aborted).toBe(false);
+    btn().click();
+    expect(signals).toHaveLength(2);
+    expect(signals[0].aborted).toBe(true);
+    expect(signals[1].aborted).toBe(false);
+  });
+
+  it("a stale search that resolves after a newer one never overwrites the grid (fetch ignores abort)", async () => {
+    const resolvers: Array<(r: Response) => void> = [];
+    const fetchFn = vi.fn(() => new Promise<Response>((r) => resolvers.push(r)));
+    const { modal, q, btn, type } = setup(fetchFn as unknown as ReturnType<typeof vi.fn>);
+    type(q<HTMLInputElement>("#links-form-label"), "Museu");
+    btn().click();
+    btn().click();
+    expect(resolvers).toHaveLength(2);
+    resolvers[1]({ ok: true, json: async () => apiBody(2) } as Response);
+    await flush();
+    resolvers[0]({ ok: true, json: async () => apiBody(4) } as Response);
+    await flush();
+    expect(modal.element.querySelectorAll(".links-image-search__option")).toHaveLength(2);
+  });
+
+  it("changing the place name clears the open results grid and cancels the in-flight search", async () => {
+    const { modal, q, btn, type } = setup(okFetch(apiBody(3)));
+    type(q<HTMLInputElement>("#links-form-label"), "Museu");
+    btn().click();
+    await flush();
+    expect(modal.element.querySelectorAll(".links-image-search__option")).toHaveLength(3);
+    type(q<HTMLInputElement>("#links-form-label"), "Museu do Amanhã");
+    expect(modal.element.querySelectorAll(".links-image-search__option")).toHaveLength(0);
+    expect(modal.element.querySelector(".links-image-search__status")!.textContent).toBe("");
+  });
+
+  it("changing the place name aborts a pending search", () => {
+    const signals: AbortSignal[] = [];
+    const fetchFn = vi.fn((_u: string, init: RequestInit) => {
+      signals.push(init.signal!);
+      return new Promise<Response>(() => {});
+    });
+    const { q, btn, type } = setup(fetchFn as unknown as ReturnType<typeof vi.fn>);
+    type(q<HTMLInputElement>("#links-form-label"), "Museu");
+    btn().click();
+    type(q<HTMLInputElement>("#links-form-label"), "Museu X");
+    expect(signals[0].aborted).toBe(true);
+  });
+
+  it("reopening the form cancels a pending search and clears the grid", async () => {
+    const signals: AbortSignal[] = [];
+    const fetchFn = vi.fn((_u: string, init: RequestInit) => {
+      signals.push(init.signal!);
+      return new Promise<Response>(() => {});
+    });
+    const { modal, q, btn, type } = setup(fetchFn as unknown as ReturnType<typeof vi.fn>);
+    type(q<HTMLInputElement>("#links-form-label"), "Museu");
+    btn().click();
+    modal.openCreate({ url: "https://example.com/y" });
+    expect(signals[0].aborted).toBe(true);
+    expect(modal.element.querySelector(".links-image-search__status")!.textContent).toBe("");
+  });
+
+  it("never injects remote text as HTML", async () => {
+    const body = {
+      query: { pages: { a: { title: '<img src=x onerror="window.__pwn=1">', index: 1, thumbnail: { source: THUMB(1) } } } },
+    };
+    const { modal, q, btn, type } = setup(okFetch(body));
+    type(q<HTMLInputElement>("#links-form-label"), "Museu");
+    btn().click();
+    await flush();
+    const opt = modal.element.querySelector(".links-image-search__option")!;
+    expect(opt.querySelectorAll("img")).toHaveLength(1);
+    expect(opt.querySelector("img")!.getAttribute("alt")).toBe('<img src=x onerror="window.__pwn=1">');
+    expect((window as unknown as { __pwn?: number }).__pwn).toBeUndefined();
+  });
+});

@@ -31,6 +31,7 @@ import { withoutEmptyProposals } from "./draft";
 import { displayTitle, linkDomain } from "./feed";
 import { uiIcon, type IconName } from "./ui-icons";
 import { buildMapUrl } from "./map-url";
+import { searchImages, type ImageCandidate } from "./image-search";
 import { parseMemoryLink } from "./memory-link";
 import {
   MAX_POSES,
@@ -1053,6 +1054,8 @@ export type LinkFormOptions = {
   findDuplicate?: (url: string, sourceUrl: string) => LinkRow | null;
   /** Opens that item; the form closes first, so the new item is discarded. */
   onOpenDuplicate?: (link: LinkRow) => void;
+  /** fetch used by "Buscar imagem" (injectable for tests). */
+  fetchFn?: typeof fetch;
 };
 
 export function createLinkFormModal(
@@ -1160,6 +1163,82 @@ export function createLinkFormModal(
   imageField.input.placeholder = "https://...";
   imageField.input.setAttribute("inputmode", "url");
   normalizeUrlOnBlur(imageField.input);
+
+  // "Buscar imagem": Wikipedia search, only when the editor taps the button.
+  const imageRow = document.createElement("div");
+  imageRow.className = "links-image-search__row";
+  const searchBtn = document.createElement("button");
+  searchBtn.type = "button";
+  searchBtn.className = "links-admin-button links-admin-button--ghost links-image-search__btn";
+  searchBtn.append(uiIcon("search", 18), document.createTextNode(" Buscar imagem"));
+  imageRow.append(imageField.input, searchBtn);
+  imageField.wrapper.appendChild(imageRow);
+  const searchStatus = document.createElement("p");
+  searchStatus.className = "links-admin-form__hint links-image-search__status";
+  searchStatus.setAttribute("role", "status");
+  searchStatus.setAttribute("aria-live", "polite");
+  const searchGrid = document.createElement("div");
+  searchGrid.className = "links-image-search__grid";
+  imageField.wrapper.append(searchStatus, searchGrid);
+  let searchCtl: AbortController | null = null;
+
+  function resetImageSearch(): void {
+    searchCtl?.abort();
+    searchCtl = null;
+    searchStatus.textContent = "";
+    searchGrid.replaceChildren();
+  }
+
+  function renderCandidates(found: ImageCandidate[]): void {
+    searchGrid.replaceChildren();
+    if (found.length === 0) {
+      searchStatus.textContent = "Nenhuma imagem encontrada";
+      return;
+    }
+    searchStatus.textContent = "Toque numa imagem para usar";
+    for (const candidate of found) {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "links-image-search__option";
+      const img = document.createElement("img");
+      img.alt = candidate.title;
+      img.setAttribute("loading", "lazy");
+      img.setAttribute("referrerpolicy", "no-referrer");
+      img.src = candidate.url;
+      option.appendChild(img);
+      option.addEventListener("click", () => {
+        imageField.input.value = candidate.url;
+        imageField.input.dispatchEvent(new Event("input", { bubbles: true }));
+        resetImageSearch();
+      });
+      searchGrid.appendChild(option);
+    }
+  }
+
+  searchBtn.addEventListener("click", () => {
+    const name = labelField.input.value.trim();
+    if (!name) return;
+    searchCtl?.abort();
+    const ctl = new AbortController();
+    searchCtl = ctl;
+    searchGrid.replaceChildren();
+    searchStatus.textContent = "Buscando…";
+    const city = moreText.find((f) => f.key === "city")?.input.value ?? "";
+    searchImages(name, city, formOptions.fetchFn ?? ((...args) => fetch(...args)), ctl.signal).then(
+      (found) => {
+        if (searchCtl === ctl) renderCandidates(found);
+      },
+      () => {
+        if (searchCtl === ctl) {
+          searchGrid.replaceChildren();
+          searchStatus.textContent = "Não foi possível buscar agora";
+        }
+      }
+    );
+  });
+
+  // A changed place name makes the open results (and any pending search) stale.
+  labelField.input.addEventListener("input", resetImageSearch);
 
   const memoryField = labelledInput(
     "links-form-note",
@@ -1518,6 +1597,7 @@ export function createLinkFormModal(
     const src = categoryBackdropSrc(category, image);
     if (src) previewImg.src = src;
     else previewImg.removeAttribute("src");
+    searchBtn.disabled = labelField.input.value.trim() === "";
   }
   for (const input of [urlField.input, labelField.input, imageField.input]) {
     input.addEventListener("input", syncPreview);
@@ -1619,6 +1699,7 @@ export function createLinkFormModal(
   function close(): void {
     overlay.hidden = true;
     clearError();
+    resetImageSearch();
     form.reset();
     more.open = false;
     editingId = null;
@@ -1633,6 +1714,7 @@ export function createLinkFormModal(
 
   function afterOpen(): void {
     previouslyFocused = document.activeElement as HTMLElement | null;
+    resetImageSearch();
     overlay.hidden = false;
     syncBodyScreenLock();
     clearError();

@@ -47,6 +47,7 @@ Agenda / sorteio        História à mão             Vídeo/álbum (link)
 | 4.1 | Link do plano para participantes (marcar itens sem login) | ✅ No ar |
 | Extras | Dossiê e roteiro mais ricos na skill; várias categorias por item (principal + até 3); Fontes (links das fontes) nos detalhes; campo Duração | ✅ No ar |
 | 7 | Modo visita: tela cheia para o dia do passeio (roteiro, checklist marcável, história, poses), tela acesa, banner "Hoje" e "Terminar visita" → Como foi. Spec: `2026-11-22-links-modo-visita-design.md` | ✅ No ar |
+| 8 | Imagem automática: "Buscar imagem" na Wikipedia no formulário + regra de imagem na skill. Spec: `2026-11-22-links-imagem-automatica-design.md` | ✅ No ar |
 
 ## Decisões já tomadas
 
