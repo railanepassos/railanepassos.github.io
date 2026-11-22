@@ -46,6 +46,7 @@ Agenda / sorteio        História à mão             Vídeo/álbum (link)
 | 6 | Aba Memórias (linha do tempo dos feitos, "há 1 ano…"), sorteio com filtros (custo, cidade, tag, tempo) | ✅ No ar |
 | 4.1 | Link do plano para participantes (marcar itens sem login) | ✅ No ar |
 | Extras | Dossiê e roteiro mais ricos na skill; várias categorias por item (principal + até 3); Fontes (links das fontes) nos detalhes; campo Duração | ✅ No ar |
+| 7 | Modo visita: tela cheia para o dia do passeio (roteiro, checklist marcável, história, poses), tela acesa, banner "Hoje" e "Terminar visita" → Como foi. Spec: `2026-11-22-links-modo-visita-design.md` | 🚧 Em implementação |
 
 ## Decisões já tomadas
 
