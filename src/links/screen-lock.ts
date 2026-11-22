@@ -27,7 +27,8 @@ export function syncBodyScreenLock(): void {
   }
   if (
     document.querySelector(".links-filter-sheet:not([hidden])") != null ||
-    document.querySelector(".links-deck-screen:not([hidden])") != null
+    document.querySelector(".links-deck-screen:not([hidden])") != null ||
+    document.querySelector(".links-visit:not([hidden])") != null
   ) {
     locking = true;
   }

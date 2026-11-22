@@ -2078,6 +2078,8 @@ export type ViewModalCallbacks = {
   onEditReview?: (link: LinkRow) => void;
   /** Any place: open the "Plano do passeio" sheet to edit the plan. */
   onEditPlan?: (link: LinkRow) => void;
+  /** Wishlist places only: open the full-screen "Modo visita" (the detail closes first). */
+  onVisit?: (link: LinkRow) => void;
   /**
    * Tick/untick a plan item: persist `items` (the whole plan_items array).
    * Rejects when the save fails; the detail then rolls the tick back.
@@ -2108,7 +2110,7 @@ export type ViewModalHandle = {
 };
 
 /** One pose in the detail list: optional https link (new tab) + plain-text note. */
-function renderPoseItem(ref: { url?: string; note?: string }, index: number): HTMLElement {
+export function renderPoseItem(ref: { url?: string; note?: string }, index: number): HTMLElement {
   const li = document.createElement("li");
   li.className = "links-detail__pose";
   if (ref.url) {
@@ -2513,7 +2515,16 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   sourcesRow.value.appendChild(sourcesUl);
   info.append(posesRow.row, linkRow.row, sourcesRow.row);
 
-  body.append(chips, title, info);
+  const visitBtn = document.createElement("button");
+  visitBtn.type = "button";
+  visitBtn.className = "links-detail__visit";
+  visitBtn.dataset.action = "visit-mode";
+  visitBtn.hidden = true;
+  const visitText = document.createElement("span");
+  visitText.textContent = "Modo visita";
+  visitBtn.append(uiIcon("clock", 20), visitText);
+
+  body.append(chips, title, visitBtn, info);
 
   const bar = document.createElement("div");
   bar.className = "links-detail__bar";
@@ -2661,6 +2672,7 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     const isDone = link.status === "done";
     doneBtn.hidden = isDone;
     unmarkBtn.hidden = !isDone || !cb.onUnmarkDone;
+    visitBtn.hidden = isDone || !cb.onVisit;
 
     visitRow.row.hidden = !(isDone && link.completed_at && formatVisitDate(link.completed_at));
     visitRow.value.textContent = isDone ? formatVisitDate(link.completed_at) : "";
@@ -2925,6 +2937,9 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
 
   primary.addEventListener("click", () => act(cb.onSchedule));
   doneBtn.addEventListener("click", () => act(cb.onMarkDone));
+  visitBtn.addEventListener("click", () => {
+    if (cb.onVisit) act(cb.onVisit);
+  });
   unmarkBtn.addEventListener("click", () => {
     if (cb.onUnmarkDone) act(cb.onUnmarkDone);
   });

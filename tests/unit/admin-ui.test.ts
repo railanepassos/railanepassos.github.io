@@ -247,6 +247,31 @@ describe("createViewModal", () => {
     expect(cb.onMarkDone).toHaveBeenCalled();
   });
 
+  it("shows Modo visita for wishlist places only and fires onVisit after closing", () => {
+    const onVisit = vi.fn();
+    const modal = createViewModal({ ...callbacks(), onVisit });
+    document.body.appendChild(modal.element);
+    const btn = () =>
+      modal.element.querySelector<HTMLButtonElement>('[data-action="visit-mode"]')!;
+    modal.open(row());
+    expect(btn().hidden).toBe(false);
+    expect(btn().textContent).toContain("Modo visita");
+    btn().click();
+    expect(onVisit).toHaveBeenCalledWith(expect.objectContaining({ id: "link-1" }));
+    expect(modal.currentId()).toBeNull();
+    modal.open(row({ status: "done" }));
+    expect(btn().hidden).toBe(true);
+  });
+
+  it("hides Modo visita when no onVisit callback is wired", () => {
+    const modal = createViewModal(callbacks());
+    document.body.appendChild(modal.element);
+    modal.open(row());
+    expect(
+      modal.element.querySelector<HTMLButtonElement>('[data-action="visit-mode"]')!.hidden
+    ).toBe(true);
+  });
+
   it("hides mark done for completed items", () => {
     const modal = createViewModal(callbacks());
     document.body.appendChild(modal.element);

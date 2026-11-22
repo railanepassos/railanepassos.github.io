@@ -70,6 +70,11 @@ import { buildIcs, downloadIcs } from "./ics";
 import { createReviewSheet, type ReviewSheetHandle } from "./review-sheet";
 import { UNMARK_DONE_PATCH, reviewError, reviewFromLink, reviewToPatch } from "./review";
 import { createPlanSheet, type PlanSheetHandle } from "./plan-sheet";
+import type { PlanItem } from "./plan";
+import { renderTodayBanner } from "./today-banner";
+import { createVisitMode, type VisitModeHandle } from "./visit-ui";
+import { isVisitFragment, parseVisitFragment, pendingVisitAction, visitFragment } from "./visit";
+import { createKeyedQueue } from "./keyed-queue";
 import { mergeProposedPlanItems, planError, planFromLink, planToPatch } from "./plan";
 import { createDeckScreen, type DeckHandle } from "./deck-ui";
 import { nextPriority } from "./deck-queue";
@@ -290,6 +295,24 @@ function bootDynamic(
     getPeopleSuggestions: () => collectPeople(links),
     getLessonCandidates: () => collectLessons(links),
   });
+  // One queue per place for the detail and the visit mode alike, so a save started in one
+  // never races the conditional save of the other (self-inflicted StaleLinkError).
+  const planSaveQueue = createKeyedQueue();
+  const savePlanItems = (l: LinkRow, items: PlanItem[]): Promise<void> =>
+    planSaveQueue(l.id, () => writePlanItems(l, items));
+  const writePlanItems = async (l: LinkRow, items: PlanItem[]): Promise<void> => {
+    // Each save is conditioned on the updated_at we last saw; queued saves run one after
+    // another, so each one picks up the previous result.
+    const loaded = findLink(l.id) ?? l;
+    const saved = await repo.updateLinkIfUnchanged(l.id, { plan_items: items }, loaded.updated_at);
+    if (saved === null) throw new StaleLinkError(await adoptServerRow(l.id));
+    links = links.map((row) =>
+      row.id === l.id ? { ...row, plan_items: items, updated_at: saved.updated_at ?? row.updated_at } : row
+    );
+    renderList();
+    deckScreen.refresh(links);
+  };
+
   const viewModal: ViewModalHandle = createViewModal({
     onEdit: (l) => formModal.openEdit(l),
     onSchedule: (l) => openSchedule(l),
@@ -297,18 +320,8 @@ function bootDynamic(
     onUnmarkDone: (l) => void unmarkDone(l),
     onEditReview: (l) => openReview(l, "edit"),
     onEditPlan: (l) => openPlan(l),
-    onSavePlanItems: async (l, items) => {
-      // Each save is conditioned on the updated_at we last saw: the queued saves of
-      // the detail run one after another, so each one picks up the previous result.
-      const loaded = findLink(l.id) ?? l;
-      const saved = await repo.updateLinkIfUnchanged(l.id, { plan_items: items }, loaded.updated_at);
-      if (saved === null) throw new StaleLinkError(await adoptServerRow(l.id));
-      links = links.map((row) =>
-        row.id === l.id ? { ...row, plan_items: items, updated_at: saved.updated_at ?? row.updated_at } : row
-      );
-      renderList();
-      deckScreen.refresh(links);
-    },
+    onSavePlanItems: savePlanItems,
+    onVisit: (l) => openVisit(l),
     onPlanShareEnable: async (l) => {
       const token = await repo.enablePlanShare(l.id);
       links = links.map((row) => (row.id === l.id ? { ...row, plan_share_token: token } : row));
@@ -328,6 +341,40 @@ function bootDynamic(
       if (id === null) resumeQueue();
     },
   });
+
+  const visitMode: VisitModeHandle = createVisitMode({
+    onSavePlanItems: savePlanItems,
+    onMarkDone: (l) => void markDone(l),
+    onClose: () => {
+      if (isVisitFragment(window.location.hash)) {
+        history.replaceState(null, "", location.pathname + location.search);
+      }
+    },
+  });
+
+  /** Opens the visit mode (the detail already closed) and keeps the URL shareable. */
+  function openVisit(link: LinkRow): void {
+    visitMode.open(link);
+    history.replaceState(null, "", `${location.pathname}${location.search}${visitFragment(link.id)}`);
+  }
+
+  /** `#visita/<id>` on boot: open it once the editor is logged in and the list is loaded. */
+  let visitFragmentPending = isVisitFragment(window.location.hash);
+  function handlePendingVisit(): void {
+    if (!visitFragmentPending) return;
+    const id = parseVisitFragment(window.location.hash);
+    const target = id ? findLink(id) : undefined;
+    const targetOpenable = !!target && (target.status ?? "wishlist") !== "done";
+    const action = pendingVisitAction({ authenticated, listLoadFailed, targetOpenable });
+    // "wait" keeps the fragment (and the pending flag) so a later successful load reopens the mode.
+    if (action === "wait") return;
+    visitFragmentPending = false;
+    if (action === "open" && target) {
+      openVisit(target);
+    } else {
+      history.replaceState(null, "", location.pathname + location.search);
+    }
+  }
 
   const shellHandlers: ShellHandlers = {
     onSection: (next) => {
@@ -381,6 +428,7 @@ function bootDynamic(
     formModal.element,
     deleteSheet.element,
     viewModal.element,
+    visitMode.element,
     scheduleSheet.element,
     reviewSheet.element,
     planSheet.element,
@@ -631,7 +679,10 @@ function bootDynamic(
   async function resyncAfterShareChange(id: string): Promise<void> {
     try {
       const fresh = await adoptServerRow(id);
-      if (fresh) viewModal.refresh(fresh);
+      if (fresh) {
+        viewModal.refresh(fresh);
+        visitMode.refresh(fresh);
+      }
     } catch {
       // the next plan save will notice the difference and reload
     }
@@ -642,12 +693,13 @@ function bootDynamic(
    * shows what participants ticked through the plan link meanwhile.
    */
   async function refreshOpenDetail(): Promise<void> {
-    const id = viewModal.currentId();
+    const id = viewModal.currentId() ?? visitMode.currentId();
     if (!authenticated || !id) return;
     try {
       const fresh = await adoptServerRow(id);
-      if (fresh && viewModal.currentId() === id) {
+      if (fresh && (viewModal.currentId() === id || visitMode.currentId() === id)) {
         viewModal.refresh(fresh);
+        visitMode.refresh(fresh);
         renderList();
         deckScreen.refresh(links);
       }
@@ -969,6 +1021,10 @@ function bootDynamic(
       );
     }
     if (doneToolbar) els.list.appendChild(doneToolbar);
+    if (section !== "done" && section !== "memories") {
+      const today = renderTodayBanner(links, new Date(), { onOpen: (l) => openVisit(l) });
+      if (today) els.list.appendChild(today);
+    }
     const filterBar = renderFilterBar();
     if (filterBar) els.list.appendChild(filterBar);
     const filtering = query.trim().length > 0 || categoryFilter.length > 0;
@@ -1087,10 +1143,13 @@ function bootDynamic(
         }
       } else {
         links = [];
+        // Private data must not stay on screen after sign-out (also clears #visita/<id>).
+        visitMode.close();
       }
       render();
       handlePendingDraft();
       handlePendingShare();
+      handlePendingVisit();
     })();
   });
 
@@ -1120,6 +1179,7 @@ function bootDynamic(
     render();
     handlePendingDraft();
     handlePendingShare();
+    handlePendingVisit();
   })();
 
   // Paint immediately with guest gate while the session check resolves.
