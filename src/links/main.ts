@@ -71,6 +71,7 @@ import { createReviewSheet, type ReviewSheetHandle } from "./review-sheet";
 import { UNMARK_DONE_PATCH, reviewError, reviewFromLink, reviewToPatch } from "./review";
 import { createPlanSheet, type PlanSheetHandle } from "./plan-sheet";
 import type { PlanItem } from "./plan";
+import { renderTodayBanner } from "./today-banner";
 import { createVisitMode, type VisitModeHandle } from "./visit-ui";
 import { isVisitFragment, parseVisitFragment, visitFragment } from "./visit";
 import { mergeProposedPlanItems, planError, planFromLink, planToPatch } from "./plan";
@@ -1010,6 +1011,10 @@ function bootDynamic(
       );
     }
     if (doneToolbar) els.list.appendChild(doneToolbar);
+    if (section !== "done" && section !== "memories") {
+      const today = renderTodayBanner(links, new Date(), { onOpen: (l) => openVisit(l) });
+      if (today) els.list.appendChild(today);
+    }
     const filterBar = renderFilterBar();
     if (filterBar) els.list.appendChild(filterBar);
     const filtering = query.trim().length > 0 || categoryFilter.length > 0;
