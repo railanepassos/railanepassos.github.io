@@ -48,8 +48,8 @@ Agenda / sorteio        História à mão             Vídeo/álbum (link)
 | Extras | Dossiê e roteiro mais ricos na skill; várias categorias por item (principal + até 3); Fontes (links das fontes) nos detalhes; campo Duração | ✅ No ar |
 | 7 | Modo visita: tela cheia para o dia do passeio (roteiro, checklist marcável, história, poses), tela acesa, banner "Hoje" e "Terminar visita" → Como foi. Spec: `2026-11-22-links-modo-visita-design.md` | ✅ No ar |
 | 8 | Imagem automática: "Buscar imagem" na Wikipedia no formulário + regra de imagem na skill. Spec: `2026-11-22-links-imagem-automatica-design.md` | ✅ No ar |
-| 9 | Pedidos ao Claude: botões no app (importar do Instagram, refinar dossiê/roteiro/lanches/imagem de 1+ lugares, importar da agenda) viram uma fila no Supabase processada pelo Claude local. Spec: `2026-11-22-links-pedidos-claude-design.md` | 🚧 Em implementação |
-| 10 | Exportar para o Google Agenda: botão por lugar, `.ics` de todos e link de assinatura (Edge Function). Spec: `2026-11-22-links-google-agenda-export-design.md` | 🚧 Em implementação |
+| 9 | Pedidos ao Claude: botões no app (importar do Instagram, refinar dossiê/roteiro/lanches/imagem de 1+ lugares, importar da agenda) viram uma fila no Supabase processada pelo Claude local. Spec: `2026-11-22-links-pedidos-claude-design.md` | ✅ No ar |
+| 10 | Exportar para o Google Agenda: botão por lugar, `.ics` de todos e link de assinatura (Edge Function). Spec: `2026-11-22-links-google-agenda-export-design.md` | ✅ No ar |
 
 ## Decisões já tomadas
 
