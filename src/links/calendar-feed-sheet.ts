@@ -39,14 +39,14 @@ export function createCalendarFeedSheet(deps: CalendarFeedSheetDeps): CalendarFe
   let loaded = false;
 
   const { overlay, dialog, backBtn } = createScreenChrome(
-    "links-feed-title",
+    "links-calfeed-title",
     "Agenda no Google",
     "dialog"
   );
   overlay.hidden = true;
 
   const body = document.createElement("div");
-  body.className = "links-feed";
+  body.className = "links-calfeed";
 
   const hint = document.createElement("p");
   hint.className = "links-admin-modal__body";
@@ -54,12 +54,12 @@ export function createCalendarFeedSheet(deps: CalendarFeedSheetDeps): CalendarFe
   const input = document.createElement("input");
   input.type = "text";
   input.readOnly = true;
-  input.className = "links-feed__url";
+  input.className = "links-calfeed__url";
   input.setAttribute("aria-label", "Link da agenda");
   input.addEventListener("focus", () => input.select());
 
   const actions = document.createElement("div");
-  actions.className = "links-feed__actions";
+  actions.className = "links-calfeed__actions";
 
   function actionButton(action: string, text: string, primary = false): HTMLButtonElement {
     const b = document.createElement("button");
