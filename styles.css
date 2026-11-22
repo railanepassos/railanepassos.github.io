@@ -2979,6 +2979,15 @@ body.page-links-admin {
   display: none;
 }
 
+/* Mobile: the icon group keeps its size and the title ellipsizes instead
+   (with four icons the group used to overflow the bar). */
+@media (max-width: 719px) {
+  .links-appbar:not(.links-appbar--searching) .links-appbar__actions,
+  .links-appbar:not(.links-appbar--searching) .links-appbar__tools {
+    flex-shrink: 0;
+  }
+}
+
 /* Mobile: the search icon expands the field over the title. */
 .links-appbar--searching .links-appbar__title {
   display: none;
