@@ -1340,7 +1340,12 @@ body.page-sub {
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
+  text-decoration: none;
   transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.links-admin-button[hidden] {
+  display: none;
 }
 
 .links-admin-button:disabled {
@@ -4155,6 +4160,54 @@ body.links-authed .links-app__layout {
     height: 44px;
     border-radius: 22px;
   }
+}
+
+.links-agendabar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.links-agendabar .links-agendabar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.links-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 24px;
+}
+
+.links-feed__url {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--app-line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+}
+
+.links-feed__url[hidden] {
+  display: none;
+}
+
+.links-feed__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.links-feed__actions [hidden] {
+  display: none;
 }
 
 .links-tagfilter {

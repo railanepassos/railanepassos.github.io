@@ -19,6 +19,7 @@ export function icsUtcStamp(d: Date): string {
 
 function escapeText(value: string): string {
   return value
+    .replace(/\r\n?/g, "\n")
     .replace(/\\/g, "\\\\")
     .replace(/\n/g, "\\n")
     .replace(/,/g, "\\,")
@@ -32,13 +33,34 @@ function toLocalIcsStamp(iso: string): string {
   return `${y}${m}${d}T${hh}${mm}00`;
 }
 
-export function buildIcs(input: IcsInput): string {
+/** RFC 5545 section 3.1: fold lines longer than 75 octets (CRLF + space), never inside a character. */
+export function foldIcsLine(line: string): string {
+  const encoder = new TextEncoder();
+  if (encoder.encode(line).length <= 75) return line;
+  const parts: string[] = [];
+  let current = "";
+  let size = 0;
+  let limit = 75;
+  for (const ch of line) {
+    const bytes = encoder.encode(ch).length;
+    if (size + bytes > limit) {
+      parts.push(current);
+      current = "";
+      size = 0;
+      limit = 74; // continuation lines start with one space
+    }
+    current += ch;
+    size += bytes;
+  }
+  parts.push(current);
+  return parts.join("\r\n ");
+}
+
+export type IcsEventInput = IcsInput & { location?: string | null };
+
+/** The VEVENT block (BEGIN..END) of one event, unfolded. */
+export function icsEventLines(input: IcsEventInput): string[] {
   const lines = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Railane Passos//Experience Bucket List//PT",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
     "BEGIN:VEVENT",
     `UID:${escapeText(input.uid)}`,
     `DTSTAMP:${icsUtcStamp(new Date())}`,
@@ -46,6 +68,8 @@ export function buildIcs(input: IcsInput): string {
     `DTEND;TZID=${SCHEDULE_TZID}:${toLocalIcsStamp(input.endIso)}`,
     `SUMMARY:${escapeText(input.title)}`,
   ];
+  const location = input.location?.trim();
+  if (location) lines.push(`LOCATION:${escapeText(location)}`);
   const descParts = [
     input.description?.trim() || "",
     input.url,
@@ -53,9 +77,27 @@ export function buildIcs(input: IcsInput): string {
   if (descParts.length) {
     lines.push(`DESCRIPTION:${escapeText(descParts.join("\n"))}`);
   }
-  lines.push(`URL:${input.url}`);
-  lines.push("END:VEVENT", "END:VCALENDAR", "");
-  return lines.join("\r\n");
+  lines.push(`URL:${input.url.replace(/[\r\n]/g, "")}`);
+  lines.push("END:VEVENT");
+  return lines;
+}
+
+/** VCALENDAR wrapper around any number of events (zero is valid). */
+export function wrapIcsCalendar(events: IcsEventInput[]): string {
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Railane Passos//Experience Bucket List//PT",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    ...events.flatMap(icsEventLines),
+    "END:VCALENDAR",
+  ];
+  return lines.map(foldIcsLine).join("\r\n") + "\r\n";
+}
+
+export function buildIcs(input: IcsEventInput): string {
+  return wrapIcsCalendar([input]);
 }
 
 /** Trigger a file download in the browser (no-op friendly for unit tests if unused). */
