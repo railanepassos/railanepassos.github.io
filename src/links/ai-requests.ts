@@ -2,8 +2,8 @@
  * Claude request queue (Phase 9), pure model. No DOM, no network. The table is
  * created by migration 021; the repo lives in ai-requests-repo.ts.
  */
-import { encodeDraft, parseDraft, type Draft } from "./draft";
-import { validateScheduleRange } from "./schedule";
+import { encodeDraft, parseDraft, type Draft } from "./draft.ts";
+import { SCHEDULE_OFFSET, validateScheduleRange } from "./schedule.ts";
 
 export type AiRequestKind = "instagram" | "refinar" | "agenda";
 export type AiRequestStatus = "pendente" | "processando" | "pronto" | "erro" | "aplicado" | "descartado";
@@ -42,6 +42,8 @@ export const DEFAULT_AGENDA_DAYS = 60;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const YMD_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DAY_MS = 86_400_000;
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+const OFFSET_MS = -3 * 3_600_000;
 
 function fail(reason: string): { ok: false; reason: string } {
   return { ok: false, reason };
@@ -168,6 +170,14 @@ function parseDrafts(list: unknown): AiResult {
   return { ok: true, type: "drafts", drafts };
 }
 
+/** ISO with T and an offset -> the same instant as `YYYY-MM-DDTHH:MM:00-03:00` (what the app saves and shows). */
+function normalizeScheduleIso(value: string): string | null {
+  if (!ISO_RE.test(value)) return null;
+  const t = Date.parse(value);
+  if (Number.isNaN(t)) return null;
+  return `${new Date(t + OFFSET_MS).toISOString().slice(0, 16)}:00${SCHEDULE_OFFSET}`;
+}
+
 function parseAgenda(list: unknown): AiResult {
   if (!Array.isArray(list) || list.length < 1 || list.length > MAX_AGENDA_PROPOSALS) {
     return fail(`A resposta deve ter de 1 a ${MAX_AGENDA_PROPOSALS} propostas de agenda.`);
@@ -178,12 +188,15 @@ function parseAgenda(list: unknown): AiResult {
     const { link_id, start, end, event_title } = item;
     if (typeof link_id !== "string" || !UUID_RE.test(link_id)) return fail("Proposta com item inválido.");
     if (typeof start !== "string" || typeof end !== "string") return fail("Proposta sem data e hora.");
-    const range = validateScheduleRange(start, end);
+    const startIso = normalizeScheduleIso(start);
+    const endIso = normalizeScheduleIso(end);
+    if (startIso === null || endIso === null) return fail("Data ou horário inválido.");
+    const range = validateScheduleRange(startIso, endIso);
     if (range) return fail(range);
     if (typeof event_title !== "string" || event_title.trim() === "" || event_title.length > MAX_EVENT_TITLE) {
       return fail(`O título do evento deve ter de 1 a ${MAX_EVENT_TITLE} caracteres.`);
     }
-    proposals.push({ link_id, start, end, event_title });
+    proposals.push({ link_id, start: startIso, end: endIso, event_title });
   }
   return { ok: true, type: "agenda", proposals };
 }

@@ -6,12 +6,8 @@ import { createAuthStorage, setRememberMe } from "./session-storage";
 import { PLAN_STALE_NOTICE, isPlanShareFragment } from "./plan-share";
 import { bootSharedPlan } from "./shared-plan-boot";
 import {
-  draftPrefill,
   isDraftFragment,
   parseDraft,
-  withoutEmptyProposals,
-  type Draft,
-  type DraftFields,
   type DraftPlanItem,
   type ParseDraftResult,
 } from "./draft";
@@ -26,6 +22,7 @@ import { renderAgendaToolbar } from "./agenda-toolbar";
 import { createCalendarFeedSheet } from "./calendar-feed-sheet";
 import { createAiRequestsRepo } from "./ai-requests-repo";
 import { countReady, type AgendaProposal } from "./ai-requests";
+import { createDraftFlow } from "./draft-flow";
 import { createAiRequestsUi, renderReadyBadge } from "./ai-requests-ui";
 import { buildCalendarIcs, googleCalendarUrl, scheduledForCalendar } from "./google-calendar";
 import { renderMemoriesSwitch, renderMemoriesTimeline } from "./memories-ui";
@@ -239,37 +236,19 @@ function bootDynamic(
     }
   });
 
-  /** Update draft with fields + plan: the plan sheet opens once the item is saved. */
-  let planAfterSave: { id: string; items: DraftPlanItem[] } | null = null;
-  /** `fila` draft: new items still to open, one by one (memory only). */
-  let draftQueue: DraftFields[] = [];
-  let draftQueueTotal = 0;
-  /**
-   * Runs once the editor saves the last form of a draft opened from "Pedir ao Claude"
-   * (the request is then marked applied). Cleared when the editor dismisses the last form.
-   */
-  let draftDone: (() => void) | null = null;
-
-  function finishDraft(): void {
-    const done = draftDone;
-    draftDone = null;
-    done?.();
-  }
-
-  function openNextQueued(): void {
-    const next = draftQueue.shift();
-    if (!next) return;
-    const position = draftQueueTotal - draftQueue.length;
-    formModal.openCreate(draftPrefill(next), `Nova experiência (${position} de ${draftQueueTotal})`);
-  }
-
-  /** Opens the next queued item once the form and the detail are both closed. */
-  function resumeQueue(): void {
-    if (draftQueue.length === 0) return;
-    setTimeout(() => {
-      if (formModal.element.hidden && viewModal.currentId() === null) openNextQueued();
-    }, 0);
-  }
+  /** Chains drafts through the forms (novo / fila / atualizacao); see draft-flow.ts. */
+  const draftFlow = createDraftFlow<LinkRow>({
+    openCreate: (prefill, title) => formModal.openCreate(prefill, title),
+    openEdit: (link, prefill) => formModal.openEdit(link, prefill),
+    openPlan: (link, items, hooks) => openPlan(link, items, hooks),
+    findLink: (id) => findLink(id),
+    isIdle: () => formModal.element.hidden && viewModal.currentId() === null,
+    notify: (message) => {
+      draftNotice = message;
+      renderList();
+    },
+    listLoadFailed: () => listLoadFailed,
+  });
 
   const formModal: LinkFormHandle = createLinkFormModal(
     async (values, editingId) => {
@@ -281,18 +260,7 @@ function bootDynamic(
           await submitCreate(values);
         }
         formModal.close();
-        resumeQueue();
-        const next = planAfterSave;
-        planAfterSave = null;
-        const saved = next && next.id === editingId ? findLink(next.id) : undefined;
-        if (next && saved) {
-          // The fields are saved: the plan sheet closing (saved or skipped) completes the draft.
-          const done = draftQueue.length === 0 ? draftDone : null;
-          if (done) draftDone = null;
-          openPlan(saved, next.items, { onSaved: done ?? undefined, onSkipped: done ?? undefined });
-        } else if (draftQueue.length === 0) {
-          finishDraft();
-        }
+        draftFlow.formSaved(editingId);
       } catch (err) {
         formModal.setError(messageOf(err, GENERIC_ERROR));
       } finally {
@@ -302,15 +270,10 @@ function bootDynamic(
     {
       getTagSuggestions: () => collectTags(links),
       getPeopleSuggestions: () => collectPeople(links),
-      onDismiss: () => {
-        planAfterSave = null;
-        if (draftQueue.length === 0) draftDone = null;
-        resumeQueue();
-      },
+      onDismiss: () => draftFlow.formDismissed(),
       findDuplicate: (url, source_url) => findDuplicate(links, { url, source_url }),
       onOpenDuplicate: (l) => {
-        planAfterSave = null;
-        draftDone = null;
+        draftFlow.duplicateOpened();
         viewModal.open(l);
       },
     }
@@ -327,8 +290,14 @@ function bootDynamic(
   let aiReady = 0;
   const aiUi = createAiRequestsUi({
     repo: aiRepo,
-    getLinks: () => links.map((l) => ({ id: l.id, label: displayTitle(l) })),
-    onReviewDrafts: (drafts, onDone) => reviewDrafts(drafts, onDone),
+    getLinks: () =>
+      links.map((l) => ({
+        id: l.id,
+        label: displayTitle(l),
+        scheduled_start: l.scheduled_start,
+        scheduled_end: l.scheduled_end,
+      })),
+    onReviewDrafts: (drafts, onDone) => draftFlow.reviewDrafts(drafts, onDone),
     onApplyProposal: applyAgendaProposal,
     onRowsChange: (rows) => {
       const ready = countReady(rows);
@@ -390,7 +359,7 @@ function bootDynamic(
     onPerson: (person) => togglePeopleFilter(person),
     onOpenChange: (id) => {
       syncSelectedCard();
-      if (id === null) resumeQueue();
+      if (id === null) draftFlow.resumeQueue();
     },
   });
 
@@ -1171,60 +1140,7 @@ function bootDynamic(
       return;
     }
     pendingDraft = null;
-    openDraft(result.draft);
-  }
-
-  /**
-   * Opens one draft in the usual flow (novo -> create form, fila -> one by one,
-   * atualizacao -> edit form / plan sheet). `onDone` runs when the editor saves the
-   * last form; closing or cancelling never calls it.
-   */
-  function openDraft(draft: Draft, onDone?: () => void): void {
-    draftDone = onDone ?? null;
-    if (draft.kind === "novo") {
-      formModal.openCreate(draftPrefill(draft.fields));
-      return;
-    }
-    if (draft.kind === "fila") {
-      draftQueue = [...draft.items];
-      draftQueueTotal = draftQueue.length;
-      openNextQueued();
-      return;
-    }
-    const { id, plan } = draft;
-    const fields = draft.fields ? draftPrefill(withoutEmptyProposals(draft.fields)) : undefined;
-    const target = findLink(id);
-    if (!target) {
-      draftDone = null;
-      draftNotice = listLoadFailed
-        ? "Não foi possível abrir o rascunho: a lista de itens não carregou. Recarregue a página e tente de novo."
-        : "Não foi possível abrir o rascunho: o item não existe mais ou o id está errado.";
-      renderList();
-      return;
-    }
-    const hasPlan = plan !== undefined && plan.length > 0;
-    if (fields && Object.keys(fields).length > 0) {
-      planAfterSave = hasPlan ? { id, items: plan } : null;
-      formModal.openEdit(target, fields);
-    } else if (hasPlan) {
-      const done = draftDone;
-      draftDone = null;
-      openPlan(target, plan, { onSaved: done ?? undefined });
-    } else {
-      draftDone = null;
-    }
-  }
-
-  /** Several drafts from one request: one at a time; `onDone` after the last is saved. */
-  function reviewDrafts(drafts: Draft[], onDone: () => void): void {
-    const rest = [...drafts];
-    const next = (): void => {
-      const draft = rest.shift();
-      if (!draft) return;
-      // Non-last drafts chain to the next form once saved.
-      setTimeout(() => openDraft(draft, rest.length === 0 ? onDone : next), 0);
-    };
-    next();
+    draftFlow.openDraft(result.draft);
   }
 
   // --- auth wiring: reload private list on every session change ---
@@ -1247,6 +1163,7 @@ function bootDynamic(
         // Private data must not stay on screen after sign-out (also clears #visita/<id>).
         visitMode.close();
         aiUi.reset();
+        draftFlow.reset();
       }
       render();
       refreshAiRequests();

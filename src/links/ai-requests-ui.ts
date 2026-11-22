@@ -33,7 +33,7 @@ export type AiRequestsRepoLike = Pick<
 export type AiRequestsUiDeps = {
   repo: AiRequestsRepoLike;
   /** Places the editor can refine, and the names shown for ids in results. */
-  getLinks: () => { id: string; label: string }[];
+  getLinks: () => { id: string; label: string; scheduled_start?: string | null; scheduled_end?: string | null }[];
   /** Open the drafts one at a time; `onDone` runs when the last one is saved. */
   onReviewDrafts: (drafts: Draft[], onDone: () => void) => void;
   /** Save one agenda proposal (same save as the schedule sheet); rejects on failure. */
@@ -134,6 +134,8 @@ export function createAiRequestsUi(deps: AiRequestsUiDeps): AiRequestsUiHandle {
   let rows: AiRequestRow[] = [];
   let timer: ReturnType<typeof setInterval> | null = null;
   let busy = false;
+  /** Bumped by reset(): a refresh that started before it must not bring rows back. */
+  let generation = 0;
   /** Agenda proposals decided in this session: request id -> index -> outcome. */
   const decided = new Map<string, Map<number, "applied" | "ignored">>();
   const itemErrors = new Map<string, string>();
@@ -141,7 +143,10 @@ export function createAiRequestsUi(deps: AiRequestsUiDeps): AiRequestsUiHandle {
   // ---------------------------------------------------------------- data
   function syncPolling(): void {
     if (hasActive(rows)) {
-      if (timer === null) timer = setInterval(() => void refresh().catch(() => undefined), POLL_MS);
+      if (timer === null) timer = setInterval(() => {
+        if (document.hidden) return;
+        void refresh().catch(() => undefined);
+      }, POLL_MS);
     } else if (timer !== null) {
       clearInterval(timer);
       timer = null;
@@ -149,13 +154,17 @@ export function createAiRequestsUi(deps: AiRequestsUiDeps): AiRequestsUiHandle {
   }
 
   async function refresh(): Promise<void> {
-    rows = await deps.repo.list();
+    const mine = generation;
+    const fetched = await deps.repo.list();
+    if (mine !== generation) return;
+    rows = fetched;
     syncPolling();
     renderRequests();
     deps.onRowsChange?.(rows);
   }
 
   function reset(): void {
+    generation += 1;
     rows = [];
     decided.clear();
     itemErrors.clear();
@@ -449,13 +458,20 @@ export function createAiRequestsUi(deps: AiRequestsUiDeps): AiRequestsUiHandle {
   async function guarded(fn: () => Promise<void>, id: string): Promise<void> {
     if (busy) return;
     busy = true;
+    try {
+      await settle(fn, id);
+    } finally {
+      busy = false;
+    }
+  }
+
+  /** Runs `fn`, then reloads. Never skipped: used where the editor already finished the work. */
+  async function settle(fn: () => Promise<void>, id: string): Promise<void> {
     itemErrors.delete(id);
     try {
       await fn();
     } catch {
       itemErrors.set(id, ACTION_ERROR);
-    } finally {
-      busy = false;
     }
     try {
       await refresh();
@@ -478,17 +494,31 @@ export function createAiRequestsUi(deps: AiRequestsUiDeps): AiRequestsUiHandle {
   function review(r: AiRequestRow, drafts: Draft[]): void {
     closeRequests();
     deps.onReviewDrafts(drafts, () => {
-      void guarded(() => deps.repo.markApplied(r.id), r.id);
+      void settle(() => deps.repo.markApplied(r.id), r.id);
     });
   }
 
-  function decide(r: AiRequestRow, total: number, index: number, outcome: "applied" | "ignored"): void {
+  /** Already on the place's schedule (same instants): shown as applied. */
+  function alreadyApplied(p: AgendaProposal): boolean {
+    const l = deps.getLinks().find((x) => x.id === p.link_id);
+    if (!l?.scheduled_start || !l.scheduled_end) return false;
+    return Date.parse(l.scheduled_start) === Date.parse(p.start) && Date.parse(l.scheduled_end) === Date.parse(p.end);
+  }
+
+  function outcomeOf(r: AiRequestRow, p: AgendaProposal, index: number): "applied" | "ignored" | undefined {
+    return decided.get(r.id)?.get(index) ?? (alreadyApplied(p) ? "applied" : undefined);
+  }
+
+  function decide(r: AiRequestRow, proposals: AgendaProposal[], index: number, outcome: "applied" | "ignored"): void {
     const map = decided.get(r.id) ?? new Map<number, "applied" | "ignored">();
     map.set(index, outcome);
     decided.set(r.id, map);
-    if (map.size >= total) {
+    const outcomes = proposals.map((p, i) => outcomeOf(r, p, i));
+    if (outcomes.every((o) => o !== undefined)) {
       decided.delete(r.id);
-      void guarded(() => deps.repo.markApplied(r.id), r.id);
+      // Nothing applied (all ignored): the suggestion is dropped, not "applied".
+      const anyApplied = outcomes.includes("applied");
+      void settle(() => (anyApplied ? deps.repo.markApplied(r.id) : deps.repo.discard(r.id)), r.id);
     } else {
       renderRequests();
     }
@@ -508,28 +538,33 @@ export function createAiRequestsUi(deps: AiRequestsUiDeps): AiRequestsUiHandle {
       return;
     }
     busy = false;
-    decide(r, proposals.length, index, "applied");
+    decide(r, proposals, index, "applied");
   }
 
   function renderProposals(r: AiRequestRow, proposals: AgendaProposal[]): HTMLElement {
     const list = el("ul", "links-ai__proposals");
-    const done = decided.get(r.id);
     proposals.forEach((p, i) => {
       const li = el("li", "links-ai__proposal");
       li.dataset.proposal = String(i);
       const label = labelOf(p.link_id);
-      const outcome = done?.get(i);
+      const outcome = outcomeOf(r, p, i);
       li.append(
         el("strong", undefined, label ?? "Item removido"),
         el("span", "links-ai__meta", `${p.event_title} · ${formatScheduleLabel(p.start, p.end)}`)
       );
+      const current = deps.getLinks().find((l) => l.id === p.link_id);
+      if (!outcome && current?.scheduled_start && current.scheduled_end) {
+        li.appendChild(
+          el("span", "links-ai__meta", `Já agendado: ${formatScheduleLabel(current.scheduled_start, current.scheduled_end)}`)
+        );
+      }
       if (outcome) {
         li.appendChild(el("span", "links-ai__meta", outcome === "applied" ? "Aplicado" : "Ignorado"));
       } else {
         const actions = el("div", "links-ai__actions");
         const apply = action("ai-apply", "Aplicar", () => void applyProposal(r, proposals, i), "primary");
         apply.disabled = label === null;
-        actions.append(apply, action("ai-ignore", "Ignorar", () => decide(r, proposals.length, i, "ignored")));
+        actions.append(apply, action("ai-ignore", "Ignorar", () => decide(r, proposals, i, "ignored")));
         li.appendChild(actions);
       }
       const err = itemErrors.get(`${r.id}:${i}`);
@@ -539,7 +574,7 @@ export function createAiRequestsUi(deps: AiRequestsUiDeps): AiRequestsUiHandle {
     return list;
   }
 
-  function renderItem(r: AiRequestRow): HTMLElement {
+  function renderItemUnsafe(r: AiRequestRow): HTMLElement {
     const item = el("article", "links-ai__item");
     item.dataset.requestId = r.id;
     item.dataset.status = r.status;
@@ -573,6 +608,19 @@ export function createAiRequestsUi(deps: AiRequestsUiDeps): AiRequestsUiHandle {
     const err = itemErrors.get(r.id);
     if (err) item.appendChild(el("p", "links-ai__error", err));
     return item;
+  }
+
+  /** One broken request must not take the whole list down. */
+  function renderItem(r: AiRequestRow): HTMLElement {
+    try {
+      return renderItemUnsafe(r);
+    } catch {
+      const item = el("article", "links-ai__item");
+      item.dataset.requestId = r.id;
+      item.dataset.status = "erro";
+      item.append(el("strong", undefined, KIND_LABELS[r.kind] ?? "Pedido"), el("p", "links-ai__error", "Erro: resposta inválida"));
+      return item;
+    }
   }
 
   function renderRequests(): void {

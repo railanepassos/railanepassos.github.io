@@ -47,6 +47,48 @@ create trigger links_ai_requests_touch
   before update on public.links_ai_requests
   for each row execute function public.links_ai_requests_touch();
 
+-- The app (role authenticated) cannot forge who queued a request or when: the
+-- insert trigger overwrites created_by / created_at / updated_at. The processor
+-- (postgres) is not affected. The update trigger keeps `aplicado` for requests
+-- that were `pronto`.
+create or replace function public.links_ai_requests_before_insert()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if current_user = 'authenticated' then
+    new.created_by := auth.uid();
+    new.created_at := now();
+    new.updated_at := now();
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists links_ai_requests_before_insert on public.links_ai_requests;
+create trigger links_ai_requests_before_insert
+  before insert on public.links_ai_requests
+  for each row execute function public.links_ai_requests_before_insert();
+
+create or replace function public.links_ai_requests_guard_apply()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if current_user = 'authenticated' and new.status = 'aplicado' and old.status <> 'pronto' then
+    raise exception 'only a ready request can be applied' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists links_ai_requests_guard_apply on public.links_ai_requests;
+create trigger links_ai_requests_guard_apply
+  before update on public.links_ai_requests
+  for each row execute function public.links_ai_requests_guard_apply();
+
 alter table public.links_ai_requests enable row level security;
 revoke all on public.links_ai_requests from public, anon;
 revoke all on public.links_ai_requests from authenticated;
@@ -70,7 +112,7 @@ create policy links_ai_requests_insert on public.links_ai_requests
   );
 
 -- An editor can discard a pending / ready / failed request, or apply a ready one
--- (the app only applies `pronto`; the database also accepts pendente -> aplicado).
+-- (only `pronto` can become `aplicado`: the guard_apply trigger enforces it).
 -- Rows already aplicado / descartado / processando are frozen for the app.
 drop policy if exists links_ai_requests_update on public.links_ai_requests;
 create policy links_ai_requests_update on public.links_ai_requests

@@ -286,6 +286,121 @@ describe("refresh and polling", () => {
   });
 });
 
+describe("review fixes", () => {
+  it("a sign-out during a refresh does not bring the rows or the polling back", async () => {
+    vi.useFakeTimers();
+    const { ui, repo, deps } = setup([]);
+    let release: (rows: AiRequestRow[]) => void = () => undefined;
+    repo.list.mockImplementation(() => new Promise<AiRequestRow[]>((res) => (release = res)));
+    const pending = ui.refresh();
+    ui.reset();
+    release([row({ id: "a", status: "pendente" })]);
+    await pending;
+    expect(deps.onRowsChange).toHaveBeenLastCalledWith([]);
+    expect(ui.requestsElement.querySelector("[data-request-id]")).toBeNull();
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(repo.list).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not poll while the page is hidden, and resumes when visible", async () => {
+    vi.useFakeTimers();
+    let hidden = true;
+    const spy = vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+    try {
+      const { ui, repo } = setup([row({ id: "a", status: "pendente" })]);
+      await ui.refresh();
+      await vi.advanceTimersByTimeAsync(180_000);
+      expect(repo.list).toHaveBeenCalledTimes(1);
+      hidden = false;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(repo.list).toHaveBeenCalledTimes(2);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("marks the request applied when the review ends, even while another action is running", async () => {
+    const { ui, repo, deps } = setup([
+      row({ id: "p", status: "pronto", result: DRAFT_NOVO }),
+      row({ id: "x", status: "pendente" }),
+    ]);
+    await ui.openRequests();
+    let finish: () => void = () => undefined;
+    repo.discard.mockImplementation(() => new Promise<undefined>((res) => (finish = () => res(undefined))));
+    q("[data-request-id='x'] [data-action='ai-discard']").click(); // busy now
+    q("[data-request-id='p'] [data-action='ai-review']").click();
+    const onDone = (deps.onReviewDrafts as ReturnType<typeof vi.fn>).mock.calls[0][1] as () => void;
+    onDone();
+    await flush();
+    expect(repo.markApplied).toHaveBeenCalledWith("p");
+    finish();
+    await flush();
+  });
+
+  it("shows an error for a request that cannot be rendered, keeping the others", async () => {
+    let calls = 0;
+    const { ui } = setup(
+      [
+        row({ id: "g", kind: "agenda", status: "pronto", result: AGENDA }),
+        row({ id: "ok", status: "pendente" }),
+      ],
+      {
+        getLinks: () => {
+          if (++calls <= 1) return [];
+          throw new Error("boom");
+        },
+      }
+    );
+    await ui.openRequests();
+    expect(q("[data-request-id='ok']")).not.toBeNull();
+    expect(q("[data-request-id='g']").textContent).toContain("Erro: resposta inválida");
+  });
+
+  const SCHED = (start: string, end: string) => ({ scheduled_start: start, scheduled_end: end });
+
+  it("shows Aplicado for a proposal the place already has scheduled, and warns about a different schedule", async () => {
+    const { ui } = setup([row({ id: "g", kind: "agenda", status: "pronto", result: AGENDA })], {
+      getLinks: () => [
+        { id: ID1, label: "Lugar A", ...SCHED("2026-12-05T12:00:00+00:00", "2026-12-05T20:00:00+00:00") },
+        { id: ID2, label: "Lugar B", ...SCHED("2026-12-24T10:00:00-03:00", "2026-12-24T11:00:00-03:00") },
+      ],
+    });
+    await ui.openRequests();
+    const first = q("[data-proposal='0']");
+    expect(first.textContent).toContain("Aplicado");
+    expect(first.querySelector("[data-action='ai-apply']")).toBeNull();
+    const second = q("[data-proposal='1']");
+    expect(second.textContent).toContain("Já agendado: ");
+    expect(second.textContent).toContain("24 dez 2026");
+    expect(second.querySelector("[data-action='ai-apply']")).not.toBeNull();
+  });
+
+  it("ignoring every proposal discards the request instead of marking it applied", async () => {
+    const { ui, repo } = setup([row({ id: "g", kind: "agenda", status: "pronto", result: AGENDA })]);
+    await ui.openRequests();
+    q<HTMLElement>("[data-proposal='0'] [data-action='ai-ignore']").click();
+    await flush();
+    q<HTMLElement>("[data-proposal='1'] [data-action='ai-ignore']").click();
+    await flush();
+    expect(repo.discard).toHaveBeenCalledWith("g");
+    expect(repo.markApplied).not.toHaveBeenCalled();
+  });
+
+  it("ignoring the rest after a proposal was already scheduled marks it applied", async () => {
+    const { ui, repo } = setup([row({ id: "g", kind: "agenda", status: "pronto", result: AGENDA })], {
+      getLinks: () => [
+        { id: ID1, label: "Lugar A", ...SCHED("2026-12-05T09:00:00-03:00", "2026-12-05T17:00:00-03:00") },
+        { id: ID2, label: "Lugar B" },
+      ],
+    });
+    await ui.openRequests();
+    q<HTMLElement>("[data-proposal='1'] [data-action='ai-ignore']").click();
+    await flush();
+    expect(repo.markApplied).toHaveBeenCalledWith("g");
+    expect(repo.discard).not.toHaveBeenCalled();
+  });
+});
+
 describe("ready badge", () => {
   it("is null with no ready suggestions", () => {
     expect(renderReadyBadge(0, () => undefined)).toBeNull();

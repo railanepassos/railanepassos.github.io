@@ -73,6 +73,7 @@ beforeAll(async () => {
   for (const file of files) await db.exec(readFileSync(MIGRATIONS + file, "utf8"));
   await db.exec(`
     grant usage on schema public to anon, authenticated;
+    grant usage on schema auth to anon, authenticated;
     insert into auth.users (id) values ('${EDITOR}'), ('${STRANGER}');
     insert into public.links_editors (user_id) values ('${EDITOR}');
   `);
@@ -125,6 +126,45 @@ describe("migration 021: links_ai_requests", () => {
       expect(await denied(db.query(INSERT("kind, payload, error", `'agenda', '{}', 'x'`)))).toBe(true);
       expect(await denied(db.query(INSERT("kind, payload, processed_at", `'agenda', '{}', now()`)))).toBe(true);
     });
+  });
+
+  it("forces created_by, created_at and updated_at on an editor insert", async () => {
+    await asEditor(async () => {
+      await db.query(
+        INSERT(
+          "kind, payload, created_by, created_at, updated_at",
+          `'agenda', '{}', '${STRANGER}', '2000-01-01', '2000-01-01'`
+        )
+      );
+      const r = await db.query<{ created_by: string; old: boolean }>(
+        `select created_by, (created_at < now() - interval '1 day' or updated_at < now() - interval '1 day') as old
+         from public.links_ai_requests where kind = 'agenda' and payload = '{}' order by id desc limit 1`
+      );
+      expect(r.rows.every((x) => x.created_by === EDITOR && !x.old)).toBe(true);
+    });
+  });
+
+  it("keeps the processor free to set created_at (only authenticated is forced)", async () => {
+    const id = await seed("pendente", "created_at|'2001-01-01'");
+    const r = await db.query<{ y: number }>(
+      "select extract(year from created_at)::int as y from public.links_ai_requests where id = $1",
+      [id]
+    );
+    expect(r.rows[0]!.y).toBe(2001);
+  });
+
+  it("does not let an editor mark erro or pendente as aplicado", async () => {
+    const failed = await seed("erro");
+    const waiting = await seed("pendente");
+    await asEditor(async () => {
+      for (const id of [failed, waiting]) {
+        expect(await denied(db.query("update public.links_ai_requests set status = 'aplicado' where id = $1", [id]))).toBe(true);
+      }
+      // discarding them is still fine
+      await db.query("update public.links_ai_requests set status = 'descartado' where id = $1", [failed]);
+    });
+    expect(await statusOf(failed)).toBe("descartado");
+    expect(await statusOf(waiting)).toBe("pendente");
   });
 
   it("rejects an unknown kind or status", async () => {

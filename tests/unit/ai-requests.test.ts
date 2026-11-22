@@ -184,6 +184,23 @@ describe("parseAiResult", () => {
     expect(parseAiResult({ v: 1, agenda: Array.from({ length: 51 }, () => item) }).ok).toBe(false);
   });
 
+  it("rejects agenda dates that are not ISO with T and an offset (they would break the label)", () => {
+    const item = { link_id: ID1, start: "2026-12-05T09:00:00-03:00", end: "2026-12-05T17:00:00-03:00", event_title: "Passeio" };
+    for (const start of ["2026-12-05 09:00", "Dec 5 2026 09:00", "2026-12-05T09:00", "2026-12-05", "2026-12-05T09:00:00"]) {
+      const r = parseAiResult({ v: 1, agenda: [{ ...item, start }] });
+      expect(r.ok, start).toBe(false);
+    }
+  });
+
+  it("normalizes agenda dates to the app's -03:00 wall time (Z becomes local)", () => {
+    const item = { link_id: ID1, start: "2026-12-05T12:00:00Z", end: "2026-12-05T20:30+00:00", event_title: "Passeio" };
+    const r = parseAiResult({ v: 1, agenda: [item] });
+    expect(r.ok && r.type === "agenda" && [r.proposals[0]!.start, r.proposals[0]!.end]).toEqual([
+      "2026-12-05T09:00:00-03:00",
+      "2026-12-05T17:30:00-03:00",
+    ]);
+  });
+
   it("rejects anything else", () => {
     for (const bad of [null, undefined, "texto", 3, [], {}, { v: 2, drafts: [] }, { v: 1, foo: 1 }, { v: 1, kind: "outro" }]) {
       const r = parseAiResult(bad);

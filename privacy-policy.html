@@ -28,7 +28,7 @@
     <div class="container container--wide">
         <article class="legal-content">
             <h1>Política de Privacidade e Proteção de Dados Pessoais</h1>
-            <p class="legal-meta"><strong>Última atualização:</strong> 22 de novembro de 2026 &nbsp;|&nbsp; <strong>Versão:</strong> 2.12</p>
+            <p class="legal-meta"><strong>Última atualização:</strong> 22 de novembro de 2026 &nbsp;|&nbsp; <strong>Versão:</strong> 2.13</p>
 
             <p>Esta Política descreve, de forma transparente, como <strong>Railane Passos</strong>, pessoa física responsável pela consultoria <strong>Workflow Tech Engineering</strong> (“<strong>nós</strong>”, “<strong>controladora</strong>”), trata dados pessoais no site <a href="https://railanepassos.tec.br/">https://railanepassos.tec.br/</a> (“<strong>Site</strong>”), em conformidade com a Lei Geral de Proteção de Dados Pessoais — LGPD (Lei nº 13.709/2018) e regulamentações da Autoridade Nacional de Proteção de Dados (ANPD).</p>
 
@@ -139,15 +139,9 @@
                         <td>Estados Unidos e outros países</td>
                     </tr>
                     <tr>
-                        <td><a href="https://www.anthropic.com/legal/privacy" rel="noopener noreferrer">Anthropic</a> (Claude)</td>
-                        <td>Operador do processamento dos pedidos ao assistente, executado localmente na máquina da titular</td>
-                        <td>Somente quando um editor faz um pedido na área restrita, o Claude, rodando na máquina da controladora, lê o pedido e os dados do lugar correspondentes e escreve rascunhos de resposta. Nada é aplicado sem a revisão do editor.</td>
-                        <td>Estados Unidos e outros países</td>
-                    </tr>
-                    <tr>
                         <td><a href="https://policies.google.com/privacy" rel="noopener noreferrer">Google LLC</a> (Google Agenda, importação sob pedido)</td>
                         <td>Fonte de leitura apenas, a pedido do editor</td>
-                        <td>Somente quando um editor pede a importação da agenda, o assistente lê os eventos do período escolhido e guarda apenas o nome do evento, o início e o fim. Nada é escrito na agenda.</td>
+                        <td>Somente quando um editor pede a importação da agenda, o assistente lê os eventos do período escolhido e guarda apenas o nome do evento (sem nomes de participantes), o início e o fim. Nada é escrito na agenda.</td>
                         <td>Estados Unidos e outros países</td>
                     </tr>
                     <tr>
@@ -164,8 +158,8 @@
                     </tr>
                     <tr>
                         <td><a href="https://www.anthropic.com/legal/privacy" rel="noopener noreferrer">Anthropic, PBC</a> (Claude)</td>
-                        <td>Operador — assistente de IA usado pelos editores para redigir rascunhos de itens</td>
-                        <td>Somente quando um editor usa o assistente: o conteúdo que ele mostra ao assistente (publicações públicas e, quando indicada pelo editor, uma conversa do Instagram usada apenas para achar links de publicações compartilhadas) é processado para gerar o rascunho. Nada é salvo sem revisão humana e a lista não guarda nomes, perfis ou mensagens de terceiros</td>
+                        <td>Operador — assistente de IA usado pelos editores para redigir rascunhos de itens e para processar os pedidos feitos no aplicativo</td>
+                        <td>Somente quando um editor usa o assistente ou faz um pedido pelo aplicativo: o conteúdo que ele mostra ao assistente (publicações públicas e, quando indicada pelo editor, uma conversa do Instagram usada apenas para achar links de publicações compartilhadas) e, nos pedidos feitos no aplicativo, o pedido e os dados do lugar correspondente são processados para gerar o rascunho. O processamento é disparado na máquina da controladora, mas o conteúdo do pedido é processado pela Anthropic nos Estados Unidos (transferência internacional, ver item 5). Nada é aplicado sem revisão humana e a lista não guarda nomes, perfis ou mensagens de terceiros</td>
                         <td>Estados Unidos</td>
                     </tr>
                     <tr>
@@ -229,7 +223,7 @@
 
             <h2 id="decisoes">10. Decisões automatizadas e perfilamento</h2>
             <p>Não realizamos decisões automatizadas ou perfilamento que produzam efeitos legais ou relevantes sobre você neste Site.</p>
-            <p><strong>Assistente de IA no preparo de rascunhos.</strong> Os editores autorizados podem usar um assistente de inteligência artificial (Claude, da Anthropic) para redigir rascunhos de textos de itens. O conteúdo que o editor mostra ao assistente — publicações públicas e, quando o editor o indica, uma conversa do Instagram usada somente para encontrar links de publicações compartilhadas — é processado pela Anthropic nos Estados Unidos (ver itens 4 e 5). O rascunho apenas preenche o formulário do aplicativo: nada é salvo sem revisão humana e sem que o editor pressione “Salvar”. O assistente não tem acesso ao banco de dados do Site, e nomes, perfis ou mensagens de terceiros não são guardados na lista.</p>
+            <p><strong>Assistente de IA no preparo de rascunhos.</strong> Os editores autorizados podem usar um assistente de inteligência artificial (Claude, da Anthropic) para redigir rascunhos de textos de itens. O conteúdo que o editor mostra ao assistente — publicações públicas e, quando o editor o indica, uma conversa do Instagram usada somente para encontrar links de publicações compartilhadas — é processado pela Anthropic nos Estados Unidos (ver itens 4 e 5). O rascunho apenas preenche o formulário do aplicativo: nada é salvo sem revisão humana e sem que o editor pressione “Salvar”. Nos pedidos feitos no aplicativo, o assistente lê os dados do lugar e grava rascunhos numa fila restrita do banco de dados, mas nunca altera os itens da lista; nomes, perfis ou mensagens de terceiros não são guardados na lista.</p>
 
             <h2 id="alteracoes">11. Alterações desta Política</h2>
             <p>Podemos atualizar esta Política para refletir mudanças legais, técnicas ou no Site. A data da versão vigente constará no topo. Recomendamos revisão periódica desta página.</p>
