@@ -10,6 +10,7 @@ import {
   isDraftFragment,
   parseDraft,
   withoutEmptyProposals,
+  type Draft,
   type DraftFields,
   type DraftPlanItem,
   type ParseDraftResult,
@@ -23,6 +24,9 @@ import { matches, parseQuery, removeChip, setMinRating, toggleFilter } from "./q
 import { renderDoneToolbar } from "./done-toolbar";
 import { renderAgendaToolbar } from "./agenda-toolbar";
 import { createCalendarFeedSheet } from "./calendar-feed-sheet";
+import { createAiRequestsRepo } from "./ai-requests-repo";
+import { countReady, type AgendaProposal } from "./ai-requests";
+import { createAiRequestsUi, renderReadyBadge } from "./ai-requests-ui";
 import { buildCalendarIcs, googleCalendarUrl, scheduledForCalendar } from "./google-calendar";
 import { renderMemoriesSwitch, renderMemoriesTimeline } from "./memories-ui";
 import { rankDone, filterDone } from "./ranking";
@@ -195,6 +199,7 @@ function bootDynamic(
   els: Els,
   auth: Auth,
   repo: LinksRepo,
+  aiRepo: ReturnType<typeof createAiRequestsRepo>,
   initialLinks: LinkRow[],
   warning?: string
 ): void {
@@ -239,6 +244,17 @@ function bootDynamic(
   /** `fila` draft: new items still to open, one by one (memory only). */
   let draftQueue: DraftFields[] = [];
   let draftQueueTotal = 0;
+  /**
+   * Runs once the editor saves the last form of a draft opened from "Pedir ao Claude"
+   * (the request is then marked applied). Cleared when the editor dismisses the last form.
+   */
+  let draftDone: (() => void) | null = null;
+
+  function finishDraft(): void {
+    const done = draftDone;
+    draftDone = null;
+    done?.();
+  }
 
   function openNextQueued(): void {
     const next = draftQueue.shift();
@@ -269,7 +285,14 @@ function bootDynamic(
         const next = planAfterSave;
         planAfterSave = null;
         const saved = next && next.id === editingId ? findLink(next.id) : undefined;
-        if (next && saved) openPlan(saved, next.items);
+        if (next && saved) {
+          // The fields are saved: the plan sheet closing (saved or skipped) completes the draft.
+          const done = draftQueue.length === 0 ? draftDone : null;
+          if (done) draftDone = null;
+          openPlan(saved, next.items, { onSaved: done ?? undefined, onSkipped: done ?? undefined });
+        } else if (draftQueue.length === 0) {
+          finishDraft();
+        }
       } catch (err) {
         formModal.setError(messageOf(err, GENERIC_ERROR));
       } finally {
@@ -281,11 +304,13 @@ function bootDynamic(
       getPeopleSuggestions: () => collectPeople(links),
       onDismiss: () => {
         planAfterSave = null;
+        if (draftQueue.length === 0) draftDone = null;
         resumeQueue();
       },
       findDuplicate: (url, source_url) => findDuplicate(links, { url, source_url }),
       onOpenDuplicate: (l) => {
         planAfterSave = null;
+        draftDone = null;
         viewModal.open(l);
       },
     }
@@ -299,6 +324,23 @@ function bootDynamic(
     enable: () => repo.enableCalendarFeed(),
     disable: () => repo.disableCalendarFeed(),
   });
+  let aiReady = 0;
+  const aiUi = createAiRequestsUi({
+    repo: aiRepo,
+    getLinks: () => links.map((l) => ({ id: l.id, label: displayTitle(l) })),
+    onReviewDrafts: (drafts, onDone) => reviewDrafts(drafts, onDone),
+    onApplyProposal: applyAgendaProposal,
+    onRowsChange: (rows) => {
+      const ready = countReady(rows);
+      if (ready === aiReady) return;
+      aiReady = ready;
+      renderList();
+    },
+  });
+  /** Quietly reloads the request list (session start, tab visible again). */
+  function refreshAiRequests(): void {
+    if (authenticated) void aiUi.refresh().catch(() => undefined);
+  }
   const reviewSheet: ReviewSheetHandle = createReviewSheet();
   const planSheet: PlanSheetHandle = createPlanSheet({
     getPeopleSuggestions: () => collectPeople(links),
@@ -331,6 +373,7 @@ function bootDynamic(
     onEditPlan: (l) => openPlan(l),
     onSavePlanItems: savePlanItems,
     onVisit: (l) => openVisit(l),
+    onAskClaude: (l) => aiUi.openAsk({ tab: "refinar", linkIds: [l.id] }),
     onPlanShareEnable: async (l) => {
       const token = await repo.enablePlanShare(l.id);
       links = links.map((row) => (row.id === l.id ? { ...row, plan_share_token: token } : row));
@@ -403,6 +446,8 @@ function bootDynamic(
     onAdd: () => formModal.openCreate(),
     onDeck: () => deckScreen.open(links, "wishlist"),
     onDraw: () => drawFilterSheet.open(),
+    onAskClaude: () => aiUi.openAsk(),
+    onAiRequests: () => void aiUi.openRequests(),
     onSignOut: () => {
       void (async () => {
         try {
@@ -440,6 +485,8 @@ function bootDynamic(
     visitMode.element,
     scheduleSheet.element,
     calendarFeedSheet.element,
+    aiUi.askElement,
+    aiUi.requestsElement,
     reviewSheet.element,
     planSheet.element,
     drawFilterSheet.element,
@@ -579,7 +626,11 @@ function bootDynamic(
   }
 
   /** "Plano do passeio" sheet, opened from the detail; the detail comes back when it closes. */
-  function openPlan(link: LinkRow, proposed?: readonly DraftPlanItem[]): void {
+  function openPlan(
+    link: LinkRow,
+    proposed?: readonly DraftPlanItem[],
+    hooks: { onSaved?: () => void; onSkipped?: () => void } = {}
+  ): void {
     const reopenDetail = (): void => {
       const current = findLink(link.id);
       if (current) viewModal.open(current);
@@ -590,7 +641,7 @@ function bootDynamic(
       initial: proposed
         ? { ...current, items: mergeProposedPlanItems(current.items, proposed) }
         : current,
-      onSkip: proposed ? () => undefined : reopenDetail,
+      onSkip: proposed ? () => hooks.onSkipped?.() : reopenDetail,
       onSave: async (values) => {
         const problem = planError(values.items);
         if (problem) {
@@ -625,6 +676,7 @@ function bootDynamic(
           deckScreen.refresh(links);
           planSheet.close();
           reopenDetail();
+          hooks.onSaved?.();
         } catch {
           planSheet.setError(PLAN_SAVE_ERROR);
         } finally {
@@ -718,7 +770,10 @@ function bootDynamic(
     }
   }
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") void refreshOpenDetail();
+    if (document.visibilityState === "visible") {
+      void refreshOpenDetail();
+      refreshAiRequests();
+    }
   });
   window.addEventListener("pageshow", (event) => {
     if (event.persisted) void refreshOpenDetail();
@@ -744,6 +799,20 @@ function bootDynamic(
   function downloadAgendaIcs(): void {
     if (scheduledForCalendar(links).length === 0) return;
     downloadIcs("agenda-experiencias.ics", buildCalendarIcs(links));
+  }
+
+  /** The one schedule save (scheduled_start/end): the schedule sheet, its undo and "Pedir ao Claude". */
+  async function persistSchedule(id: string, start: string | null, end: string | null): Promise<void> {
+    await saveLink(id, { scheduled_start: start, scheduled_end: end });
+    links = sortLinks(
+      links.map((row) => (row.id === id ? { ...row, scheduled_start: start, scheduled_end: end } : row))
+    );
+    renderList();
+  }
+
+  async function applyAgendaProposal(proposal: AgendaProposal): Promise<void> {
+    if (!findLink(proposal.link_id)) throw new Error("item not found");
+    await persistSchedule(proposal.link_id, proposal.start, proposal.end);
   }
 
   function openSchedule(link: LinkRow): void {
@@ -818,38 +887,12 @@ function bootDynamic(
           const undoStart = findLink(link.id)?.scheduled_start ?? previousStart;
           const undoEnd = findLink(link.id)?.scheduled_end ?? previousEnd;
 
-          await saveLink(link.id, {
-            scheduled_start: startIso,
-            scheduled_end: endIso,
-          });
-          links = sortLinks(
-            links.map((row) =>
-              row.id === link.id
-                ? { ...row, scheduled_start: startIso, scheduled_end: endIso }
-                : row
-            )
-          );
-          renderList();
+          await persistSchedule(link.id, startIso, endIso);
           scheduleSheet.setHasSchedule(true);
           scheduleSheet.showSuccess("Agendamento salvo.", async () => {
             scheduleSheet.setBusy(true);
             try {
-              await saveLink(link.id, {
-                scheduled_start: undoStart,
-                scheduled_end: undoEnd,
-              });
-              links = sortLinks(
-                links.map((row) =>
-                  row.id === link.id
-                    ? {
-                        ...row,
-                        scheduled_start: undoStart,
-                        scheduled_end: undoEnd,
-                      }
-                    : row
-                )
-              );
-              renderList();
+              await persistSchedule(link.id, undoStart, undoEnd);
               openSchedule(findLink(link.id) ?? {
                 ...link,
                 scheduled_start: undoStart,
@@ -1048,6 +1091,10 @@ function bootDynamic(
         )
       );
     }
+    if (section === "feed") {
+      const ready = renderReadyBadge(aiReady, () => void aiUi.openRequests());
+      if (ready) els.list.appendChild(ready);
+    }
     if (section !== "done" && section !== "memories") {
       const today = renderTodayBanner(links, new Date(), { onOpen: (l) => openVisit(l) });
       if (today) els.list.appendChild(today);
@@ -1124,20 +1171,31 @@ function bootDynamic(
       return;
     }
     pendingDraft = null;
-    if (result.draft.kind === "novo") {
-      formModal.openCreate(draftPrefill(result.draft.fields));
+    openDraft(result.draft);
+  }
+
+  /**
+   * Opens one draft in the usual flow (novo -> create form, fila -> one by one,
+   * atualizacao -> edit form / plan sheet). `onDone` runs when the editor saves the
+   * last form; closing or cancelling never calls it.
+   */
+  function openDraft(draft: Draft, onDone?: () => void): void {
+    draftDone = onDone ?? null;
+    if (draft.kind === "novo") {
+      formModal.openCreate(draftPrefill(draft.fields));
       return;
     }
-    if (result.draft.kind === "fila") {
-      draftQueue = [...result.draft.items];
+    if (draft.kind === "fila") {
+      draftQueue = [...draft.items];
       draftQueueTotal = draftQueue.length;
       openNextQueued();
       return;
     }
-    const { id, plan } = result.draft;
-    const fields = result.draft.fields ? draftPrefill(withoutEmptyProposals(result.draft.fields)) : undefined;
+    const { id, plan } = draft;
+    const fields = draft.fields ? draftPrefill(withoutEmptyProposals(draft.fields)) : undefined;
     const target = findLink(id);
     if (!target) {
+      draftDone = null;
       draftNotice = listLoadFailed
         ? "Não foi possível abrir o rascunho: a lista de itens não carregou. Recarregue a página e tente de novo."
         : "Não foi possível abrir o rascunho: o item não existe mais ou o id está errado.";
@@ -1149,8 +1207,24 @@ function bootDynamic(
       planAfterSave = hasPlan ? { id, items: plan } : null;
       formModal.openEdit(target, fields);
     } else if (hasPlan) {
-      openPlan(target, plan);
+      const done = draftDone;
+      draftDone = null;
+      openPlan(target, plan, { onSaved: done ?? undefined });
+    } else {
+      draftDone = null;
     }
+  }
+
+  /** Several drafts from one request: one at a time; `onDone` after the last is saved. */
+  function reviewDrafts(drafts: Draft[], onDone: () => void): void {
+    const rest = [...drafts];
+    const next = (): void => {
+      const draft = rest.shift();
+      if (!draft) return;
+      // Non-last drafts chain to the next form once saved.
+      setTimeout(() => openDraft(draft, rest.length === 0 ? onDone : next), 0);
+    };
+    next();
   }
 
   // --- auth wiring: reload private list on every session change ---
@@ -1172,8 +1246,10 @@ function bootDynamic(
         links = [];
         // Private data must not stay on screen after sign-out (also clears #visita/<id>).
         visitMode.close();
+        aiUi.reset();
       }
       render();
+      refreshAiRequests();
       handlePendingDraft();
       handlePendingShare();
       handlePendingVisit();
@@ -1204,6 +1280,7 @@ function bootDynamic(
       links = [];
     }
     render();
+    refreshAiRequests();
     handlePendingDraft();
     handlePendingShare();
     handlePendingVisit();
@@ -1265,7 +1342,7 @@ async function boot(): Promise<void> {
     initialLinks = [];
   }
 
-  bootDynamic(els, auth, repo, initialLinks);
+  bootDynamic(els, auth, repo, createAiRequestsRepo(client), initialLinks);
 }
 
 if (document.readyState === "loading") {

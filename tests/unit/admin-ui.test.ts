@@ -247,6 +247,26 @@ describe("createViewModal", () => {
     expect(cb.onMarkDone).toHaveBeenCalled();
   });
 
+  it("shows Pedir ao Claude in the detail and fires onAskClaude after closing", () => {
+    const onAskClaude = vi.fn();
+    const modal = createViewModal({ ...callbacks(), onAskClaude });
+    document.body.appendChild(modal.element);
+    modal.open(row());
+    const btn = modal.element.querySelector<HTMLButtonElement>('[data-action="ask-claude"]')!;
+    expect(btn.hidden).toBe(false);
+    expect(btn.textContent).toContain("Pedir ao Claude");
+    btn.click();
+    expect(onAskClaude).toHaveBeenCalledTimes(1);
+    expect(modal.element.hidden).toBe(true);
+  });
+
+  it("hides Pedir ao Claude when there is no callback", () => {
+    const modal = createViewModal(callbacks());
+    document.body.appendChild(modal.element);
+    modal.open(row());
+    expect(modal.element.querySelector<HTMLButtonElement>('[data-action="ask-claude"]')!.hidden).toBe(true);
+  });
+
   it("shows Modo visita for wishlist places only and fires onVisit after closing", () => {
     const onVisit = vi.fn();
     const modal = createViewModal({ ...callbacks(), onVisit });

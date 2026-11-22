@@ -5128,3 +5128,100 @@ select {
     transition: none;
   }
 }
+
+/* --- Pedir ao Claude (tabs, lists, proposals) ------------------------------ */
+.links-ai {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 16px 24px;
+}
+
+.links-ai__tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.links-ai__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.links-ai__panel[hidden] {
+  display: none;
+}
+
+.links-ai__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.links-ai__check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 1rem;
+}
+
+.links-ai__item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.links-ai__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.links-ai__summary,
+.links-ai__error {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.links-ai__error {
+  color: var(--danger, #b3261e);
+}
+
+.links-ai__meta {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.links-ai__status {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.links-ai__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.links-ai__proposals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.links-ai__proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}

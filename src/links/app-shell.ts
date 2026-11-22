@@ -23,6 +23,8 @@ export type ShellHandlers = {
   onAdd: () => void;
   onDeck: () => void;
   onDraw: () => void;
+  onAskClaude: () => void;
+  onAiRequests: () => void;
   onSignOut: () => void;
 };
 
@@ -58,7 +60,7 @@ function labelledButton(icon: IconName, text: string, className: string): HTMLBu
  * desktop; on mobile a search icon expands it over the title.
  */
 export function createAppBarActions(
-  handlers: Pick<ShellHandlers, "onQuery" | "onAdd" | "onDraw" | "onSignOut">,
+  handlers: Pick<ShellHandlers, "onQuery" | "onAdd" | "onDraw" | "onAskClaude" | "onSignOut">,
   appBar: HTMLElement | null
 ): HTMLElement {
   const wrap = document.createElement("div");
@@ -114,13 +116,17 @@ export function createAppBarActions(
   const draw = iconButton("shuffle", "Sortear experiência", "links-icon-btn links-appbar__draw");
   draw.addEventListener("click", handlers.onDraw);
 
+  const askClaude = iconButton("sparkle", "Pedir ao Claude", "links-icon-btn links-appbar__ask-claude");
+  askClaude.dataset.action = "ask-claude";
+  askClaude.addEventListener("click", handlers.onAskClaude);
+
   const add = labelledButton("plus", "Nova experiência", "links-appbar__add");
   add.addEventListener("click", handlers.onAdd);
 
   const signOut = iconButton("logout", "Sair", "links-icon-btn");
   signOut.addEventListener("click", handlers.onSignOut);
 
-  wrap.append(search, openSearch, draw, add, signOut);
+  wrap.append(search, openSearch, draw, askClaude, add, signOut);
   return wrap;
 }
 
@@ -230,6 +236,22 @@ export function renderSideNav(
   deck.append(uiIcon("deck", 20), deckLabel);
   deck.addEventListener("click", handlers.onDeck);
   sections.appendChild(deck);
+
+  for (const [action, text, icon, onClick] of [
+    ["ask-claude", "Pedir ao Claude", "sparkle", handlers.onAskClaude],
+    ["ai-requests", "Pedidos e sugestões", "clipboard", handlers.onAiRequests],
+  ] as const) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "links-sidenav__item";
+    item.dataset.action = action;
+    const label = document.createElement("span");
+    label.className = "links-sidenav__label";
+    label.textContent = text;
+    item.append(uiIcon(icon, 20), label);
+    item.addEventListener("click", onClick);
+    sections.appendChild(item);
+  }
 
   const heading = document.createElement("h2");
   heading.className = "links-sidenav__heading";

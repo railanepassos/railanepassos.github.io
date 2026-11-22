@@ -2181,6 +2181,8 @@ export type ViewModalCallbacks = {
   onEditPlan?: (link: LinkRow) => void;
   /** Wishlist places only: open the full-screen "Modo visita" (the detail closes first). */
   onVisit?: (link: LinkRow) => void;
+  /** Any place: open "Pedir ao Claude" on the Refinar tab with this place ticked (the detail closes first). */
+  onAskClaude?: (link: LinkRow) => void;
   /**
    * Tick/untick a plan item: persist `items` (the whole plan_items array).
    * Rejects when the save fails; the detail then rolls the tick back.
@@ -2639,7 +2641,16 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   visitText.textContent = "Modo visita";
   visitBtn.append(uiIcon("clock", 20), visitText);
 
-  body.append(chips, title, visitBtn, info);
+  const askClaudeBtn = document.createElement("button");
+  askClaudeBtn.type = "button";
+  askClaudeBtn.className = "links-detail__visit";
+  askClaudeBtn.dataset.action = "ask-claude";
+  askClaudeBtn.hidden = true;
+  const askClaudeText = document.createElement("span");
+  askClaudeText.textContent = "Pedir ao Claude";
+  askClaudeBtn.append(uiIcon("sparkle", 20), askClaudeText);
+
+  body.append(chips, title, visitBtn, askClaudeBtn, info);
 
   const bar = document.createElement("div");
   bar.className = "links-detail__bar";
@@ -2792,6 +2803,7 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
     doneBtn.hidden = isDone;
     unmarkBtn.hidden = !isDone || !cb.onUnmarkDone;
     visitBtn.hidden = isDone || !cb.onVisit;
+    askClaudeBtn.hidden = !cb.onAskClaude;
 
     visitRow.row.hidden = !(isDone && link.completed_at && formatVisitDate(link.completed_at));
     visitRow.value.textContent = isDone ? formatVisitDate(link.completed_at) : "";
@@ -3058,6 +3070,9 @@ export function createViewModal(cb: ViewModalCallbacks): ViewModalHandle {
   doneBtn.addEventListener("click", () => act(cb.onMarkDone));
   visitBtn.addEventListener("click", () => {
     if (cb.onVisit) act(cb.onVisit);
+  });
+  askClaudeBtn.addEventListener("click", () => {
+    if (cb.onAskClaude) act(cb.onAskClaude);
   });
   unmarkBtn.addEventListener("click", () => {
     if (cb.onUnmarkDone) act(cb.onUnmarkDone);
