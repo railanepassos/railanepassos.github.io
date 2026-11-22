@@ -252,7 +252,13 @@ export function createVisitMode(cb: VisitModeCallbacks): VisitModeHandle {
       historia: renderHistoria,
       poses: renderPoses,
     };
+    const boxes = () => Array.from(panel.querySelectorAll<HTMLInputElement>("input[type='checkbox']"));
+    const focusedBox = boxes().indexOf(document.activeElement as HTMLInputElement);
+    const hadFocus = panel.contains(document.activeElement);
     panel.replaceChildren(...render[active](current));
+    // The re-render replaces the focused checkbox: put focus back on its equivalent.
+    if (focusedBox >= 0) boxes()[focusedBox]?.focus();
+    else if (hadFocus) panel.focus();
   }
 
   function renderAll(link: LinkRow): void {
@@ -260,8 +266,15 @@ export function createVisitMode(cb: VisitModeCallbacks): VisitModeHandle {
     title.textContent = displayTitle(link);
     const tabs = visitTabs(link);
     if (!tabs.includes(active)) active = "roteiro";
+    const focusedTab = tablist.contains(document.activeElement)
+      ? (document.activeElement as HTMLElement).dataset.tab
+      : undefined;
     renderTabs(tabs);
     select(active);
+    if (focusedTab) {
+      const same = tabButtons().find((t) => t.dataset.tab === focusedTab) ?? tabButtons()[0];
+      same?.focus();
+    }
   }
 
   function syncFor(link: LinkRow): PlanSync {
@@ -328,6 +341,7 @@ export function createVisitMode(cb: VisitModeCallbacks): VisitModeHandle {
       planError.hidden = true;
       resetFinish();
     }
+    if (overlay.hidden) document.addEventListener("keydown", onDocumentKeydown);
     overlay.hidden = false;
     renderAll(link);
     syncBodyScreenLock();
@@ -339,11 +353,12 @@ export function createVisitMode(cb: VisitModeCallbacks): VisitModeHandle {
   function close(): void {
     if (overlay.hidden) return;
     overlay.hidden = true;
+    document.removeEventListener("keydown", onDocumentKeydown);
     current = null;
     resetFinish();
     syncBodyScreenLock();
     void wake.release();
-    previouslyFocused?.focus?.();
+    if (previouslyFocused?.isConnected) previouslyFocused.focus();
     previouslyFocused = null;
     cb.onClose?.();
   }
@@ -357,7 +372,11 @@ export function createVisitMode(cb: VisitModeCallbacks): VisitModeHandle {
   confirmYes.addEventListener("click", () => {
     const link = current;
     close();
-    if (link) cb.onMarkDone(link);
+    if (!link) return;
+    // Pending tick saves land first: markDone writes unconditionally and would race them.
+    const state = planSync.get(link.id);
+    if (state && state.pending > 0) void state.chain.then(() => cb.onMarkDone(link));
+    else cb.onMarkDone(link);
   });
   closeBtn.addEventListener("click", close);
   overlay.addEventListener("keydown", (e) => {
@@ -366,6 +385,40 @@ export function createVisitMode(cb: VisitModeCallbacks): VisitModeHandle {
       close();
     }
   });
+
+  function focusables(): HTMLElement[] {
+    return Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex='-1'])"
+      )
+    ).filter((node) => !node.closest("[hidden]"));
+  }
+
+  /** While open: Escape works even if focus fell to the body, and Tab never leaves the dialog. */
+  function onDocumentKeydown(e: KeyboardEvent): void {
+    if (overlay.hidden) return;
+    const inside = overlay.contains(e.target as Node | null);
+    if (e.key === "Escape") {
+      if (!inside) close();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    const nodes = focusables();
+    if (nodes.length === 0) return;
+    const first = nodes[0]!;
+    const last = nodes[nodes.length - 1]!;
+    const activeEl = document.activeElement as HTMLElement | null;
+    if (!inside || !activeEl || !dialog.contains(activeEl)) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+    } else if (e.shiftKey && activeEl === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && activeEl === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
 
   return {
     element: overlay,

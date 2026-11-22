@@ -3,6 +3,7 @@ import {
   isVisitFragment,
   isVisitToday,
   parseVisitFragment,
+  pendingVisitAction,
   planProgress,
   todayVisits,
   visitFragment,
@@ -192,5 +193,21 @@ describe("visit fragment", () => {
   it("builds the fragment and round-trips", () => {
     expect(visitFragment("abc-1")).toBe("#visita/abc-1");
     expect(parseVisitFragment(visitFragment("abc-1"))).toBe("abc-1");
+  });
+});
+
+describe("pendingVisitAction", () => {
+  const base = { authenticated: true, listLoadFailed: false, targetOpenable: true };
+  it("waits while logged out", () => {
+    expect(pendingVisitAction({ ...base, authenticated: false })).toBe("wait");
+  });
+  it("keeps the fragment (waits) when the list failed to load", () => {
+    expect(pendingVisitAction({ ...base, listLoadFailed: true, targetOpenable: false })).toBe("wait");
+  });
+  it("opens an openable target", () => {
+    expect(pendingVisitAction(base)).toBe("open");
+  });
+  it("clears the fragment when the target is missing or done", () => {
+    expect(pendingVisitAction({ ...base, targetOpenable: false })).toBe("clear");
   });
 });

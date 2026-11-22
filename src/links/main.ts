@@ -73,7 +73,8 @@ import { createPlanSheet, type PlanSheetHandle } from "./plan-sheet";
 import type { PlanItem } from "./plan";
 import { renderTodayBanner } from "./today-banner";
 import { createVisitMode, type VisitModeHandle } from "./visit-ui";
-import { isVisitFragment, parseVisitFragment, visitFragment } from "./visit";
+import { isVisitFragment, parseVisitFragment, pendingVisitAction, visitFragment } from "./visit";
+import { createKeyedQueue } from "./keyed-queue";
 import { mergeProposedPlanItems, planError, planFromLink, planToPatch } from "./plan";
 import { createDeckScreen, type DeckHandle } from "./deck-ui";
 import { nextPriority } from "./deck-queue";
@@ -294,9 +295,14 @@ function bootDynamic(
     getPeopleSuggestions: () => collectPeople(links),
     getLessonCandidates: () => collectLessons(links),
   });
-  const savePlanItems = async (l: LinkRow, items: PlanItem[]): Promise<void> => {
-    // Each save is conditioned on the updated_at we last saw: the queued saves of
-    // the detail run one after another, so each one picks up the previous result.
+  // One queue per place for the detail and the visit mode alike, so a save started in one
+  // never races the conditional save of the other (self-inflicted StaleLinkError).
+  const planSaveQueue = createKeyedQueue();
+  const savePlanItems = (l: LinkRow, items: PlanItem[]): Promise<void> =>
+    planSaveQueue(l.id, () => writePlanItems(l, items));
+  const writePlanItems = async (l: LinkRow, items: PlanItem[]): Promise<void> => {
+    // Each save is conditioned on the updated_at we last saw; queued saves run one after
+    // another, so each one picks up the previous result.
     const loaded = findLink(l.id) ?? l;
     const saved = await repo.updateLinkIfUnchanged(l.id, { plan_items: items }, loaded.updated_at);
     if (saved === null) throw new StaleLinkError(await adoptServerRow(l.id));
@@ -355,11 +361,15 @@ function bootDynamic(
   /** `#visita/<id>` on boot: open it once the editor is logged in and the list is loaded. */
   let visitFragmentPending = isVisitFragment(window.location.hash);
   function handlePendingVisit(): void {
-    if (!visitFragmentPending || !authenticated) return;
-    visitFragmentPending = false;
+    if (!visitFragmentPending) return;
     const id = parseVisitFragment(window.location.hash);
     const target = id ? findLink(id) : undefined;
-    if (target && (target.status ?? "wishlist") !== "done") {
+    const targetOpenable = !!target && (target.status ?? "wishlist") !== "done";
+    const action = pendingVisitAction({ authenticated, listLoadFailed, targetOpenable });
+    // "wait" keeps the fragment (and the pending flag) so a later successful load reopens the mode.
+    if (action === "wait") return;
+    visitFragmentPending = false;
+    if (action === "open" && target) {
       openVisit(target);
     } else {
       history.replaceState(null, "", location.pathname + location.search);
@@ -1133,6 +1143,8 @@ function bootDynamic(
         }
       } else {
         links = [];
+        // Private data must not stay on screen after sign-out (also clears #visita/<id>).
+        visitMode.close();
       }
       render();
       handlePendingDraft();

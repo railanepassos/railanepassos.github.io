@@ -78,3 +78,18 @@ export function parseVisitFragment(hash: string): string | null {
 export function visitFragment(id: string): string {
   return `${VISIT_FRAGMENT_PREFIX}${id}`;
 }
+
+/**
+ * What to do with a `#visita/<id>` fragment found on boot: "wait" (keep it for a
+ * later try: logged out, or the list failed to load), "open" the mode, or
+ * "clear" the fragment (the place is gone or already done).
+ */
+export function pendingVisitAction(state: {
+  authenticated: boolean;
+  listLoadFailed: boolean;
+  targetOpenable: boolean;
+}): "wait" | "open" | "clear" {
+  if (!state.authenticated) return "wait";
+  if (state.targetOpenable) return "open";
+  return state.listLoadFailed ? "wait" : "clear";
+}

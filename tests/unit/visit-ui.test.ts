@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createVisitMode } from "../../src/links/visit-ui";
 import type { LinkRow } from "../../src/links/links-repo";
 import type { PlanItem } from "../../src/links/plan";
+import { StaleLinkError } from "../../src/links/links-repo";
 
 beforeEach(() => {
   document.body.replaceChildren();
@@ -198,6 +199,93 @@ describe("createVisitMode", () => {
     await flush();
     expect(save).toHaveBeenCalledTimes(2);
     expect(save.mock.calls[1]![1].map((i: PlanItem) => i.done)).toEqual([true, true, true]);
+  });
+
+  const tickBox = (visit: { element: HTMLElement }, i: number) => {
+    const b = visit.element.querySelectorAll<HTMLInputElement>("input[type='checkbox']")[i]!;
+    b.focus();
+    b.checked = !b.checked;
+    b.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  it("Marcar como feito waits for pending tick saves before calling onMarkDone", async () => {
+    let release!: () => void;
+    const first = new Promise<void>((r) => (release = r));
+    const save = vi.fn().mockReturnValueOnce(first);
+    const { tab, visit, button, cb } = setup(row({ plan_items: PLAN }), { onSavePlanItems: save });
+    tab("Checklist").click();
+    tickBox(visit, 1);
+    button("Terminar visita").click();
+    button("Marcar como feito").click();
+    await flush();
+    expect(visit.element.hidden).toBe(true);
+    expect(cb.onMarkDone).not.toHaveBeenCalled();
+    release();
+    await flush();
+    expect(cb.onMarkDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps focus on the same checkbox after a tick and Escape still closes", async () => {
+    const { tab, visit } = setup(row({ plan_items: PLAN }));
+    tab("Checklist").click();
+    tickBox(visit, 1);
+    const boxes = visit.element.querySelectorAll<HTMLInputElement>("input[type='checkbox']");
+    expect(document.activeElement).toBe(boxes[1]);
+    document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(visit.element.hidden).toBe(true);
+    await flush();
+  });
+
+  it("Escape closes even when focus fell to the body", () => {
+    const { visit } = setup();
+    (document.activeElement as HTMLElement).blur();
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(visit.element.hidden).toBe(true);
+  });
+
+  it("traps Tab inside the dialog", () => {
+    const { visit } = setup();
+    const focusables = Array.from(
+      visit.element.querySelectorAll<HTMLElement>("button:not([hidden]), [tabindex='0']")
+    ).filter((e) => !e.closest("[hidden]"));
+    const last = focusables[focusables.length - 1]!;
+    last.focus();
+    const ev = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    last.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+    expect(visit.element.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(focusables[0]);
+    const back = new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true });
+    focusables[0]!.dispatchEvent(back);
+    expect(document.activeElement).toBe(last);
+  });
+
+  it("restores focus to the opener on close", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const { visit, button } = setup();
+    expect(document.activeElement).not.toBe(opener);
+    button("Fechar modo visita").click();
+    expect(visit.element.hidden).toBe(true);
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("on a stale save re-renders from the fresh link and shows the notice", async () => {
+    const fresh = row({
+      plan_items: [{ text: "Novo item", list: "checklist", done: false }],
+    });
+    const { tab, visit } = setup(row({ plan_items: PLAN }), {
+      onSavePlanItems: vi.fn().mockRejectedValue(new StaleLinkError(fresh)),
+    });
+    tab("Checklist").click();
+    tickBox(visit, 1);
+    await flush();
+    expect(visit.element.textContent).toContain("Novo item");
+    expect(visit.element.textContent).not.toContain("Água");
+    const err = visit.element.querySelector<HTMLElement>("[role='alert']")!;
+    expect(err.hidden).toBe(false);
+    expect(err.textContent).toMatch(/mudou|atualiz|outro/i);
   });
 
   it("História renders the dossier as text, never HTML, keeping line breaks", () => {

@@ -26,12 +26,15 @@ export function createWakeLock(
     try {
       const next = await api.request("screen");
       if (wanted) {
+        const previous = sentinel;
         sentinel = next;
+        // Overlapping acquires: never leave an earlier sentinel unreleased.
+        if (previous && previous !== next) await previous.release().catch(() => undefined);
       } else {
         await next.release().catch(() => undefined);
       }
     } catch {
-      sentinel = null;
+      /* refused or unsupported: keep whatever sentinel we already hold */
     }
   }
 
